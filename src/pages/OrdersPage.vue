@@ -1,7 +1,7 @@
 <template>
   <div class="orders-page">
     <header class="page-header">
-      <p class="eyebrow">你的訂購紀錄</p>
+      <p class="eyebrow">你的購票紀錄</p>
       <h1>我的訂單</h1>
       <p>每一筆訂單的進度，都可以在這裡輕鬆查看</p>
     </header>
@@ -17,8 +17,8 @@
         <path d="M26 20v24" stroke="#c7c7cc" stroke-width="2" stroke-dasharray="3 4" />
       </svg>
       <h2>還沒有訂單</h2>
-      <p>準備好了的話，下一件屬於駝客的紀念品正在等你</p>
-      <router-link to="/" class="primary-button">探索商品</router-link>
+      <p>準備好了的話，就先去挑選你的舞會票種吧。</p>
+      <router-link to="/" class="primary-button">探索票種</router-link>
     </div>
 
     <div v-else class="order-list">

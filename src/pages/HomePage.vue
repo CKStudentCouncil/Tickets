@@ -1,10 +1,10 @@
 <template>
   <div class="storefront">
     <section class="hero">
-      <p class="eyebrow eyebrow-en">Keep Your Memories Alive</p>
-      <h1 class="text-bold">把青春的片刻<br>留在身邊</h1>
-      <p class="hero-copy">為駝客設計的紀念品系列，讓那些在校園裡發生的故事，陪你走得更遠</p>
-      <a href="#collection" class="primary-link">探索商品 <q-icon name="south_east" /></a>
+      <p class="eyebrow eyebrow-en">CK PARTY NIGHT</p>
+      <h1 class="text-bold">建中舞會購票系統</h1>
+      <p class="hero-copy">全票種皆為站票，分為校內票、一階票、二階票，請依開賣時程與資格完成購票。</p>
+      <a href="#collection" class="primary-link">探索票種 <q-icon name="south_east" /></a>
     </section>
 
     <!--<section class="offers" style="margin-top: -40px;">
@@ -29,7 +29,7 @@
     <section id="collection" class="collection">
       <div class="section-heading">
         <p class="eyebrow">商品系列</p>
-        <h2 class="text-bold">挑一件屬於你的紀念</h2>
+        <h2 class="text-bold">選擇你的站票票種</h2>
       </div>
       <div class="product-grid">
         <router-link
@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { comboDeals, products } from 'src/data/catalog'
+import { products } from 'src/data/catalog'
 </script>
 
 <style scoped>

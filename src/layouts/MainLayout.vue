@@ -1,9 +1,9 @@
 <template>
   <div class="app-shell">
     <header class="site-header">
-      <router-link to="/" class="brand" aria-label="建中紀念品首頁">
-        <img src="../../public/cksclogo.png" alt="CK Souvenir Logo" class="brand-mark" />
-        <span>CK Souvenir 2.0</span>
+      <router-link to="/" class="brand" aria-label="建中舞會購票系統首頁">
+        <img src="../../public/cksclogo.png" alt="建中舞會購票系統 Logo" class="brand-mark" />
+        <span>建中舞會購票系統</span>
       </router-link>
 
       <nav class="primary-nav" aria-label="主要導覽">
@@ -109,6 +109,7 @@
             <router-link to="/orders">我的訂單</router-link>
             <router-link to="/about">關於我們</router-link>
             <router-link to="/survey">使用者問卷</router-link>
+            <a href="https://souvenir.cksc.tw" target="_blank" rel="noopener">校慶紀念品</a>
           </nav>
         </div>
 
@@ -126,33 +127,22 @@
             <a href="https://cksc.tw" target="_blank">建中班聯會</a>
             <a href="https://cktfgpromo.cksc.tw" target="_blank">建北特約官網</a>
               <div class="footer-social">
-              <a
-                href="https://www.instagram.com/cksc.81st/"
-                target="_blank"
-                rel="noopener"
-                aria-label="Instagram"
-                class="social-icon"
-              >
-                <svg class="ig-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor"/>
-              </svg>
-              </a>
+              <a href="https://www.instagram.com/cksc.81st/" target="_blank" rel="noopener">follow CKSC（@cksc.81st）</a>
+              <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener">follow CK Party Night（@ck_party_night）</a>
             </div>
           </nav>
         </div>
   
         <div class="footer-col footer-brand">
           <div class="footer-logo">
-            <span>CK Souvenir</span>
+            <span>建中舞會購票系統</span>
           </div>
           <p class="footer-meta">Taipei Municipal Chien Kuo High School Student Council</p>
           <p class="footer-meta">Developed by Chris Sun and Jim Tang</p>
         </div>
       </div> 
       <div class="footer-bottom">
-        <span>© <span class="num">{{ currentYear }}</span> CK Souvenir. All rights reserved.</span>
+        <span>© <span class="num">{{ currentYear }}</span> 建中舞會購票系統. All rights reserved.</span>
       </div>
     </footer>
   </div>

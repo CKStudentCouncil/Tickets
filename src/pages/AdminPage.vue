@@ -87,6 +87,82 @@
       </button>
     </div>
 
+    <div
+      v-if="canManageOrders"
+      class="panel"
+    >
+      <div class="notify-header">
+        <h2>票種管理</h2>
+        <button
+          type="button"
+          class="btn"
+          :disabled="savingTicketTypes"
+          @click="saveTicketTypeSettings"
+        >
+          {{ savingTicketTypes ? '儲存中...' : '儲存票種設定' }}
+        </button>
+      </div>
+      <p class="panel-copy">所有票種皆為站票，可設定資格、販售時段、總量與每人限購。</p>
+      <div
+        v-for="ticketType in ticketTypeForm"
+        :key="ticketType.id"
+        class="ticket-type-card"
+      >
+        <h3>{{ ticketType.name }}（站票）</h3>
+        <div class="ticket-type-grid">
+          <label class="field">
+            <span>Eligible Buyer Identity</span>
+            <select v-model="ticketType.eligibleBuyerIdentity">
+              <option value="campus_students">Campus Students</option>
+              <option value="all_users">All Users</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Sales Start Time</span>
+            <input
+              v-model="ticketType.salesStartTime"
+              type="datetime-local"
+            >
+          </label>
+
+          <label class="field">
+            <span>Sales End Time</span>
+            <input
+              v-model="ticketType.salesEndTime"
+              type="datetime-local"
+            >
+          </label>
+
+          <label class="field">
+            <span>Total Ticket Quantity</span>
+            <input
+              v-model.number="ticketType.totalTicketQuantity"
+              type="number"
+              min="0"
+            >
+          </label>
+
+          <label class="field ticket-limit-field">
+            <span>Purchase Limit Per Person</span>
+            <div class="ticket-limit-controls">
+              <input
+                v-model="ticketType.unlimited"
+                type="checkbox"
+              >
+              <span>Unlimited</span>
+            </div>
+            <input
+              v-model.number="ticketType.purchaseLimitPerPerson"
+              type="number"
+              min="1"
+              :disabled="ticketType.unlimited"
+            >
+          </label>
+        </div>
+      </div>
+    </div>
+
     <div class="panel notify-panel">
       <div class="notify-header">
         <h2>自動寄送通知</h2>

@@ -1,11 +1,11 @@
 <template>
   <div class="static-page">
     <article class="content-card">
-      <p class="eyebrow">關於CK Souvenir2.0</p>
-      <h1>把校園記憶，變成能帶走的日常</h1>
-      <p>此系統由建中班聯會 80 屆團隊製作，為建中整理一個簡單、安心的紀念品訂購方式。</p>
-      <p>我們希望每一件校慶紀念品，不只是印著建中的物品，而是能讓你想起人、課堂、球場，或某個很平凡卻很重要的瞬間。</p>
-      <p>然此系統仍於開發階段，尚有不足之處，希望各界能提供意見與建議，以利改進。</p>
+      <p class="eyebrow">關於建中舞會購票系統</p>
+      <h1>讓每一張票，都準時帶你進場</h1>
+      <p>此系統由建中班聯會團隊維運，提供校內票、一階票、二階票的線上購票服務。</p>
+      <p>所有票種皆為站票，並依票種設定控管開賣時間、購買資格、總量與每人限購，讓購票流程更清楚透明。</p>
+      <p>若你在使用上遇到問題或有改進建議，歡迎提供回饋，協助我們持續優化購票體驗。</p>
       <p>如有友校有意願使用此系統，歡迎與開發者聯繫。</p>
 
       <section class="contact-section">
@@ -46,7 +46,15 @@
             <circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.6"/>
             <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor"/>
           </svg>
-          Follow Us on Instagram
+          follow CKSC - IG cksc.81st
+        </a>
+        <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener" class="ghost-button">
+          <svg class="ig-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.6"/>
+            <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor"/>
+          </svg>
+          follow CK Party Night - IG ck_party_night
         </a>
         <router-link to="/" class="secondary-button">回到首頁</router-link>
       </div>

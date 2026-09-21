@@ -13,8 +13,192 @@ import { generateOrderNotificationHTML } from './paymentNotificationTemplate.js'
 initializeApp()
 
 const db = getFirestore()
+const ELIGIBLE_IDENTITIES = {
+  CAMPUS_STUDENTS: 'campus_students',
+  ALL_USERS: 'all_users'
+}
+
+const DEFAULT_TICKET_TYPES = [
+  {
+    id: 'campus_ticket',
+    name: '校內票',
+    eligibleBuyerIdentity: ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS,
+    salesStartTime: null,
+    salesEndTime: null,
+    totalTicketQuantity: 1200,
+    purchaseLimitPerPerson: 2
+  },
+  {
+    id: 'first_release',
+    name: '一階票',
+    eligibleBuyerIdentity: ELIGIBLE_IDENTITIES.ALL_USERS,
+    salesStartTime: null,
+    salesEndTime: null,
+    totalTicketQuantity: 1500,
+    purchaseLimitPerPerson: 4
+  },
+  {
+    id: 'second_release',
+    name: '二階票',
+    eligibleBuyerIdentity: ELIGIBLE_IDENTITIES.ALL_USERS,
+    salesStartTime: null,
+    salesEndTime: null,
+    totalTicketQuantity: 1500,
+    purchaseLimitPerPerson: null
+  }
+]
+
+const CAMPUS_SCHOOLS = new Set([
+  '建國中學',
+  '北一女中',
+  '中山女高',
+  '景美女中',
+  '成功高中',
+  '師大附中'
+])
 
 const SENDER_EMAIL = process.env.SENDER_EMAIL || process.env.GMAIL_EMAIL
+
+function parseTimestamp(value) {
+  if (!value) return null
+  if (value.toDate) return value.toDate()
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function normalizeTicketTypeConfig(ticketType) {
+  return {
+    ...ticketType,
+    totalTicketQuantity: Number(ticketType.totalTicketQuantity || 0),
+    purchaseLimitPerPerson:
+      ticketType.purchaseLimitPerPerson === null || ticketType.purchaseLimitPerPerson === undefined
+        ? null
+        : Number(ticketType.purchaseLimitPerPerson),
+    salesStartTime: ticketType.salesStartTime || null,
+    salesEndTime: ticketType.salesEndTime || null
+  }
+}
+
+async function loadTicketTypeConfigs() {
+  const defaultMap = new Map(
+    DEFAULT_TICKET_TYPES.map((ticketType) => [ticketType.id, normalizeTicketTypeConfig(ticketType)])
+  )
+
+  const snapshot = await db.collection('ticketTypes').get()
+  if (snapshot.empty) return defaultMap
+
+  snapshot.forEach((ticketDoc) => {
+    defaultMap.set(ticketDoc.id, normalizeTicketTypeConfig({ id: ticketDoc.id, ...ticketDoc.data() }))
+  })
+
+  return defaultMap
+}
+
+function getTicketTypeIdFromItem(item) {
+  if (item.ticketTypeId) return String(item.ticketTypeId)
+  if (item.id) return String(item.id)
+  return ''
+}
+
+function getBuyerIdentity(orderPayload) {
+  if (CAMPUS_SCHOOLS.has(orderPayload.school)) return ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
+  return ELIGIBLE_IDENTITIES.ALL_USERS
+}
+
+async function validateOrderAgainstTicketRules(orderPayload) {
+  const items = Array.isArray(orderPayload.items) ? orderPayload.items : []
+  if (items.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', '訂單內容為空')
+  }
+
+  const ticketTypeConfigMap = await loadTicketTypeConfigs()
+  const now = new Date()
+  const buyerIdentity = getBuyerIdentity(orderPayload)
+
+  const currentOrderQuantityByType = new Map()
+  items.forEach((item) => {
+    const ticketTypeId = getTicketTypeIdFromItem(item)
+    if (!ticketTypeId) return
+    const quantity = Number(item.quantity || 0)
+    if (!quantity) return
+    currentOrderQuantityByType.set(
+      ticketTypeId,
+      (currentOrderQuantityByType.get(ticketTypeId) || 0) + quantity
+    )
+  })
+
+  if (currentOrderQuantityByType.size === 0) {
+    throw new functions.https.HttpsError('invalid-argument', '票種資料無效')
+  }
+
+  for (const ticketTypeId of currentOrderQuantityByType.keys()) {
+    if (!ticketTypeConfigMap.has(ticketTypeId)) {
+      throw new functions.https.HttpsError('invalid-argument', `無效的票種：${ticketTypeId}`)
+    }
+  }
+
+  for (const [ticketTypeId, quantity] of currentOrderQuantityByType.entries()) {
+    if (quantity <= 0) {
+      throw new functions.https.HttpsError('invalid-argument', '票券數量必須大於 0')
+    }
+
+    const config = ticketTypeConfigMap.get(ticketTypeId)
+    const startTime = parseTimestamp(config.salesStartTime)
+    const endTime = parseTimestamp(config.salesEndTime)
+
+    if (startTime && now < startTime) {
+      throw new functions.https.HttpsError('failed-precondition', `${config.name}尚未開賣`)
+    }
+    if (endTime && now > endTime) {
+      throw new functions.https.HttpsError('failed-precondition', `${config.name}已結束販售`)
+    }
+    if (config.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS && buyerIdentity !== ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS) {
+      throw new functions.https.HttpsError('permission-denied', `${config.name}僅限校內學生購買`)
+    }
+  }
+
+  const email = String(orderPayload.customerEmail || '').trim().toLowerCase()
+  const userId = String(orderPayload.userId || '').trim()
+  const ordersSnapshot = await db.collection('orders').get()
+  const soldQuantityByType = new Map()
+  const buyerQuantityByType = new Map()
+
+  ordersSnapshot.forEach((orderDoc) => {
+    const orderData = orderDoc.data()
+    const orderItems = Array.isArray(orderData.items) ? orderData.items : []
+    const matchesBuyer =
+      (email && String(orderData.customerEmail || '').trim().toLowerCase() === email) ||
+      (userId && String(orderData.userId || '').trim() === userId)
+
+    orderItems.forEach((item) => {
+      const ticketTypeId = getTicketTypeIdFromItem(item)
+      if (!ticketTypeConfigMap.has(ticketTypeId)) return
+      const quantity = Number(item.quantity || 0)
+      if (!quantity) return
+      soldQuantityByType.set(ticketTypeId, (soldQuantityByType.get(ticketTypeId) || 0) + quantity)
+      if (matchesBuyer) {
+        buyerQuantityByType.set(ticketTypeId, (buyerQuantityByType.get(ticketTypeId) || 0) + quantity)
+      }
+    })
+  })
+
+  for (const [ticketTypeId, quantity] of currentOrderQuantityByType.entries()) {
+    const config = ticketTypeConfigMap.get(ticketTypeId)
+    const sold = soldQuantityByType.get(ticketTypeId) || 0
+    const alreadyBought = buyerQuantityByType.get(ticketTypeId) || 0
+
+    if (config.totalTicketQuantity && sold + quantity > config.totalTicketQuantity) {
+      throw new functions.https.HttpsError('resource-exhausted', `${config.name}剩餘票量不足`)
+    }
+
+    if (config.purchaseLimitPerPerson !== null && alreadyBought + quantity > config.purchaseLimitPerPerson) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `${config.name}超過每人限購 ${config.purchaseLimitPerPerson} 張`
+      )
+    }
+  }
+}
 
 const createTransporter = () => {
   // Configure AWS SES. Prefer providing AWS credentials via Secret Manager
@@ -87,7 +271,7 @@ export const sendOrderQRCode = functions
         from: `"建國中學班聯會" <${SENDER_EMAIL}>`,
         to: order.customerEmail,
         subject:
-          `建中校慶紀念品訂單確認 - 訂單編號：${orderId}`,
+          `建中舞會購票系統訂單確認 - 訂單編號：${orderId}`,
         html: generateEmailHTML(orderId, order),
 
         attachments: [
@@ -173,10 +357,10 @@ async function assertIsAdmin(context) {
 
 
 const NOTIFY_SUBJECTS = {
-  payment: '【建中校慶紀念品】繳費通知',
-  pickup: '【建中校慶紀念品】領貨通知',
-  both: '【建中校慶紀念品】繳費暨領貨通知',
-  custom: '【建中校慶紀念品】訂購通知'
+  payment: '【建中舞會購票系統】繳費通知',
+  pickup: '【建中舞會購票系統】領票通知',
+  both: '【建中舞會購票系統】繳費暨領票通知',
+  custom: '【建中舞會購票系統】購票通知'
 }
 
 
@@ -449,6 +633,8 @@ export const createOrder = functions
         '訂單資料無效'
       )
     }
+
+    await validateOrderAgainstTicketRules(orderPayload)
 
     const orderId = await generateOrderId(
       orderPayload.school
