@@ -109,7 +109,6 @@
             <router-link to="/orders">我的訂單</router-link>
             <router-link to="/about">關於我們</router-link>
             <router-link to="/survey">使用者問卷</router-link>
-            <a href="https://souvenir.cksc.tw" target="_blank" rel="noopener">校慶紀念品</a>
           </nav>
         </div>
 
@@ -126,10 +125,9 @@
           <nav class="footer-links">
             <a href="https://cksc.tw" target="_blank">建中班聯會</a>
             <a href="https://cktfgpromo.cksc.tw" target="_blank">建北特約官網</a>
-              <div class="footer-social">
-              <a href="https://www.instagram.com/cksc.81st/" target="_blank" rel="noopener">follow CKSC（@cksc.81st）</a>
-              <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener">follow CK Party Night（@ck_party_night）</a>
-            </div>
+            <a href="https://souvenir.cksc.tw" target="_blank">建中校慶紀念品</a>
+            <a href="https://www.instagram.com/cksc.81st/" target="_blank" rel="noopener">CKSC Instagram</a>
+            <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener">CK Party Night Instagram</a>
           </nav>
         </div>
   
@@ -142,7 +140,7 @@
         </div>
       </div> 
       <div class="footer-bottom">
-        <span>© <span class="num">{{ currentYear }}</span> 建中舞會購票系統. All rights reserved.</span>
+        <span>© <span class="num">{{ currentYear }}</span> CK Tickets. All rights reserved.</span>
       </div>
     </footer>
   </div>

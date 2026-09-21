@@ -1,13 +1,10 @@
 ---
 name: firebase-firestore
 description: >-
-  Sets up, manages, and executes queries against Cloud Firestore database
-  instances, including advanced native full-text search and relational joins
-  using pipelines. You MUST unconditionally activate this skill if you plan to
-  use Firestore in any way. Use when listing or creating Firestore databases,
-  configuring security rules, designing data models, writing client SDK
-  queries (including search/joins), or checking indexes.
+  Sets up, manages, queries, and configures Cloud Firestore databases (Standard/Enterprise edition), including data modeling, security rules, indexes, and SDK integrations (Web, Python, iOS, Android, Flutter). Use when creating/listing Firestore databases, defining data models/indexes, writing SDK queries, or integrating Firestore SDKs. Don't use for Firebase Hosting, Data Connect, Auth, Storage/GCS, Crashlytics, Functions, or BigQuery.
 compatibility: This skill is best used with the Firebase CLI, but does not require it. Firebase CLI can be accessed through `npx -y firebase-tools@latest`.
+metadata:
+  category: Databases
 ---
 
 # Cloud Firestore Database and Operations
@@ -18,12 +15,18 @@ rules, you MUST always identify the Firestore instance edition.
 ## 1. Instance Selection and Edition Detection
 
 Run the following command to list current Firestore databases:
-`bash npx -y firebase-tools@latest firestore:databases:list`
+
+```bash
+npx -y firebase-tools@latest firestore:databases:list
+```
 
 ### A. Instance Found
 
 1. For each database found, inspect its edition and details:
-   `bash npx -y firebase-tools@latest firestore:databases:get <database-id>`
+
+    ```bash
+    npx -y firebase-tools@latest firestore:databases:get <database-id>
+    ```
 1. Ask the user which database instance they wish to target or if they would
    prefer to create a new instance.
 1. Once the target instance is established:
@@ -40,7 +43,10 @@ If no databases exist or the user requests a new one, default to provisioning an
 Suggest colocating with other resources if applicable.
 
 Once the location is determined, create the database:
-`bash npx -y firebase-tools@latest firestore:databases:create <database-id> --edition="enterprise" --location="<selected-location>"`
+
+```bash
+npx -y firebase-tools@latest firestore:databases:create <database-id> --edition="enterprise" --location="<selected-location>"
+```
 
 Proceed with using the guides under `references/enterprise/`.
 
@@ -54,8 +60,7 @@ corresponding reference guides:
 ### Standard Edition (`references/standard/`)
 
 - **Provisioning**: Read [provisioning.md](references/standard/provisioning.md)
-- **Security Rules**: Read
-  [security_rules.md](references/standard/security_rules.md)
+- **Security Rules**: See the `firestore-rules-creation` skill
 - **SDK Usage**: Read [web_sdk_usage.md](references/standard/web_sdk_usage.md),
   [android_sdk_usage.md](references/standard/android_sdk_usage.md),
   [ios_setup.md](references/standard/ios_setup.md), or
@@ -69,8 +74,7 @@ corresponding reference guides:
 
 - **Data Model**: Read [data_model.md](references/enterprise/data_model.md)
 
-- **Security Rules**: Read
-  [security_rules.md](references/enterprise/security_rules.md)
+- **Security Rules**: See the `firestore-rules-creation` skill
 
 - **SDK Usage**:
 

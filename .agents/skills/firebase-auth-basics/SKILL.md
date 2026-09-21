@@ -2,6 +2,8 @@
 name: firebase-auth-basics
 description: Guide for setting up and using Firebase Authentication. Use this skill when the user's app requires user sign-in, user management, or secure data access using auth rules.
 compatibility: This skill is best used with the Firebase CLI, but does not require it. Firebase CLI can be accessed through `npx -y firebase-tools@latest`.
+metadata:
+  category: Identity
 ---
 
 ## Prerequisites
@@ -64,13 +66,13 @@ Configure Firebase Authentication in `firebase.json` by adding an 'auth' block:
 ```
 {
   "auth": {
+  "authorizedDomains": ["localhost"],
     "providers": {
       "anonymous": true,
       "emailPassword": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "Your Brand Name",
-        "supportEmail": "support@example.com",
-        "authorizedRedirectUris": ["https://example.com", "http://localhost"]
+        "supportEmail": "support@example.com"
       }
     }
   }
