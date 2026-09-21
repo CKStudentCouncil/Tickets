@@ -6,13 +6,13 @@ import { getStorage } from 'firebase/storage'
 import { getAnalytics, isSupported } from 'firebase/analytics'
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyB8PR6m1CjfxX4JH4BEQXJcs2EjSnDssbE',
-  authDomain: 'cksc-merchandis.firebaseapp.com',
-  projectId: 'cksc-merchandis',
-  storageBucket: 'cksc-merchandis.firebasestorage.app',
-  messagingSenderId: '294251224185',
-  appId: '1:294251224185:web:5b1904f929e6ced3eb08a8',
-  measurementId: 'G-J8LM25YKVM'
+  apiKey: 'AIzaSyDpURP6Src9JzM5nttBCpA9eCllwRobJtc',
+  authDomain: 'cksc-ticket.firebaseapp.com',
+  projectId: 'cksc-ticket',
+  storageBucket: 'cksc-ticket.firebasestorage.app',
+  messagingSenderId: '612340629816',
+  appId: '1:612340629816:web:eec6974f9164564d6481cd',
+  measurementId: 'G-38C5F865D4'
 }
 
 export const app = initializeApp(firebaseConfig)
