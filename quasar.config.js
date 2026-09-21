@@ -20,8 +20,8 @@ export default configure(() => ({
 
     vueRouterMode: 'history',
 
-    // GitHub Pages project sites are served from /Tickets/.
-    // Local development continues to use the root path.
+    // GitHub Pages project site is served from /Tickets/
+    // Local development uses the root path.
     publicPath: process.env.GITHUB_ACTIONS ? '/Tickets/' : '/',
 
     distDir: 'dist/spa'
@@ -36,6 +36,7 @@ export default configure(() => ({
     plugins: ['Notify']
   }
 }))
+
 /*import { configure } from 'quasar/wrappers'
 
 export default configure(() => ({
@@ -62,4 +63,4 @@ export default configure(() => ({
     config: {},
     plugins: ['Notify']
   }
-}))
+}))*/
