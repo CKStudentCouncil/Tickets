@@ -1,8 +1,8 @@
 {
   "name": "cksc-online-souvenir",
   "version": "0.0.1",
-  "description": "A platform for ordering commemorative merchandise for Chien Kuo High School.",
-  "productName": "CKSC Online Souvenir",
+  "description": "A platform for buying CK Party Night tickets.",
+  "productName": "CKSC Online Tickets",
   "author": "Jim08020",
   "private": true,
   "scripts": {
