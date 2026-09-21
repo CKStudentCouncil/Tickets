@@ -1,15 +1,15 @@
 <template>
   <div class="cart-page">
     <header>
-      <p class="eyebrow">你的購物袋</p>
+      <p class="eyebrow">你的購票清單</p>
       <h1>快完成了</h1>
-      <p>確認想帶走的商品，所有符合資格的優惠都會自動套用</p>
+      <p>確認票種與張數後即可送出，系統將依票種規則驗證資格與限購</p>
     </header>
 
     <ol v-if="cart.cartItems.length" class="steps" aria-label="結帳步驟">
       <li :class="{ active: !showCheckout, done: showCheckout }">
         <span class="dot" aria-hidden="true"></span>
-        <span class="label">商品明細</span>
+        <span class="label">票種明細</span>
       </li>
       <li class="track" aria-hidden="true"><span :class="{ filled: showCheckout }"></span></li>
       <li :class="{ active: showCheckout }">
@@ -24,8 +24,8 @@
         <rect x="12" y="22" width="40" height="30" rx="6" stroke="#c7c7cc" stroke-width="2" />
       </svg>
       <h2>購物袋裡還沒有商品</h2>
-      <p>挑一件喜歡的紀念品，讓故事繼續陪著你</p>
-      <router-link to="/" class="primary-button">探索商品</router-link>
+      <p>請先選擇票種後再進行購票。</p>
+      <router-link to="/" class="primary-button">探索票種</router-link>
     </div>
 
     <div v-else class="cart-layout">
@@ -36,9 +36,9 @@
             <p>每件 <span class="num">NT$ {{ item.price }}</span></p>
           </div>
           <div class="quantity">
-            <button type="button" aria-label="減少數量" @click="changeQty(item.id, -1)">−</button>
+            <button type="button" aria-label="減少張數" @click="changeQty(item.id, -1)">−</button>
             <span class="num">{{ item.quantity }}</span>
-            <button type="button" aria-label="增加數量" @click="changeQty(item.id, 1)">+</button>
+            <button type="button" aria-label="增加張數" @click="changeQty(item.id, 1)">+</button>
           </div>
           <button type="button" class="icon-button" aria-label="移除商品" title="移除商品" @click="cart.removeFromCart(item.id)">
             <q-icon name="delete_outline" size="18px" />
@@ -102,7 +102,7 @@
         <button v-if="!showCheckout" type="button" class="primary-button" @click="showCheckout = true">確認並填寫資料</button>
 
         <form v-else class="checkout-form" @submit.prevent="placeOrder">
-          <h3>再填幾項資料就完成了。</h3>
+          <h3>再填幾項資料就完成購票。</h3>
           <p>我們會用這些資料與你確認訂單。</p>
 
           <label>姓名<input v-model="checkout.name" required autocomplete="name" placeholder="請填寫中文本名"></label>
@@ -171,7 +171,7 @@ const giftProgress = computed(() => {
 onMounted(() => { try { rememberMe.value = localStorage.getItem('rememberMeCheckout') === 'true'; if (rememberMe.value) Object.assign(checkout, JSON.parse(localStorage.getItem('checkoutData') || '{}')) } catch {} })
 watch(rememberMe, (value) => { localStorage.setItem('rememberMeCheckout', String(value)); if (!value) localStorage.removeItem('checkoutData') })
 
-function changeQty(id, delta) { const item = cart.cartItems.find((entry) => entry.id === id); if (item && item.quantity + delta <= 0) { cart.removeFromCart(id); toast.show('已從購物袋移除商品。'); return } cart.updateQuantity(id, delta) }
+function changeQty(id, delta) { const item = cart.cartItems.find((entry) => entry.id === id); if (item && item.quantity + delta <= 0) { cart.removeFromCart(id); toast.show('已從購票清單移除票種。'); return } cart.updateQuantity(id, delta) }
 async function placeOrder() {
   if (!agreedToTerms.value) {
     toast.show('請先閱讀並同意使用者條款')
@@ -190,7 +190,17 @@ async function placeOrder() {
     const result = await submitOrder({ userId: auth.user?.uid || null, isGuestOrder: !auth.user, items: JSON.parse(JSON.stringify(cart.cartItems)), originalTotal: p.originalTotal, finalTotal: p.finalTotal, totalDiscount: p.prPackageApplied ? p.prPackageDiscount : p.totalDiscount + p.giftDiscount, appliedCombos: p.prPackageApplied ? [{ name: '公關品訂單' }] : p.appliedCombos, prPackageUsed: p.prPackageApplied, prPackageDiscount: p.prPackageApplied ? p.prPackageDiscount : 0, isAdminOrder: auth.isAdmin, qualifiesForGift: p.qualifiesForGift && !p.prPackageApplied, giftDiscount: p.giftDiscount, hasAvailableGift: p.hasAvailableGift, totalGiftQuantity: p.totalGiftQuantity, giftUsedInCombo: p.giftUsedInCombo, availableGiftCount: p.availableGiftCount, customerName: checkout.name.trim(), customerPhone: checkout.phone.trim(), customerEmail: checkout.email.trim(), school: checkout.school, class: isSpecialSchool ? '' : checkout.class.trim(), number: isSpecialSchool ? '' : checkout.number.trim() })
     if (result.status !== 201) throw new Error()
     setLastSubmittedOrderId(result.id); cart.clearCart(); usePRPackage.value = false; agreedToTerms.value = false; agreedToPolicy.value = false; toast.show('訂單已送出。'); router.push({ name: 'order-success', query: { id: result.id } })
-  } catch { toast.show('訂單尚未送出，請再試一次；購物袋內容會為你保留。') } finally { submitting.value = false }
+  } catch (error) { toast.show(parseSubmitError(error)) } finally { submitting.value = false }
+}
+
+function parseSubmitError(error) {
+  const message = String(error?.message || '')
+  if (!message) return '訂單尚未送出，請再試一次；購票清單內容會為你保留。'
+  if (message.includes('functions/')) {
+    const splitByColon = message.split(': ')
+    return splitByColon[splitByColon.length - 1] || '訂單尚未送出，請再試一次；購票清單內容會為你保留。'
+  }
+  return message
 }
 </script>
 

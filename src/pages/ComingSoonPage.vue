@@ -1,7 +1,7 @@
 <template>
   <div class="coming-soon">
-    <p class="eyebrow">CK Souvenir</p>
-    <h1>Coming Soon</h1>
+    <p class="eyebrow">建中舞會購票系統</p>
+    <h1>即將開賣</h1>
   </div>
 </template>
 

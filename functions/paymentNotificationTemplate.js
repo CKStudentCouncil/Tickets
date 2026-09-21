@@ -92,7 +92,7 @@ export function generateOrderNotificationHTML({ type, paymentTime, pickupTime, l
               <tr>
                 <td style="background: #1d1d1f; padding: 28px;">
                   <p style="margin: 0; color: #ffffff; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .6;">${escapeHtml(label)}</p>
-                  <p style="margin: 8px 0 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -.01em;">建中校慶紀念品</p>
+                  <p style="margin: 8px 0 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -.01em;">建中舞會購票系統</p>
                 </td>
               </tr>
 

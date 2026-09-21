@@ -22,9 +22,9 @@
       />
       <path d="M24 32h16" stroke="#c7c7cc" stroke-width="2" stroke-linecap="round" />
     </svg>
-    <p class="eyebrow">商品頁面</p>
-    <h2>找不到這項商品</h2>
-    <p class="not-found-copy">可能是連結有誤，或商品已下架</p>
+    <p class="eyebrow">票種頁面</p>
+    <h2>找不到這個票種</h2>
+    <p class="not-found-copy">可能是連結有誤，或票種已關閉</p>
     <button
       type="button"
       class="home-btn"

@@ -1,6 +1,6 @@
 <template>
   <div class="product-page">
-    <router-link to="/" class="back-button" aria-label="回到商品系列">
+    <router-link to="/" class="back-button" aria-label="回到票種列表">
       <q-icon name="arrow_back" size="18px" />
     </router-link>
 
@@ -10,7 +10,7 @@
       </div>
 
       <section class="purchase-card">
-        <p class="eyebrow eyebrow-en">CKSC Collection</p>
+        <p class="eyebrow eyebrow-en">CK PARTY NIGHT</p>
         <h1>{{ config.product.name }}</h1>
 
         <div class="price-row">
@@ -20,10 +20,10 @@
 
         <div class="divider" />
 
-        <p class="description">一份小小的紀念，裝進校園裡最值得記得的片段</p>
+        <p class="description">本票種為站票，請於開賣期間完成下單，並依通知完成後續流程。</p>
 
         <button type="button" class="primary-button" @click="add">
-          加入購物袋
+          加入購票清單
           <q-icon name="add_shopping_cart" size="18px" />
         </button>
       </section>
@@ -41,7 +41,7 @@ const toast = useToastStore()
 
 function add() {
   cart.addToCart(props.config.product)
-  toast.show(`已將「${props.config.product.name}」加入購物袋。`)
+  toast.show(`已將「${props.config.product.name}」加入購票清單。`)
 }
 </script>
 
