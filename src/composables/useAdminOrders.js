@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { saveAs } from 'file-saver'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { schools } from 'src/data/catalog'
 import { debounce } from 'src/utils/debounce'
 import { useAuthStore } from 'src/stores/auth'
@@ -160,7 +160,44 @@ export function useAdminOrders({ showToast, displayName }) {
     showToast('訂單已刪除')
   }
 
-  function exportToExcel(onlyDelivered = false) {
+  function appendJsonWorksheet(workbook, sheetName, rows, options = {}) {
+    const worksheet = workbook.addWorksheet(sheetName)
+    const headerSet = new Set()
+
+    rows.forEach((row) => {
+      Object.keys(row).forEach((key) => headerSet.add(key))
+    })
+
+    const headers = Array.from(headerSet)
+
+    if (headers.length > 0) {
+      worksheet.columns = headers.map((header) => ({
+        header,
+        key: header
+      }))
+
+      rows.forEach((row) => {
+        const normalizedRow = {}
+        headers.forEach((header) => {
+          normalizedRow[header] = row[header] ?? ''
+        })
+        worksheet.addRow(normalizedRow)
+      })
+    }
+
+    ;(options.merges || []).forEach((merge) => {
+      worksheet.mergeCells(
+        merge.s.r + 1,
+        merge.s.c + 1,
+        merge.e.r + 1,
+        merge.e.c + 1
+      )
+    })
+
+    return worksheet
+  }
+
+  async function exportToExcel(onlyDelivered = false) {
     const base = onlyDelivered ? deliveredOrders.value : orders.value
     const exportOrders = filterOrdersBySchool(base).filter(matchesCustomerSearch)
     const exportStats = calculateStatistics(exportOrders)
@@ -286,15 +323,11 @@ export function useAdminOrders({ showToast, displayName }) {
       })
     })
 
-    const productSheet = XLSX.utils.json_to_sheet(summaryData)
-    const ordersSheet = XLSX.utils.json_to_sheet(orderRows)
-    if (merges.length > 0) ordersSheet['!merges'] = merges
-
-    const workbook = XLSX.utils.book_new()
+    const workbook = new ExcelJS.Workbook()
     const schoolPrefix = selectedSchool.value !== 'all' ? `${selectedSchool.value}_` : ''
     const sheetPrefix = onlyDelivered ? '已交貨' : '全部'
-    XLSX.utils.book_append_sheet(workbook, productSheet, `${sheetPrefix}商品統計`)
-    XLSX.utils.book_append_sheet(workbook, ordersSheet, `${sheetPrefix}訂單明細`)
+    appendJsonWorksheet(workbook, `${sheetPrefix}商品統計`, summaryData)
+    appendJsonWorksheet(workbook, `${sheetPrefix}訂單明細`, orderRows, { merges })
 
     // Add per-school sheets
     const sortedItems = Array.from(allItems).sort()
@@ -321,15 +354,19 @@ export function useAdminOrders({ showToast, displayName }) {
           schoolSheetData.push(row)
         })
 
-        const schoolSheet = XLSX.utils.json_to_sheet(schoolSheetData)
         const sanitizedSchoolName = schoolName.replace(/[\/\\?*:[\]]/g, '').slice(0, 31)
-        XLSX.utils.book_append_sheet(workbook, schoolSheet, sanitizedSchoolName)
+        appendJsonWorksheet(workbook, sanitizedSchoolName, schoolSheetData)
       })
     }
 
     const filename = `${schoolPrefix}${onlyDelivered ? '已交貨' : ''}訂單統計_${new Date().toISOString().slice(0, 10)}.xlsx`
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-    saveAs(new Blob([excelBuffer], { type: 'application/octet-stream' }), filename)
+    const excelBuffer = await workbook.xlsx.writeBuffer()
+    saveAs(
+      new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      }),
+      filename
+    )
     showToast('Excel 已匯出')
   }
 
