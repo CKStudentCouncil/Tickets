@@ -9,6 +9,20 @@
   color: #1d1d1f;
 }
 
+@media (max-width: 480px) {
+  .admin-page {
+    padding: 24px 14px;
+  }
+
+  .panel {
+    padding: 18px;
+  }
+
+  .modal {
+    padding: 20px;
+  }
+}
+
 .num {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Noto Sans TC', Arial, sans-serif;
   font-variant-numeric: tabular-nums;
@@ -532,6 +546,21 @@
   transition: all 0.15s;
 }
 
+@media (max-width: 420px) {
+  /* Four pills in one row (繳費 / 領貨 / 繳費暨領貨 / 自訂訊息) squeezes the
+     five-character labels below a readable width on small phones — wrap
+     into a 2x2 grid instead. */
+  .type-options {
+    flex-wrap: wrap;
+    border-radius: 16px;
+  }
+
+  .type-option {
+    flex: 1 1 45%;
+    border-radius: 12px;
+  }
+}
+
 .type-option.active {
   background: #1d1d1f;
   color: #fff;
@@ -670,14 +699,50 @@
   flex: 1;
 }
 
+.ticket-type-card {
+  background: #fff;
+  border: 1px solid #e5e5e7;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ticket-type-card:last-child {
+  margin-bottom: 0;
+}
+
+/* Missing before: without an explicit grid, .ticket-type-grid fell back to
+   normal block stacking (which happens to be phone-safe on its own), but it
+   also meant .ticket-time-field's `grid-column: 1 / -1` below had no grid
+   parent to span across, so it never visually spans on desktop. auto-fit +
+   minmax naturally collapses to a single column on narrow phones. */
+.ticket-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.ticket-limit-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
 .ticket-time-field {
   grid-column: 1 / -1;
   margin-bottom: 14px !important;
 }
 
+/* minmax(240px, 1fr) alone needs 240px of available width per column even
+   on a single column — on a 320-360px phone, after page + panel + card
+   padding there's often only ~230-260px left, which either overflows the
+   viewport or sits right at the edge. min(240px, 100%) caps the minimum at
+   the container's own width so it can never demand more than it has. */
 .time-range {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 16px;
 }
 
@@ -687,10 +752,27 @@
   color: #6e6e73;
 }
 
+/* Grid items default to min-width: auto, which for a native date/time
+   input is its intrinsic content width (~130px/~95px on iOS & Android) —
+   that can force the track wider than its fr share and overflow the
+   container even though the fr math looks fine on paper. minmax(0, …)
+   lets the tracks actually shrink to what's available. */
 .time-inputs {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 8px;
+}
+
+.time-inputs input {
+  min-width: 0;
+}
+
+@media (max-width: 360px) {
+  /* Below ~360px, side-by-side date + time gets too cramped for a
+     comfortable tap target and can clip the displayed value on iOS. */
+  .time-inputs {
+    grid-template-columns: 1fr;
+  }
 }
 
 .time-presets {
