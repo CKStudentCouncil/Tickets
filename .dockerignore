@@ -1,0 +1,20 @@
+# 依賴與編譯產物 (Dependencies & Build Artifacts)
+node_modules
+.quasar
+dist
+
+# Git 相關 (Git related)
+.git
+.gitignore
+
+# Docker 設定檔本身 (Docker configs themselves)
+Dockerfile
+docker-compose.yml
+
+# 環境變數與機密檔案 (Environment variables & Secrets)
+.env
+.env.local
+
+# 系統雜訊與記錄檔 (System noise & Logs)
+*.log
+.DS_Store

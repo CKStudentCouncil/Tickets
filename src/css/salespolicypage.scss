@@ -1,0 +1,150 @@
+.static-page {
+  max-width: 760px;
+  min-height: calc(100vh - 56px);
+  margin: auto;
+  padding: 72px 24px 96px;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC',
+    'Microsoft JhengHei', 'Helvetica Neue', Arial, sans-serif;
+  color: #1d1d1f;
+}
+
+.num {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Noto Sans TC', Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.content-card {
+  padding: clamp(28px, 6vw, 56px);
+  border: 1px solid #e5e5e7;
+  border-radius: 28px;
+  background: #fff;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: #6e6e73;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+h1 {
+  margin: 0 0 18px;
+  font-size: clamp(1.6rem, 4.2vw, 2.4rem);
+  line-height: 1.4;
+  letter-spacing: -.01em;
+}
+
+.intro {
+  margin-bottom: 36px;
+  color: #6e6e73;
+  line-height: 1.75;
+}
+
+.terms-body section {
+  margin: 0;
+  padding: 22px 0;
+  border-top: 1px solid #e5e5e7;
+}
+
+.terms-body h2 {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+  letter-spacing: -.01em;
+  font-weight: 700;
+}
+
+.terms-body ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 10px;
+}
+
+.terms-body li {
+  color: #515154;
+  line-height: 1.8;
+  font-weight: 400;
+}
+
+.updated { margin: 30px 0 18px; color: #86868b; font-size: .82rem; }
+
+.primary-button {
+  display: inline-block;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: #1d1d1f;
+  color: #fff;
+  font-size: .9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (max-width: 600px) {
+  .static-page { padding: 48px 16px 64px; }
+  .content-card { border-radius: 20px; }
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.secondary-button {
+  padding: 10px 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.secondary-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.meta-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0 24px;
+  padding: 16px 18px;
+  background:white;
+  border-radius: 12px;
+}
+
+.meta-row {
+  display: flex;
+  gap: 10px;
+  font-size: .88rem;
+}
+
+.meta-label {
+  flex-shrink: 0;
+  width: 72px;
+  color: #6e6e73;
+  font-weight: 600;
+}
+
+.meta-value {
+  color: #1d1d1f;
+}
+
+.terms-body ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.terms-body ol li {
+  margin: 8px 0;
+}
