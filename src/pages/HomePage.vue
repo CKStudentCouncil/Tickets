@@ -47,8 +47,12 @@
       
       <div class="event-subtitle">2026 · CK PARTY NIGHT</div>
       <div class="event-brand">COSMOS</div>
+      <a href="#collection" class="primary-link text-center" @click.prevent="scrollToCollection">
+          開始購票
+        <q-icon name="south_east" />
+      </a>
 
-      <div class="hero-inner">
+      <!--<div class="hero-inner">
         <p class="eyebrow">CK PARTY NIGHT</p>
         <h1 class="hero-title">建中舞會購票系統</h1>
         <div class="hero-cta-row">
@@ -58,7 +62,7 @@
           </a>
           <span class="hero-meta">2026/12/13 · 建中明道樓後停車場</span>
         </div>
-      </div>
+      </div>-->
     </section>
 
     <section id="collection" ref="collectionSection" class="collection">
