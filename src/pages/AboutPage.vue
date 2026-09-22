@@ -45,7 +45,7 @@
             <circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.6"/>
             <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor"/>
           </svg>
-          follow CKSC - IG cksc.81st
+          follow CKSC
         </a>
         <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener" class="ghost-button">
           <svg class="ig-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -53,7 +53,7 @@
             <circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="1.6"/>
             <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor"/>
           </svg>
-          follow CK Party Night - IG ck_party_night
+          follow CK Party Night
         </a>
         <router-link to="/" class="secondary-button">回到首頁</router-link>
       </div>
