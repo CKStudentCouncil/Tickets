@@ -3,7 +3,6 @@
     <section class="hero">
       <p class="eyebrow eyebrow-en">CK PARTY NIGHT</p>
       <h1 class="text-bold">建中舞會購票系統</h1>
-      <p class="hero-copy">全票種皆為站票，分為校內票、一階票、二階票，請依開賣時程與資格完成購票。</p>
       <a href="#collection" class="primary-link">探索票種 <q-icon name="south_east" /></a>
     </section>
 
