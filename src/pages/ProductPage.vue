@@ -1,104 +1,186 @@
 <template>
-  <ProductSized
-    v-if="config?.type === 'sized'"
-    :config="config"
-  />
-  <ProductSimple
-    v-else-if="config?.type === 'simple'"
-    :config="config"
-  />
-  <ProductMulti
-    v-else-if="config?.type === 'multi'"
-    :config="config"
-  />
-  <div
-    v-else
-    class="not-found"
-  >
-    <svg class="not-found-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-      <path
-        d="M8 24a4 4 0 0 1 4-4h40a4 4 0 0 1 4 4v3a5 5 0 0 0 0 10v3a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4v-3a5 5 0 0 0 0-10v-3Z"
-        stroke="#c7c7cc" stroke-width="2" stroke-linejoin="round"
-      />
-      <path d="M24 32h16" stroke="#c7c7cc" stroke-width="2" stroke-linecap="round" />
-    </svg>
-    <p class="eyebrow">票種頁面</p>
-    <h2>找不到這個票種</h2>
-    <p class="not-found-copy">可能是連結有誤，或票種已關閉</p>
-    <button
-      type="button"
-      class="home-btn"
-      @click="$router.push('/')"
-    >
-      回首頁
-    </button>
+  <div class="product-page">
+    <router-link to="/" class="back-button" aria-label="回到票種列表">
+      <q-icon name="arrow_back" size="18px" />
+    </router-link>
+
+    <div v-if="loading" class="ticket-state">
+      <p><span class="loading-dot" />票種載入中…</p>
+    </div>
+
+    <div v-else-if="loadError" class="ticket-state">
+      <h3>票種資訊載入失敗</h3>
+      <p>請重新整理頁面後再試。</p>
+      <button type="button" class="btn" @click="loadTicketTypes">
+        重新載入
+      </button>
+    </div>
+
+    <div v-else-if="!ticketType" class="ticket-state">
+      <h3>找不到這個票種</h3>
+      <p>這個票種可能已下架，或連結有誤。</p>
+      <router-link to="/" class="btn">回到票種列表</router-link>
+    </div>
+
+    <div v-else class="product-detail">
+      <div class="image-frame">
+        <img
+          :src="`/images/ticket-${ticketType.id}.png`"
+          :alt="ticketType.name"
+          :class="{ 'is-muted-img': status.state !== 'selling' }"
+          @error="handleImageError"
+        >
+        <span class="status-chip" :class="`status-${status.className}`">
+          <span class="status-dot" />
+          <span>{{ status.label }}</span>
+        </span>
+      </div>
+
+      <section class="purchase-card">
+        <p class="eyebrow">CK PARTY NIGHT</p>
+        <h1>{{ ticketType.name }}</h1>
+
+        <p
+          v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson"
+          class="ticket-limit"
+        >
+          每人限購 {{ ticketType.purchaseLimitPerPerson }} 張
+        </p>
+
+        <div class="divider" />
+
+        <p class="description">本票種為站票，請於開賣期間完成下單，並依通知完成後續流程。</p>
+
+        <button
+          type="button"
+          class="primary-button"
+          :disabled="status.state !== 'selling'"
+          @click="add"
+        >
+          {{ status.state === 'selling' ? '加入購票清單' : status.label }}
+          <q-icon v-if="status.state === 'selling'" name="add_shopping_cart" size="18px" />
+        </button>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { productPageConfigs } from 'src/data/catalog'
-import ProductSized from 'components/products/ProductSized.vue'
-import ProductSimple from 'components/products/ProductSimple.vue'
-import ProductMulti from 'components/products/ProductMulti.vue'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from 'src/boot/firebase'
+import { useCartStore } from 'src/stores/cart'
+import { useToastStore } from 'src/stores/toast'
 
 const route = useRoute()
-const config = computed(() => productPageConfigs[route.params.id])
+const cart = useCartStore()
+const toast = useToastStore()
+
+const ticketTypes = ref([])
+const loading = ref(true)
+const loadError = ref(false)
+
+const ticketType = computed(() =>
+  ticketTypes.value.find((type) => type.id === route.params.id) || null
+)
+
+const status = computed(() =>
+  ticketType.value ? getTicketStatus(ticketType.value) : null
+)
+
+async function loadTicketTypes() {
+  loading.value = true
+  loadError.value = false
+
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'settings', 'ticketTypes')
+    )
+
+    if (!snapshot.exists()) {
+      ticketTypes.value = []
+      return
+    }
+
+    const data = snapshot.data()
+
+    ticketTypes.value = Array.isArray(data.types)
+      ? data.types.filter(
+          (type) =>
+            type &&
+            type.id &&
+            type.name
+        )
+      : []
+  } catch (error) {
+    console.error('Load ticket types error:', error)
+    loadError.value = true
+    ticketTypes.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+function getTicketStatus(type) {
+  const now = new Date()
+
+  if (!type.salesStartTime || !type.salesEndTime) {
+    return {
+      state: 'unavailable',
+      label: '尚未開放',
+      className: 'upcoming'
+    }
+  }
+
+  const start = new Date(type.salesStartTime)
+  const end = new Date(type.salesEndTime)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return {
+      state: 'unavailable',
+      label: '尚未開放',
+      className: 'upcoming'
+    }
+  }
+
+  if (now < start) {
+    return {
+      state: 'upcoming',
+      label: '尚未開賣',
+      className: 'upcoming'
+    }
+  }
+
+  if (now > end) {
+    return {
+      state: 'ended',
+      label: '已結束',
+      className: 'ended'
+    }
+  }
+
+  return {
+    state: 'selling',
+    label: '販售中',
+    className: 'selling'
+  }
+}
+
+function handleImageError(event) {
+  event.target.style.display = 'none'
+}
+
+function add() {
+  if (!ticketType.value || status.value.state !== 'selling') return
+
+  cart.addToCart(ticketType.value)
+  toast.show(`已將「${ticketType.value.name}」加入購票清單。`)
+}
+
+onMounted(loadTicketTypes)
 </script>
 
 <style scoped>
-.not-found {
-  min-height: 100vh;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  text-align: center;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC',
-    'Microsoft JhengHei', 'Helvetica Neue', Arial, sans-serif;
-  color: #1d1d1f;
-}
-
-.not-found-icon {
-  width: 52px;
-  height: 52px;
-  margin-bottom: 14px;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: #6e6e73;
-  font-size: .72rem;
-  font-weight: 700;
-  letter-spacing: .08em;
-}
-
-.not-found h2 {
-  margin: 0 0 6px;
-  font-size: 1.3rem;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.not-found-copy {
-  margin: 0 0 22px;
-  color: #6e6e73;
-  line-height: 1.6;
-}
-
-.home-btn {
-  padding: 12px 28px;
-  border: 0;
-  border-radius: 999px;
-  background: #1d1d1f;
-  color: #fff;
-  font-weight: 600;
-  letter-spacing: .01em;
-  cursor: pointer;
-  transition: opacity .15s ease;
-}
-
-.home-btn:hover { opacity: .88; }
+@import 'src/css/productpage.scss'
 </style>
