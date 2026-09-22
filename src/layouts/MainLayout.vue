@@ -6,18 +6,28 @@
         <span>建中舞會購票系統</span>
       </router-link>
 
-      <nav class="primary-nav" aria-label="主要導覽">
-        <router-link to="/" exact-active-class="is-active">首頁</router-link>
-        <router-link to="/orders" active-class="is-active">我的訂單</router-link>
-        <router-link to="/about" active-class="is-active">關於我們</router-link>
+      <button
+        class="nav-toggle"
+        type="button"
+        aria-label="切換導覽選單"
+        @click="mobileNavOpen = !mobileNavOpen"
+      >
+        <span /><span />
+      </button>
+
+      <nav class="primary-nav" :class="{ open: mobileNavOpen }" aria-label="主要導覽">
+        <router-link to="/" exact-active-class="is-active" @click="mobileNavOpen = false">首頁</router-link>
+        <router-link to="/orders" active-class="is-active" @click="mobileNavOpen = false">我的訂單</router-link>
+        <router-link to="/about" active-class="is-active" @click="mobileNavOpen = false">關於我們</router-link>
       </nav>
 
       <div class="header-actions">
         <router-link to="/cart" class="bag-link" aria-label="開啟購物袋">
-          <q-icon name="shopping_bag" size="1.2rem" />
+          <q-icon name="shopping_bag" size="1.1rem" />
           <span class="bag-label">購物袋</span>
           <span v-if="itemCount" class="bag-count">{{ itemCount }}</span>
         </router-link>
+
         <div class="menu-wrapper">
           <button
             class="more-button"
@@ -25,73 +35,71 @@
             aria-label="更多選項"
             @click.stop="menuOpen = !menuOpen"
           >
-            <q-icon name="more_horiz" size="1.35rem" />
+            <q-icon name="more_horiz" size="1.3rem" />
           </button>
 
-          <div v-if="menuOpen" class="menu-popover"></div>
+          <div v-if="menuOpen" class="menu-popover">
+            <router-link to="/terms" @click="menuOpen = false">
+              使用者條款
+            </router-link>
+
+            <router-link to="/policy" @click="menuOpen = false">
+              銷售與退貨條款
+            </router-link>
+
+            <router-link to="/survey" @click="menuOpen = false">
+              使用者問卷
+            </router-link>
+
+            <router-link
+              v-if="auth.isManager && !auth.isAdmin"
+              to="/admin"
+              @click="menuOpen = false"
+            >
+              通知管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isAdmin"
+              to="/admin"
+              @click="menuOpen = false"
+            >
+              訂單管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/account"
+              @click="menuOpen = false"
+            >
+              帳號管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isManager"
+              to="/admin/survey"
+              @click="menuOpen = false"
+            >
+              問卷管理
+            </router-link>
+
+            <router-link
+              v-if="!auth.isLoggedIn"
+              to="/admin/login"
+              @click="menuOpen = false"
+            >
+              幹部登入
+            </router-link>
+
+            <button
+              v-if="auth.isManager || auth.isSuperAdmin || auth.isAdmin"
+              type="button"
+              @click="handleSignOut"
+            >
+              登出
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div v-if="menuOpen" class="menu-popover">
-        <router-link to="/terms" @click="menuOpen = false">
-          使用者條款
-        </router-link>
-
-        <router-link to="/policy" @click="menuOpen = false">
-          銷售與退貨條款
-        </router-link>
-
-        <router-link to="/survey" @click="menuOpen = false">
-          使用者問卷
-        </router-link>
-
-        <router-link
-          v-if="auth.isManager && !auth.isAdmin"
-          to="/admin"
-          @click="menuOpen = false"
-        >
-          通知管理
-        </router-link>
-
-        <router-link
-          v-if="auth.isAdmin"
-          to="/admin"
-          @click="menuOpen = false"
-        >
-          訂單管理
-        </router-link>
-
-        <router-link
-          v-if="auth.isSuperAdmin"
-          to="/admin/account"
-          @click="menuOpen = false"
-        >
-          帳號管理
-        </router-link>
-
-        <router-link
-          v-if="auth.isManager"
-          to="/admin/survey"
-          @click="menuOpen = false"
-        >
-          問卷管理
-        </router-link>
-
-        <router-link
-          v-if="!auth.isLoggedIn"
-          to="/admin/login"
-          @click="menuOpen = false"
-        >
-          幹部登入
-        </router-link>
-
-        <button
-          v-if="auth.isManager || auth.isSuperAdmin || auth.isAdmin"
-          type="button"
-          @click="handleSignOut"
-        >
-          登出
-        </button>
       </div>
     </header>
 
@@ -119,7 +127,7 @@
             <router-link to="/policy">銷售與退貨條款</router-link>
           </nav>
         </div>
-  
+
         <div class="footer-col">
           <p class="footer-heading">Links</p>
           <nav class="footer-links">
@@ -130,7 +138,7 @@
             <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener">CK Party Night Instagram</a>
           </nav>
         </div>
-  
+
         <div class="footer-col footer-brand">
           <div class="footer-logo">
             <span>建中舞會購票系統</span>
@@ -138,7 +146,7 @@
           <p class="footer-meta">Taipei Municipal Chien Kuo High School Student Council</p>
           <p class="footer-meta">Developed by Chris Sun and Jim Tang</p>
         </div>
-      </div> 
+      </div>
       <div class="footer-bottom">
         <span>© <span class="num">{{ currentYear }}</span> CK Tickets. All rights reserved.</span>
       </div>
@@ -159,6 +167,7 @@ const cart = useCartStore()
 const toast = useToastStore()
 
 const menuOpen = ref(false)
+const mobileNavOpen = ref(false)
 const currentYear = computed(() => new Date().getFullYear())
 
 const itemCount = computed(() =>
