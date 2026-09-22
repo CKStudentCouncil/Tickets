@@ -218,7 +218,7 @@ import {
   canViewOrder,
   updateOrderDelivery,
   formatOrderDate
-} from 'src/services/orders'
+} from 'src/services/orderService.js'
 
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
