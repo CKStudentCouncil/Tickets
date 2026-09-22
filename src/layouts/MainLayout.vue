@@ -3,7 +3,7 @@
     <header class="site-header">
       <router-link to="/" class="brand" aria-label="建中舞會購票系統首頁">
         <img src="../../public/cksclogo.png" alt="建中舞會購票系統 Logo" class="brand-mark" />
-        <span>建中舞會購票系統</span>
+        <span>CK Tickets</span>
       </router-link>
 
       <div class="header-actions">
