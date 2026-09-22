@@ -60,20 +60,98 @@
           {{ status.state === 'selling' ? '加入購票清單' : status.label }}
           <q-icon v-if="status.state === 'selling'" name="add_shopping_cart" size="18px" />
         </button>
+
+        <button
+          v-if="status.state === 'selling'"
+          type="button"
+          class="secondary-button"
+          @click="openOrderForm"
+        >
+          直接送出訂單
+        </button>
       </section>
     </div>
+
+    <q-dialog v-model="showOrderForm" transition-show="scale" transition-hide="scale">
+      <div class="order-dialog">
+        <button
+          type="button"
+          class="order-dialog-close"
+          aria-label="關閉"
+          @click="showOrderForm = false"
+        >
+          <q-icon name="close" size="18px" />
+        </button>
+
+        <p class="eyebrow">{{ ticketType?.name }}</p>
+        <h3>填寫訂購資訊</h3>
+
+        <div class="order-form">
+          <label>
+            數量
+            <input type="number" v-model.number="quantity" min="1" :max="maxQuantity">
+          </label>
+
+          <label>
+            學校 / 身分
+            <select v-model="buyer.school">
+              <option disabled value="">請選擇</option>
+              <option v-for="s in SCHOOLS" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </label>
+
+          <label>
+            班級
+            <input v-model="buyer.class">
+          </label>
+
+          <label>
+            座號
+            <input v-model="buyer.number">
+          </label>
+
+          <label>
+            姓名
+            <input v-model="buyer.customerName">
+          </label>
+
+          <label>
+            電話
+            <input v-model="buyer.customerPhone">
+          </label>
+
+          <label>
+            Email
+            <input type="email" v-model="buyer.customerEmail">
+          </label>
+        </div>
+
+        <p v-if="orderError" class="order-error">{{ orderError }}</p>
+
+        <button
+          type="button"
+          class="primary-button"
+          :disabled="!canSubmitOrder || submitting"
+          @click="submitDirectOrder"
+        >
+          {{ submitting ? '送出中…' : '確認送出訂單' }}
+        </button>
+      </div>
+    </q-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from 'src/boot/firebase'
 import { useCartStore } from 'src/stores/cart'
 import { useToastStore } from 'src/stores/toast'
+import { submitOrder, setLastSubmittedOrderId } from 'src/services/orderService'
 
 const route = useRoute()
+const router = useRouter()
 const cart = useCartStore()
 const toast = useToastStore()
 
@@ -179,6 +257,82 @@ function add() {
 }
 
 onMounted(loadTicketTypes)
+
+/* ---------------- direct order submission ---------------- */
+
+// mirrors SCHOOL_IDENTITIES keys in src/services/orderService.js
+const SCHOOLS = [
+  '建國中學', '北一女中', '中山女高', '景美女中',
+  '成功高中', '師大附中', '建中家長會', '建中老師', '其他學校或社會人士'
+]
+
+const showOrderForm = ref(false)
+const submitting = ref(false)
+const orderError = ref('')
+const quantity = ref(1)
+const buyer = ref({
+  school: '',
+  class: '',
+  number: '',
+  customerName: '',
+  customerPhone: '',
+  customerEmail: ''
+})
+
+const maxQuantity = computed(() =>
+  ticketType.value && !ticketType.value.unlimited
+    ? ticketType.value.purchaseLimitPerPerson || 1
+    : 99
+)
+
+const canSubmitOrder = computed(() =>
+  !!buyer.value.school &&
+  !!buyer.value.customerName &&
+  !!buyer.value.customerPhone &&
+  !!buyer.value.customerEmail &&
+  quantity.value > 0 &&
+  quantity.value <= maxQuantity.value
+)
+
+function openOrderForm() {
+  if (!ticketType.value || status.value.state !== 'selling') return
+  quantity.value = 1
+  orderError.value = ''
+  showOrderForm.value = true
+}
+
+async function submitDirectOrder() {
+  if (!ticketType.value || !canSubmitOrder.value || submitting.value) return
+
+  submitting.value = true
+  orderError.value = ''
+
+  const unitPrice = ticketType.value.price || 0
+  const items = [{
+    id: ticketType.value.id,
+    name: ticketType.value.name,
+    price: unitPrice,
+    quantity: quantity.value
+  }]
+
+  try {
+    const result = await submitOrder({
+      ...buyer.value,
+      items,
+      finalTotal: unitPrice * quantity.value
+    })
+
+    setLastSubmittedOrderId(result.id)
+    showOrderForm.value = false
+    toast.show(`訂單 #${result.id} 已送出。`)
+    router.push(`/orders/${result.id}`)
+  } catch (error) {
+    console.error('Submit order error:', error)
+    orderError.value = '訂單送出失敗，請稍後再試。'
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <style scoped>
