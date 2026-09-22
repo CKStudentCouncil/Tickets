@@ -23,7 +23,7 @@
     </div>
 
     <div v-else class="product-detail">
-      <div class="image-frame">
+      <!--<div class="image-frame">
         <img
           :src="`/images/ticket-${ticketType.id}.png`"
           :alt="ticketType.name"
@@ -34,7 +34,7 @@
           <span class="status-dot" />
           <span>{{ status.label }}</span>
         </span>
-      </div>
+      </div>-->
 
       <section class="purchase-card">
         <p class="eyebrow">CK PARTY NIGHT</p>
@@ -49,93 +49,82 @@
 
         <div class="divider" />
 
-        <!--<button
-          type="button"
-          class="primary-button"
-          :disabled="status.state !== 'selling'"
-          @click="add"
-        >
-          {{ status.state === 'selling' ? '加入購票清單' : status.label }}
-          <q-icon v-if="status.state === 'selling'" name="add_shopping_cart" size="18px" />
-        </button>-->
-
         <button
-          v-if="status.state === 'selling'"
+          v-if="status.state === 'selling' && !showOrderForm"
           type="button"
           class="primary-button"
           @click="openOrderForm"
         >
           購買 {{ ticketType.name }}
         </button>
+
+        <div v-if="showOrderForm" class="order-panel">
+          <p class="eyebrow">填寫訂購資訊</p>
+
+          <div class="order-form">
+            <label>
+              數量
+              <input type="number" v-model.number="quantity" min="1" :max="maxQuantity">
+            </label>
+
+            <label>
+              學校 / 身分
+              <select v-model="buyer.school">
+                <option disabled value="">請選擇</option>
+                <option v-for="s in SCHOOLS" :key="s" :value="s">{{ s }}</option>
+              </select>
+            </label>
+
+            <label>
+              班級
+              <input v-model="buyer.class">
+            </label>
+
+            <label>
+              座號
+              <input v-model="buyer.number">
+            </label>
+
+            <label>
+              姓名
+              <input v-model="buyer.customerName">
+            </label>
+
+            <label>
+              電話
+              <input v-model="buyer.customerPhone">
+            </label>
+
+            <label>
+              Email
+              <input type="email" v-model="buyer.customerEmail">
+            </label>
+          </div>
+
+          <p v-if="orderError" class="order-error">{{ orderError }}</p>
+
+          <div class="order-panel-actions">
+            <button
+              type="button"
+              class="secondary-button"
+              :disabled="submitting"
+              @click="closeOrderForm"
+            >
+              取消
+            </button>
+
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="!canSubmitOrder || submitting"
+              @click="submitDirectOrder"
+            >
+              {{ submitting ? '送出中…' : '確認送出訂單' }}
+            </button>
+          </div>
+        </div>
       </section>
     </div>
-
-    <q-dialog v-model="showOrderForm" transition-show="scale" transition-hide="scale">
-      <div class="order-dialog">
-        <button
-          type="button"
-          class="order-dialog-close"
-          aria-label="關閉"
-          @click="showOrderForm = false"
-        >
-          <q-icon name="close" size="18px" />
-        </button>
-
-        <p class="eyebrow">{{ ticketType?.name }}</p>
-        <h3>填寫訂購資訊</h3>
-
-        <div class="order-form">
-          <label>
-            數量
-            <input type="number" v-model.number="quantity" min="1" :max="maxQuantity">
-          </label>
-
-          <label>
-            學校 / 身分
-            <select v-model="buyer.school">
-              <option disabled value="">請選擇</option>
-              <option v-for="s in SCHOOLS" :key="s" :value="s">{{ s }}</option>
-            </select>
-          </label>
-
-          <label>
-            班級
-            <input v-model="buyer.class">
-          </label>
-
-          <label>
-            座號
-            <input v-model="buyer.number">
-          </label>
-
-          <label>
-            姓名
-            <input v-model="buyer.customerName">
-          </label>
-
-          <label>
-            電話
-            <input v-model="buyer.customerPhone">
-          </label>
-
-          <label>
-            Email
-            <input type="email" v-model="buyer.customerEmail">
-          </label>
-        </div>
-
-        <p v-if="orderError" class="order-error">{{ orderError }}</p>
-
-        <button
-          type="button"
-          class="primary-button"
-          :disabled="!canSubmitOrder || submitting"
-          @click="submitDirectOrder"
-        >
-          {{ submitting ? '送出中…' : '確認送出訂單' }}
-        </button>
-      </div>
-    </q-dialog>
   </div>
 </template>
 
@@ -256,7 +245,7 @@ function add() {
 
 onMounted(loadTicketTypes)
 
-/* ---------------- direct order submission ---------------- */
+/* ---------------- direct order submission (inline, no dialog) ---------------- */
 
 // mirrors SCHOOL_IDENTITIES keys in src/services/orderService.js
 const SCHOOLS = [
@@ -297,6 +286,11 @@ function openOrderForm() {
   quantity.value = 1
   orderError.value = ''
   showOrderForm.value = true
+}
+
+function closeOrderForm() {
+  showOrderForm.value = false
+  orderError.value = ''
 }
 
 async function submitDirectOrder() {

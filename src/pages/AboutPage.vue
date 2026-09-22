@@ -2,14 +2,14 @@
   <div class="static-page">
     <article class="content-card">
       <p class="eyebrow">關於建中舞會購票系統</p>
-      <h1>讓每一張票，都準時帶你進場</h1>
-      <p>此系統由建中班聯會團隊維運，提供建中舞會門票的線上購票服務。</p>
-      <p>若你在使用上遇到問題或有改進建議，歡迎提供回饋，協助我們持續優化購票體驗。</p>
-      <p>如有友校有意願使用此系統，歡迎與開發者聯繫。</p>
+      <h1>CK Party Night Ticketing System</h1>
+      <p>此系統由建中班聯會團隊維運，提供建中舞會門票的線上購票服務</p>
+      <p>若你在使用上遇到問題或有改進建議，歡迎提供回饋，協助我們持續優化購票體驗</p>
+      <p>如有友校有意願使用此系統，歡迎與開發者聯繫</p>
 
       <section class="contact-section">
         <h2>需要協助嗎？</h2>
-        <p>有任何問題，歡迎透過以下方式聯繫我們：</p>
+        <p>有任何問題，歡迎透過以下方式聯繫我們</p>
         <ul>
           <li>開發者孫逢邦：<span class="mono">chris20090731@gmail.com</span></li>
           <li>開發者唐盛鈞：<span class="mono">08020jt@gmail.com</span></li>
@@ -55,7 +55,7 @@
           </svg>
           follow CK Party Night
         </a>
-        <router-link to="/" class="secondary-button">回到首頁</router-link>
+        <router-link to="/" class="ghost-button">回到首頁</router-link>
       </div>
     </article>
   </div>

@@ -1,36 +1,36 @@
 import { USE_MOCK_ORDERS } from 'src/config/app'
 import {
   collection,
-  addDoc,
-  serverTimestamp,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
-  query,
   orderBy,
-  deleteDoc,
-  updateDoc,
+  query,
   runTransaction,
-  setDoc
+  serverTimestamp,
+  updateDoc
 } from 'firebase/firestore'
-import { db } from 'src/boot/firebase'
-import { addGuestOrderId, getGuestOrderIds, removeGuestOrderId } from 'src/utils/guestOrders'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { app } from 'src/boot/firebase'
-
+import { db, app } from 'src/boot/firebase'
+import {
+  addGuestOrderId,
+  getGuestOrderIds,
+  removeGuestOrderId
+} from 'src/utils/guestOrders'
 
 const MOCK_ORDERS_KEY = 'cksc_mock_orders'
 
 const SCHOOL_IDENTITIES = {
-  '建國中學': 'CKS',
-  '北一女中': 'TFG',
-  '中山女高': 'ZS',
-  '景美女中': 'JM',
-  '成功高中': 'CG',
-  '師大附中': 'HSNU',
-  '建中家長會': 'CKP',
-  '建中老師': 'CKT',
-  '其他學校或社會人士': 'O'
+  建國中學: 'CKS',
+  北一女中: 'TFG',
+  中山女高: 'ZS',
+  景美女中: 'JM',
+  成功高中: 'CG',
+  師大附中: 'HSNU',
+  建中家長會: 'CKP',
+  建中老師: 'CKT',
+  其他學校或社會人士: 'O'
 }
 
 const functions = getFunctions(app, 'asia-east1')
@@ -49,9 +49,6 @@ function saveMockOrders(orders) {
   localStorage.setItem(MOCK_ORDERS_KEY, JSON.stringify(orders))
 }
 
-/**
- * Get YYYYMMDD in Taiwan time.
- */
 function getTaiwanDateString(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Taipei',
@@ -69,70 +66,76 @@ function getTaiwanDateString(date = new Date()) {
   return `${values.year}${values.month}${values.day}`
 }
 
-/**
- * Get the identity prefix for a school.
- */
 function getSchoolIdentity(school) {
   return SCHOOL_IDENTITIES[school] || 'O'
 }
 
-/**
- * Generate a new order ID.
- *
- * Format:
- * IDENTITY + YYYYMMDD + 4-digit serial number
- *
- * Example:
- * CKS202608140001
- */
 async function generateOrderId(school) {
   const identity = getSchoolIdentity(school)
   const date = getTaiwanDateString()
-
   const counterRef = doc(db, 'orderCounters', date)
 
-  const serialNumber = await runTransaction(db, async (transaction) => {
-    const counterSnap = await transaction.get(counterRef)
+  const serialNumber = await runTransaction(
+    db,
+    async (transaction) => {
+      const counterSnap = await transaction.get(counterRef)
 
-    const currentSerial = counterSnap.exists()
-      ? Number(counterSnap.data().serialNumber || 0)
-      : 0
+      const currentSerial = counterSnap.exists()
+        ? Number(counterSnap.data().serialNumber || 0)
+        : 0
 
-    const nextSerial = currentSerial + 1
+      const nextSerial = currentSerial + 1
 
-    transaction.set(
-      counterRef,
-      {
-        date,
-        serialNumber: nextSerial,
-        updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    )
+      transaction.set(
+        counterRef,
+        {
+          date,
+          serialNumber: nextSerial,
+          updatedAt: serverTimestamp()
+        },
+        { merge: true }
+      )
 
-    return nextSerial
-  })
+      return nextSerial
+    }
+  )
 
   return `${identity}${date}${String(serialNumber).padStart(4, '0')}`
 }
 
 export function parseOrderDate(value) {
   if (!value) return null
-  if (value instanceof Date) return value
-  if (typeof value === 'string') return new Date(value)
-  if (value.toDate) return value.toDate()
+
+  if (value instanceof Date) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  if (typeof value?.toDate === 'function') {
+    return value.toDate()
+  }
+
   return null
 }
 
 export function formatOrderDate(value) {
-  const d = parseOrderDate(value)
-  return d ? d.toLocaleString() : ''
+  const date = parseOrderDate(value)
+
+  return date
+    ? date.toLocaleString('zh-TW', {
+        timeZone: 'Asia/Taipei'
+      })
+    : ''
 }
 
 function normalizeOrderPayload(payload) {
-  const { ...rest } = payload
-
-  return rest
+  return {
+    ...payload
+  }
 }
 
 export async function submitOrder(orderPayload) {
@@ -153,17 +156,15 @@ export async function submitOrder(orderPayload) {
     }
   }
 
-  await Promise.resolve()
-
   const orders = loadMockOrders()
   const date = getTaiwanDateString()
 
   const todayOrders = orders.filter((order) => {
     if (!order.id) return false
 
-    return new RegExp(
-      `^[A-Z]+${date}\\d{4}$`
-    ).test(order.id)
+    return new RegExp(`^[A-Z]+${date}\\d{4}$`).test(
+      order.id
+    )
   })
 
   let maxSerial = 0
@@ -197,9 +198,11 @@ export async function submitOrder(orderPayload) {
     createdAt,
     delivered: false,
     deliveryUpdatedAt: null,
+    deliveryUpdatedBy: null,
     deliveryUpdatedByName: null,
     paid: false,
     paymentUpdatedAt: null,
+    paymentUpdatedBy: null,
     paymentUpdatedByName: null
   }
 
@@ -223,40 +226,62 @@ export async function fetchAllOrders() {
 
     const snapshot = await getDocs(q)
 
-    const allOrdersRaw = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...d.data()
+    const orders = snapshot.docs.map((item) => ({
+      id: item.id,
+      ...item.data()
     }))
 
     return Promise.all(
-      allOrdersRaw.map(async (o) => {
+      orders.map(async (order) => {
         const needEnrich =
-          !o.customerName ||
-          !o.customerPhone ||
-          !o.customerEmail
+          !order.customerName ||
+          !order.customerPhone ||
+          !order.customerEmail
 
-        if (!needEnrich || !o.userId) return o
+        if (!needEnrich || !order.userId) {
+          return order
+        }
 
         try {
           const userSnap = await getDoc(
-            doc(db, 'users', o.userId)
+            doc(db, 'users', order.userId)
           )
 
-          if (!userSnap.exists()) return o
+          if (!userSnap.exists()) {
+            return order
+          }
 
-          const u = userSnap.data()
+          const user = userSnap.data()
 
           return {
-            ...o,
-            customerName: o.customerName || u.name || '',
-            customerPhone: o.customerPhone || u.phone || '',
-            customerEmail: o.customerEmail || u.email || '',
-            school: o.school || u.school || '',
-            class: o.class || u.class || '',
-            number: o.number || u.number || ''
+            ...order,
+            customerName:
+              order.customerName ||
+              user.name ||
+              '',
+            customerPhone:
+              order.customerPhone ||
+              user.phone ||
+              '',
+            customerEmail:
+              order.customerEmail ||
+              user.email ||
+              '',
+            school:
+              order.school ||
+              user.school ||
+              '',
+            class:
+              order.class ||
+              user.class ||
+              '',
+            number:
+              order.number ||
+              user.number ||
+              ''
           }
         } catch {
-          return o
+          return order
         }
       })
     )
@@ -275,7 +300,9 @@ export async function fetchOrderById(orderId) {
       doc(db, 'orders', orderId)
     )
 
-    if (!snap.exists()) return null
+    if (!snap.exists()) {
+      return null
+    }
 
     return {
       id: snap.id,
@@ -284,8 +311,9 @@ export async function fetchOrderById(orderId) {
   }
 
   return (
-    loadMockOrders().find((o) => o.id === orderId) ||
-    null
+    loadMockOrders().find(
+      (order) => order.id === orderId
+    ) || null
   )
 }
 
@@ -298,18 +326,27 @@ export async function fetchBuyerOrders() {
     for (const id of ids) {
       const order = await fetchOrderById(id)
 
-      if (order) loaded.push(order)
+      if (order) {
+        loaded.push(order)
+      }
     }
 
     return loaded.sort(
       (a, b) =>
-        new Date(parseOrderDate(b.createdAt)).getTime() -
-        new Date(parseOrderDate(a.createdAt)).getTime()
+        new Date(
+          parseOrderDate(b.createdAt)
+        ).getTime() -
+        new Date(
+          parseOrderDate(a.createdAt)
+        ).getTime()
     )
   }
 
   const byId = new Map(
-    loadMockOrders().map((o) => [o.id, o])
+    loadMockOrders().map((order) => [
+      order.id,
+      order
+    ])
   )
 
   return ids
@@ -329,7 +366,9 @@ export function canViewOrder(orderId) {
 
   return (
     getGuestOrderIds().includes(orderId) ||
-    loadMockOrders().some((o) => o.id === orderId)
+    loadMockOrders().some(
+      (order) => order.id === orderId
+    )
   )
 }
 
@@ -354,23 +393,26 @@ export async function updateOrderDelivery(
 
   const orders = loadMockOrders()
 
-  const idx = orders.findIndex(
-    (o) => o.id === orderId
+  const index = orders.findIndex(
+    (order) => order.id === orderId
   )
 
-  if (idx === -1) {
+  if (index === -1) {
     throw new Error('訂單不存在')
   }
 
   const patch = {
     delivered,
-    deliveryUpdatedAt: new Date().toISOString(),
-    deliveryUpdatedBy: meta.deliveryUpdatedBy,
-    deliveryUpdatedByName: meta.deliveryUpdatedByName
+    deliveryUpdatedAt:
+      new Date().toISOString(),
+    deliveryUpdatedBy:
+      meta.deliveryUpdatedBy || null,
+    deliveryUpdatedByName:
+      meta.deliveryUpdatedByName || null
   }
 
-  orders[idx] = {
-    ...orders[idx],
+  orders[index] = {
+    ...orders[index],
     ...patch
   }
 
@@ -400,23 +442,26 @@ export async function updateOrderPayment(
 
   const orders = loadMockOrders()
 
-  const idx = orders.findIndex(
-    (o) => o.id === orderId
+  const index = orders.findIndex(
+    (order) => order.id === orderId
   )
 
-  if (idx === -1) {
+  if (index === -1) {
     throw new Error('訂單不存在')
   }
 
   const patch = {
     paid,
-    paymentUpdatedAt: new Date().toISOString(),
-    paymentUpdatedBy: meta.paymentUpdatedBy,
-    paymentUpdatedByName: meta.paymentUpdatedByName
+    paymentUpdatedAt:
+      new Date().toISOString(),
+    paymentUpdatedBy:
+      meta.paymentUpdatedBy || null,
+    paymentUpdatedByName:
+      meta.paymentUpdatedByName || null
   }
 
-  orders[idx] = {
-    ...orders[idx],
+  orders[index] = {
+    ...orders[index],
     ...patch
   }
 
@@ -427,14 +472,18 @@ export async function updateOrderPayment(
 
 export async function deleteOrderById(orderId) {
   if (!USE_MOCK_ORDERS) {
-    await deleteDoc(doc(db, 'orders', orderId))
+    await deleteDoc(
+      doc(db, 'orders', orderId)
+    )
+
     removeGuestOrderId(orderId)
+
     return
   }
 
   saveMockOrders(
     loadMockOrders().filter(
-      (o) => o.id !== orderId
+      (order) => order.id !== orderId
     )
   )
 
@@ -458,6 +507,6 @@ export function setLastSubmittedOrderId(id) {
       id
     )
   } catch {
-    /* ignore */
+    // Ignore storage errors.
   }
 }

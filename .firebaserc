@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "cksc-merchandis"
-  }
+    "default": "cksc-ticket"
+  },
+  "targets": {},
+  "etags": {}
 }

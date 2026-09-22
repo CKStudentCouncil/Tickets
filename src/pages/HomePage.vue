@@ -2,14 +2,14 @@
   <div class="storefront">
     <section class="hero">
       <div class="starfield" aria-hidden="true" />
-
-      <div class="hole-wrap" aria-hidden="true">
+      
+      <!--<div class="hole-wrap" aria-hidden="true">
         <div class="hole-halo" />
         <div class="hole-ring" />
         <div class="hole-grain" />
       </div>
       <div class="light-spill" aria-hidden="true" />
-      <div class="dust" aria-hidden="true" />
+      <div class="dust" aria-hidden="true" />-->
 
       <svg class="terrain" viewBox="0 0 1440 260" preserveAspectRatio="none" aria-hidden="true">
         <defs>
@@ -44,13 +44,16 @@
           <rect x="4" y="-6" width="20" height="6" rx="1" fill="#12151a" stroke="#3a4048" stroke-width="1" />
         </g>
       </svg>
+      
+      <div class="event-subtitle">2026 · CK PARTY NIGHT</div>
+      <div class="event-brand">COSMOS</div>
 
       <div class="hero-inner">
         <p class="eyebrow">CK PARTY NIGHT</p>
         <h1 class="hero-title">建中舞會購票系統</h1>
         <div class="hero-cta-row">
           <a href="#collection" class="primary-link" @click.prevent="scrollToCollection">
-            探索票種
+            開始購票
             <q-icon name="south_east" />
           </a>
           <span class="hero-meta">2026/12/13 · 建中明道樓後停車場</span>

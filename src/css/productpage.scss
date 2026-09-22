@@ -85,6 +85,8 @@
   padding: 36px;
   border: 1px solid var(--line-soft);
   background: var(--charcoal);
+  color: var(--off-white);
+  color-scheme: dark;
 }
 
 .eyebrow {
@@ -118,13 +120,6 @@ h1 {
   background: var(--line-soft);
 }
 
-.description {
-  margin: 0 0 28px;
-  color: rgba(242, 240, 233, 0.6);
-  line-height: 1.7;
-  font-size: 13.5px;
-}
-
 .primary-button {
   width: 100%;
   padding: 15px 20px;
@@ -151,8 +146,6 @@ h1 {
 }
 
 .secondary-button {
-  width: 100%;
-  margin-top: 10px;
   padding: 15px 20px;
   display: flex;
   align-items: center;
@@ -167,52 +160,26 @@ h1 {
   transition: border-color .3s ease, background .3s ease;
 
   &:hover { border-color: var(--ember); background: rgba(228, 164, 104, 0.08); }
-}
 
-/* ---------- direct-order dialog ---------- */
-.order-dialog {
-  position: relative;
-  width: min(420px, 92vw);
-  padding: 32px;
-  background: var(--charcoal) !important;
-  border: 1px solid var(--line-soft);
-  color: var(--off-white) !important;
-  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
-  /* tells the browser to use dark UI chrome for any native bits
-     (scrollbars, select arrows, etc.) instead of defaulting to light */
-  color-scheme: dark;
-
-  h3 {
-    margin: 0 0 20px;
-    font-family: 'Noto Sans TC', 'Manrope', sans-serif;
-    font-size: 1.3rem;
-    font-weight: 800;
-    color: var(--off-white);
+  &:disabled {
+    color: rgba(242, 240, 233, 0.3);
+    cursor: not-allowed;
   }
 }
 
-/* Quasar's dialog backdrop/transition wrapper can carry its own default
-   background/color; pin them so the card never inherits light-mode values */
-:deep(.q-dialog__inner) {
-  color: var(--off-white);
+/* ---------- inline order panel (replaces the old dialog) ---------- */
+.order-panel {
+  margin-top: 4px;
+
+  .eyebrow { margin-bottom: 18px; }
 }
 
-.order-dialog-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
+.order-panel-actions {
   display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--off-white);
-  cursor: pointer;
-  transition: border-color .3s ease, background .3s ease;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
 
-  &:hover { border-color: var(--ember); background: rgba(228, 164, 104, 0.08); }
+  .primary-button, .secondary-button { width: 100%; margin-top: 0; }
 }
 
 .order-form {
@@ -233,8 +200,8 @@ h1 {
   input, select {
     padding: 11px 12px;
     border: 1px solid var(--line);
-    background: var(--void) !important;
-    color: var(--off-white) !important;
+    background: var(--void);
+    color: var(--off-white);
     font: 500 13.5px 'Manrope', 'Noto Sans TC', sans-serif;
     outline: none;
     color-scheme: dark;
@@ -321,5 +288,5 @@ h1 {
   .product-page { padding: 96px 16px 56px; }
   .product-detail { grid-template-columns: 1fr; gap: 28px; }
   .purchase-card { max-width: 100%; padding: 28px; }
-  .order-dialog { padding: 24px; }
+  .order-panel-actions { grid-template-columns: 1fr; }
 }

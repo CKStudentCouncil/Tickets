@@ -2,23 +2,14 @@
   <div class="orders-page">
     <header class="page-header">
       <p class="eyebrow">你的購票紀錄</p>
-      <h1>我的訂單</h1>
-      <p>每一筆訂單的進度，都可以在這裡輕鬆查看</p>
+      <h1>購票紀錄</h1>
     </header>
 
     <div v-if="loading" class="empty-state">正在尋找你的訂單</div>
-
+    
     <div v-else-if="orders.length === 0" class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-        <path
-          d="M8 24a4 4 0 0 1 4-4h40a4 4 0 0 1 4 4v3a5 5 0 0 0 0 10v3a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4v-3a5 5 0 0 0 0-10v-3Z"
-          stroke="#c7c7cc" stroke-width="2" stroke-linejoin="round"
-        />
-        <path d="M26 20v24" stroke="#c7c7cc" stroke-width="2" stroke-dasharray="3 4" />
-      </svg>
-      <h2>還沒有訂單</h2>
-      <p>準備好了的話，就先去挑選你的舞會票種吧。</p>
-      <router-link to="/" class="primary-button">探索票種</router-link>
+      <h2>No Tickets Found</h2><br />
+      <router-link to="/" class="primary-button">探索舞會門票</router-link>
     </div>
 
     <div v-else class="order-list">
@@ -49,7 +40,7 @@
               <p>&ensp;</p>
               <button
                 type="button"
-                style="border: none; background-color: transparent; color: #D32F2F;"
+                class="delete-button"
                 aria-label="刪除訂單"
                 title="刪除訂單"
                 @click="confirmDelete(order.id)"
@@ -113,7 +104,7 @@ async function renderQrs() {
       await QRCode.toCanvas(canvas, url, {
         width: 88,
         margin: 0,
-        color: { dark: '#1d1d1f', light: '#00000000' }
+        color: { dark: '#050608', light: '#00000000' }
       })
     } catch (error) {
       console.error(error)
@@ -147,7 +138,7 @@ async function openQr(order) {
     await QRCode.toCanvas(modalQrCanvas.value, url, {
       width: 220,
       margin: 0,
-      color: { dark: '#1d1d1f', light: '#ffffff' }
+      color: { dark: '#050608', light: '#ffffff' }
     })
   } catch (error) {
     console.error(error)

@@ -1,234 +1,327 @@
 <template>
-  <div v-if="loading" class="state">
-    載入中...
-  </div>
+  <div class="detail-page">
+    <div v-if="loading" class="state-screen">
+      <span class="eyebrow">CK PARTY NIGHT</span>
+      <p>載入訂單中...</p>
+    </div>
 
-  <div v-else-if="!order" class="state not-found">
-    <p class="eyebrow">訂單詳情</p>
-    <h2>找不到這筆訂單</h2>
-    <p class="state-copy">可能是訂單編號有誤，或訂單已被移除</p>
-    <button type="button" class="btn-primary" @click="goBack">返回</button>
-  </div>
-
-  <div v-else class="detail-page">
-    <button type="button" class="back-link" @click="goBack">
-      ← 返回{{ isAdminRoute ? '訂單列表' : '我的訂單' }}
-    </button>
-
-    <section v-if="isAdminView" class="admin-toolbar">
-      <div class="toggle-group">
-        <span class="toggle-label">交貨狀態</span>
-        <div class="toggle-switch">
-          <button
-            type="button"
-            :class="{ active: !order.delivered }"
-            @click="setDelivered(false)"
-          >未交貨</button>
-          <button
-            type="button"
-            :class="{ active: order.delivered }"
-            @click="setDelivered(true)"
-          >已交貨</button>
-        </div>
-      </div>
-      <div class="toggle-group">
-        <span class="toggle-label">付款狀態</span>
-        <div class="toggle-switch">
-          <button
-            type="button"
-            :class="{ active: !order.paid }"
-            @click="setPaid(false)"
-          >未付款</button>
-          <button
-            type="button"
-            :class="{ active: order.paid }"
-            @click="setPaid(true)"
-          >已付款</button>
-        </div>
-      </div>
-    </section>
-
-    <div v-if="isAdminView" class="receipt-actions">
-      <div>
-        <p class="receipt-actions__title">交貨收據</p>
-        <p class="receipt-actions__hint">開啟列印視窗後，選擇「另存為 PDF」即可保存兩聯收據。</p>
-      </div>
-      <button
-        type="button"
-        class="btn-primary"
-        :disabled="generatingReceipt"
-        @click="downloadReceipt"
-      >
-        {{ generatingReceipt ? '開啟中...' : '列印／另存 PDF' }}
+    <div v-else-if="!order" class="state-screen">
+      <span class="eyebrow">CK PARTY NIGHT</span>
+      <h1>找不到訂單</h1>
+      <p>此訂單不存在，或您目前沒有查看此訂單的權限。</p>
+      <button type="button" class="primary-button" @click="goBack">
+        返回
       </button>
     </div>
 
-    <article class="receipt">
-      <header class="receipt-head">
-        <p class="eyebrow">訂單詳情</p>
-        <h1 class="mono">#{{ order.id }}</h1>
-        <p class="receipt-date">{{ formatDate(order.createdAt) }}</p>
-        <div class="status-pills">
-          <span class="status-pill" :class="{ on: order.delivered }">
-            <i />{{ order.delivered ? '已交貨' : '未交貨' }}
-          </span>
-          <span class="status-pill" :class="{ on: order.paid }">
-            <i />{{ order.paid ? '已付款' : '未付款' }}
-          </span>
+    <main v-else class="detail-content">
+      <header class="page-header">
+        <div>
+          <span class="eyebrow">CK PARTY NIGHT</span>
+          <h1>訂單詳情</h1>
+          <p class="lead">建中舞會購票系統</p>
         </div>
+
+        <button type="button" class="back-button" @click="goBack">
+          返回
+        </button>
       </header>
 
-      <div class="receipt-divider" />
+      <section v-if="isAdminView" class="admin-toolbar">
+        <div class="toggle-group">
+          <span class="toggle-label">領票狀態</span>
 
-      <section v-if="order.customerName" class="receipt-section">
-        <p class="section-label">訂購人</p>
-        <dl class="detail-list">
-          <div>
-            <dt>姓名</dt>
-            <dd>{{ order.customerName }}</dd>
+          <div class="toggle-switch">
+            <button
+              type="button"
+              :class="{ active: !order.delivered }"
+              @click="setDelivered(false)"
+            >
+              未領票
+            </button>
+
+            <button
+              type="button"
+              :class="{ active: order.delivered }"
+              @click="setDelivered(true)"
+            >
+              已領票
+            </button>
           </div>
-          <div>
-            <dt>電話</dt>
-            <dd class="mono">{{ order.customerPhone }}</dd>
-          </div>
-          <div>
-            <dt>Email</dt>
-            <dd class="mono">{{ order.customerEmail }}</dd>
-          </div>
-          <div>
-            <dt>學校</dt>
-            <dd>{{ order.school }}</dd>
-          </div>
-          <div>
-            <dt>班級座號</dt>
-            <dd>{{ order.classNumber || '—' }}</dd>
-          </div>
-        </dl>
+        </div>
       </section>
 
-      <div class="receipt-divider" />
+      <article class="receipt">
+        <div class="receipt-head">
+          <div>
+            <span class="receipt-kicker">CK PARTY NIGHT</span>
+            <h2>購票收據</h2>
+          </div>
 
-      <section class="receipt-section">
-        <p class="section-label">訂購項目 <span class="num">{{ totalItemCount }}</span> 件</p>
-        <ul class="receipt-items">
-          <li v-for="item in order.items" :key="item.id + item.name">
-            <span class="item-name">{{ item.name }} <span class="qty num">×{{ item.quantity }}</span></span>
-            <span class="item-leader" aria-hidden="true" />
-            <span class="item-price num">NT$ {{ item.price }}</span>
-          </li>
-        </ul>
-      </section>
+          <div class="receipt-meta">
+            <span>訂單編號</span>
+            <strong>{{ order.id }}</strong>
+          </div>
+        </div>
 
-      <div class="receipt-divider receipt-divider--dashed" />
+        <div class="status-pills">
+          <span class="status-pill" :class="{ on: order.delivered }">
+            <i />
+            {{ order.delivered ? '已領票' : '未領票' }}
+          </span>
+        </div>
 
-      <footer class="receipt-total">
-        <span>應付總額</span>
-        <strong class="num">NT$ {{ order.finalTotal }}</strong>
-      </footer>
-    </article>
+        <section class="receipt-section">
+          <div class="section-heading">
+            <span class="section-index">01</span>
+            <h3>購票資訊</h3>
+          </div>
 
+          <dl class="detail-list">
+            <div>
+              <dt>訂單編號</dt>
+              <dd>{{ order.id }}</dd>
+            </div>
+
+            <div>
+              <dt>建立時間</dt>
+              <dd>{{ formatOrderDate(order.createdAt) }}</dd>
+            </div>
+
+            <div v-if="order.buyerName">
+              <dt>購票人</dt>
+              <dd>{{ order.buyerName }}</dd>
+            </div>
+
+            <div v-if="order.email">
+              <dt>Email</dt>
+              <dd>{{ order.email }}</dd>
+            </div>
+
+            <div v-if="order.phone">
+              <dt>聯絡電話</dt>
+              <dd>{{ order.phone }}</dd>
+            </div>
+
+            <div v-if="order.school">
+              <dt>學校</dt>
+              <dd>{{ order.school }}</dd>
+            </div>
+
+            <div v-if="order.className">
+              <dt>班級</dt>
+              <dd>{{ order.className }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="receipt-section">
+          <div class="section-heading">
+            <span class="section-index">02</span>
+            <h3>票券明細</h3>
+          </div>
+
+          <div class="receipt-items">
+            <div
+              v-for="(item, index) in order.items || []"
+              :key="item.id || item.ticketTypeId || index"
+              class="receipt-item"
+            >
+              <div class="item-main">
+                <strong>{{ item.name }}</strong>
+
+                <span v-if="item.variant">
+                  {{ item.variant }}
+                </span>
+
+                <span v-if="item.eligibleBuyerIdentity">
+                  {{ item.eligibleBuyerIdentity }}
+                </span>
+              </div>
+
+              <div class="item-meta">
+                <span>× {{ item.quantity }}</span>
+                <strong>
+                  NT$ {{ Number(item.price || 0) * Number(item.quantity || 0) }}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="receipt-total">
+            <span>應付總額</span>
+            <strong>NT$ {{ Number(order.total || 0).toLocaleString() }}</strong>
+          </div>
+        </section>
+
+        <section class="receipt-section">
+          <div class="section-heading">
+            <span class="section-index">03</span>
+            <h3>活動資訊</h3>
+          </div>
+
+          <dl class="detail-list">
+            <div>
+              <dt>活動</dt>
+              <dd>CK PARTY NIGHT</dd>
+            </div>
+
+            <div>
+              <dt>日期</dt>
+              <dd>2026 年 12 月 13 日</dd>
+            </div>
+
+            <div>
+              <dt>地點</dt>
+              <dd>建中明道樓後停車場</dd>
+            </div>
+
+            <div>
+              <dt>領票狀態</dt>
+              <dd>{{ order.delivered ? '已領票' : '未領票' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div class="receipt-note">
+          <span>NOTE</span>
+          <p>
+            請依主辦單位公告之方式及時間辦理領票。
+            入場時請依現場工作人員指示出示相關購票資訊。
+          </p>
+        </div>
+
+        <footer class="receipt-footer">
+          <span>臺北市立建國高級中學班聯會</span>
+          <span>CK PARTY NIGHT 2026</span>
+        </footer>
+      </article>
+
+      <div class="receipt-actions">
+        <button type="button" class="secondary-button" @click="downloadReceipt">
+          下載收據
+        </button>
+
+        <button type="button" class="primary-button" @click="printReceipt">
+          列印收據
+        </button>
+      </div>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from 'src/stores/auth'
-import { useToastStore } from 'src/stores/toast'
-import { MOCK_ALLOW_ADMIN_WITHOUT_AUTH, USE_MOCK_ORDERS } from 'src/config/app'
 import {
   fetchOrderById,
-  fetchAllOrders,
   canViewOrder,
   updateOrderDelivery,
-  updateOrderPayment,
   formatOrderDate
-} from 'src/services/orderService'
+} from 'src/services/orders'
+
+import { useAuthStore } from 'src/stores/auth'
+import { useToastStore } from 'src/stores/toast'
+import {
+  USE_MOCK_ORDERS,
+  MOCK_ALLOW_ADMIN_WITHOUT_AUTH
+} from 'src/config/app'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 
-const order = ref(null)
 const loading = ref(true)
-const generatingReceipt = ref(false)
-const classReceiptGenerating = ref(false)
+const order = ref(null)
 
-const isAdminRoute = computed(
-  () => route.name === 'admin-order-detail' || route.meta.isAdminSection === true
-)
+const orderId = computed(() => String(route.params.id || ''))
 
-const isAdminView = computed(
+const canAccessAdmin = computed(
   () =>
-    isAdminRoute.value &&
-    (
-      auth.isManager ||
-      (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
-    )
+    auth.isManager ||
+    (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
 )
 
-const totalItemCount = computed(
-  () => order.value?.items?.reduce((total, item) => total + item.quantity, 0) || 0
-)
-
-onMounted(async () => {
-  const id = route.params.id
-  const allowed = isAdminRoute.value || canViewOrder(id) || isOrderSaved(id)
-
-  if (!allowed) {
-    loading.value = false
-    toast.show('無權查看此訂單')
-    return
-  }
-
-  try {
-    order.value = await fetchOrderById(id)
-  } catch (error) {
-    console.error('Firestore fetch failed, falling back to local copy', error)
-  }
-
-  if (!order.value) {
-    order.value = getLocalOrder(id)
-  }
-
-  if (!order.value) {
-    toast.show('載入失敗')
-  }
-
-  loading.value = false
+const isAdminView = computed(() => {
+  return route.path.startsWith('/admin') && canAccessAdmin.value
 })
 
-function formatDate(ts) {
-  return formatOrderDate(ts)
+onMounted(async () => {
+  await loadOrder()
+})
+
+async function loadOrder() {
+  loading.value = true
+
+  try {
+    if (!orderId.value) {
+      order.value = null
+      return
+    }
+
+    const result = await fetchOrderById(orderId.value)
+
+    if (!result) {
+      order.value = null
+      return
+    }
+
+    const allowed = await canViewOrder(result)
+
+    if (!allowed && !isAdminView.value) {
+      order.value = null
+      return
+    }
+
+    order.value = {
+      ...result,
+      delivered: Boolean(result.delivered)
+    }
+  } catch {
+    toast.show('載入訂單失敗')
+    order.value = null
+  } finally {
+    loading.value = false
+  }
 }
 
-async function downloadReceipt() {
-  if (!order.value || generatingReceipt.value) return
-
-  const printWindow = window.open('', '_blank')
-  if (!printWindow) {
-    toast.show('無法開啟列印視窗，請允許此網站開啟彈出式視窗後再試一次')
+async function setDelivered(delivered) {
+  if (
+    !isAdminView.value ||
+    !order.value ||
+    order.value.delivered === delivered
+  ) {
     return
   }
 
-  generatingReceipt.value = true
   try {
-    printWindow.document.write(buildReceiptHtml(order.value))
-    printWindow.document.close()
-    printWindow.focus()
-    window.setTimeout(() => printWindow.print(), 300)
-  } catch (error) {
-    console.error('Receipt generation failed:', error)
-    printWindow.close()
-    toast.show('收據產生失敗，請再試一次')
-  } finally {
-    generatingReceipt.value = false
+    const patch = await updateOrderDelivery(
+      order.value.id,
+      delivered,
+      {
+        deliveryUpdatedByName: auth.user?.name || '管理員'
+      }
+    )
+
+    order.value = {
+      ...order.value,
+      ...patch,
+      delivered
+    }
+
+    toast.show(
+      delivered
+        ? '已標記為已領票'
+        : '已標記為未領票'
+    )
+  } catch {
+    toast.show('更新領票狀態失敗')
   }
 }
 
 function escapeHtml(value) {
-  return String(value ?? '—')
+  return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -236,182 +329,313 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;')
 }
 
-function buildReceiptHtml(receiptOrder) {
-  const customerRows = [
-    ['姓名', receiptOrder.customerName],
-    ['電話', receiptOrder.customerPhone],
-    ['Email', receiptOrder.customerEmail],
-    ['學校', receiptOrder.school],
-    ['班級', receiptOrder.class || receiptOrder.classNumber],
-    ['座號', receiptOrder.number]
-  ]
-    .map(([label, value]) => `<p><b>${label}：</b>${escapeHtml(value)}</p>`)
-    .join('')
+function buildReceiptHtml() {
+  if (!order.value) return ''
 
-  const itemRows = (receiptOrder.items || [])
-    .map((item) => `
-      <tr>
-        <td>${escapeHtml(item.name)}</td>
-        <td>NT$ ${escapeHtml(item.price)}</td>
-        <td>${escapeHtml(item.quantity)}</td>
-        <td>NT$ ${escapeHtml(Number(item.price) * Number(item.quantity))}</td>
-      </tr>`)
-    .join('')
+  const currentOrder = order.value
 
-  const makeCopy = (copyLabel) => `
-    <section class="receipt-copy">
-      <header>
-        <div><p>建國中學班聯會</p><h1>紀念品領取收據</h1></div>
-        <strong>${copyLabel}</strong>
-      </header>
-      <div class="meta"><span>訂單編號：${escapeHtml(receiptOrder.id)}</span><span>訂購日期：${escapeHtml(formatDate(receiptOrder.createdAt))}</span></div>
-      <h2>顧客資料</h2><div class="customer">${customerRows}</div>
-      <h2>購買明細</h2>
-      <table><thead><tr><th>品項</th><th>單價</th><th>數量</th><th>小計</th></tr></thead><tbody>${itemRows}</tbody></table>
-      <p class="total">應收總額：<b>NT$ ${escapeHtml(receiptOrder.finalTotal)}</b></p>
-      <footer><p>顧客簽名：<span></span></p><p>班聯會工作人員簽名：<span></span></p></footer>
-    </section>`
+  const items = (currentOrder.items || [])
+    .map((item) => {
+      const quantity = Number(item.quantity || 0)
+      const price = Number(item.price || 0)
+      const subtotal = quantity * price
 
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>紀念品領取收據-${escapeHtml(receiptOrder.id)}</title>
-    <style>
-      @page { size: A4 portrait; margin: 10mm; }
-      * { box-sizing: border-box; }
-      body { margin: 0; color: #111; font-family: 'Noto Sans TC', 'Microsoft JhengHei', Arial, sans-serif; }
-      .receipt-copy { min-height: 132mm; padding: 6mm 7mm; border: 1.5px solid #222; break-inside: avoid; }
-      .receipt-copy + .receipt-copy { margin-top: 5mm; border-top: 1px dashed #777; }
-      header, .meta, footer { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
-      header p { margin: 0 0 2px; font-size: 10pt; font-weight: 600; }
-      h1 { margin: 0; font-size: 18pt; letter-spacing: .08em; } header strong { padding: 4px 8px; border: 1px solid #222; font-size: 10pt; }
-      .meta { margin: 4mm 0; padding: 2.5mm 0; border-top: 1px solid #222; border-bottom: 1px solid #222; font-size: 9pt; }
-      h2 { margin: 3mm 0 2mm; font-size: 10pt; } .customer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5mm 4mm; font-size: 9pt; }
-      .customer p { margin: 0; } table { width: 100%; border-collapse: collapse; font-size: 9pt; } th, td { padding: 1.5mm 2mm; border: 1px solid #555; } th { background: #f0f0f0; } th:not(:first-child), td:not(:first-child) { text-align: right; }
-      .total { margin: 2mm 0 0; text-align: right; font-size: 11pt; } footer { margin-top: 6mm; font-size: 10pt; } footer p { margin: 0; } footer span { display: inline-block; width: 48mm; border-bottom: 1px solid #111; }
-    </style></head><body>${makeCopy('班聯會留存聯')}${makeCopy('顧客收執聯')}<script>window.onafterprint = () => window.close()<\/script></body></html>`
-}
-
-async function downloadClassReceipt() {
-  const school = order.value?.school
-  const className = getOrderClass(order.value)
-
-  if (!school || !className) {
-    toast.show('此訂單沒有完整的學校與班級資料，無法產生班代領取收據')
-    return
-  }
-
-  const printWindow = window.open('', '_blank')
-  if (!printWindow) {
-    toast.show('無法開啟列印視窗，請允許此網站開啟彈出式視窗後再試一次')
-    return
-  }
-
-  classReceiptGenerating.value = true
-  try {
-    const allOrders = await fetchAllOrders()
-    const classOrders = allOrders.filter(
-      (candidate) => candidate.school === school && getOrderClass(candidate) === className
-    )
-
-    if (!classOrders.length) {
-      printWindow.close()
-      toast.show('找不到此班級的訂單')
-      return
-    }
-
-    printWindow.document.write(buildClassReceiptHtml(classOrders, school, className))
-    printWindow.document.close()
-    printWindow.focus()
-    window.setTimeout(() => printWindow.print(), 300)
-  } catch (error) {
-    console.error('Class receipt generation failed:', error)
-    printWindow.close()
-    toast.show('班代領取收據產生失敗，請再試一次')
-  } finally {
-    classReceiptGenerating.value = false
-  }
-}
-
-function getOrderClass(orderData) {
-  return orderData?.class || orderData?.classNumber || ''
-}
-
-function buildClassReceiptHtml(classOrders, school, className) {
-  const sortedOrders = [...classOrders].sort((a, b) =>
-    String(a.number || '').localeCompare(String(b.number || ''), 'zh-Hant', { numeric: true })
-  )
-  const totalAmount = sortedOrders.reduce(
-    (sum, classOrder) => sum + Number(classOrder.finalTotal || 0),
-    0
-  )
-  const totalItems = sortedOrders.reduce(
-    (sum, classOrder) => sum + (classOrder.items || []).reduce(
-      (itemSum, item) => itemSum + Number(item.quantity || 0),
-      0
-    ),
-    0
-  )
-  const studentRows = sortedOrders
-    .map((classOrder) => {
-      const products = (classOrder.items || [])
-        .map((item) => `${escapeHtml(item.name)} ×${escapeHtml(item.quantity)}`)
-        .join('<br>')
-      return `<tr><td>${escapeHtml(classOrder.number)}</td><td>${escapeHtml(classOrder.customerName)}</td><td>${products}</td><td>NT$ ${escapeHtml(classOrder.finalTotal)}</td></tr>`
+      return `
+        <tr>
+          <td>
+            ${escapeHtml(item.name)}
+            ${
+              item.variant
+                ? `<div class="sub">${escapeHtml(item.variant)}</div>`
+                : ''
+            }
+          </td>
+          <td class="center">${quantity}</td>
+          <td class="right">NT$ ${subtotal.toLocaleString()}</td>
+        </tr>
+      `
     })
     .join('')
 
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>班代領取收據-${escapeHtml(school)}-${escapeHtml(className)}</title>
-    <style>
-      @page { size: A4 portrait; margin: 12mm; } * { box-sizing: border-box; }
-      body { margin: 0; color: #111; font-family: 'Noto Sans TC', 'Microsoft JhengHei', Arial, sans-serif; }
-      header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 4mm; border-bottom: 1.5px solid #222; }
-      header p { margin: 0 0 2px; font-size: 10pt; font-weight: 600; } h1 { margin: 0; font-size: 19pt; letter-spacing: .06em; }
-      .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2mm 8mm; margin: 5mm 0; font-size: 10pt; }
-      .notice { margin: 4mm 0; padding: 3mm; border: 1px solid #555; background: #f5f5f5; font-size: 9pt; }
-      table { width: 100%; border-collapse: collapse; font-size: 9pt; } th, td { padding: 2mm; border: 1px solid #555; vertical-align: top; } th { background: #f0f0f0; } th:nth-child(1), td:nth-child(1), th:nth-child(4), td:nth-child(4) { text-align: right; white-space: nowrap; }
-      .summary { display: flex; justify-content: flex-end; gap: 8mm; margin: 4mm 0; font-size: 10pt; } .summary strong { font-size: 12pt; }
-      footer { display: flex; justify-content: space-between; gap: 8mm; margin-top: 12mm; font-size: 10pt; } footer p { margin: 0; } footer span { display: inline-block; width: 58mm; border-bottom: 1px solid #111; }
-    </style></head><body>
-      <header><div><p>建國中學班聯會</p><h1>班級代表領取收據</h1></div><strong>班聯會留存聯</strong></header>
-      <div class="meta"><span>學校：${escapeHtml(school)}</span><span>班級：${escapeHtml(className)}</span><span>學生人數：${sortedOrders.length} 人</span><span>產生日期：${escapeHtml(formatDate(new Date()))}</span></div>
-      <p class="notice">班級代表確認已代為領取下列同班同學的紀念品，並應將商品轉交給各訂購人。</p>
-      <table><thead><tr><th>座號</th><th>學生姓名</th><th>訂購品項</th><th>訂單金額</th></tr></thead><tbody>${studentRows}</tbody></table>
-      <div class="summary"><span>商品總件數：<b>${totalItems}</b></span><span>訂單總額：<strong>NT$ ${totalAmount}</strong></span></div>
-      <footer><p>班級代表簽名：<span></span></p><p>班聯會工作人員簽名：<span></span></p></footer>
-      <script>window.onafterprint = () => window.close()<\/script>
-    </body></html>`
+  return `
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>CK PARTY NIGHT 購票收據</title>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 40px;
+    background: #fff;
+    color: #111;
+    font-family: Arial, "Noto Sans TC", sans-serif;
+  }
+
+  .receipt {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .head {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid #111;
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .order-id {
+    text-align: right;
+    font-size: 12px;
+    color: #555;
+  }
+
+  .section {
+    padding: 24px 0;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .section h2 {
+    margin: 0 0 16px;
+    font-size: 15px;
+  }
+
+  .info {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 16px;
+    font-size: 13px;
+  }
+
+  .info .label {
+    color: #666;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th,
+  td {
+    padding: 10px 0;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+  }
+
+  th {
+    font-size: 11px;
+    color: #666;
+  }
+
+  .center {
+    text-align: center;
+  }
+
+  .right {
+    text-align: right;
+  }
+
+  .sub {
+    margin-top: 4px;
+    color: #666;
+    font-size: 11px;
+  }
+
+  .total {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 18px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .note {
+    margin-top: 24px;
+    padding: 16px;
+    background: #f5f5f5;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 32px;
+    padding-top: 14px;
+    border-top: 1px solid #111;
+    font-size: 10px;
+    color: #666;
+  }
+
+  @media print {
+    body {
+      padding: 0;
+    }
+  }
+</style>
+</head>
+
+<body>
+  <div class="receipt">
+    <div class="head">
+      <div>
+        <div class="eyebrow">CK PARTY NIGHT</div>
+        <h1>購票收據</h1>
+      </div>
+
+      <div class="order-id">
+        <div>訂單編號</div>
+        <strong>${escapeHtml(currentOrder.id)}</strong>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>購票資訊</h2>
+
+      <div class="info">
+        <div class="label">購票人</div>
+        <div>${escapeHtml(currentOrder.buyerName || '—')}</div>
+
+        <div class="label">Email</div>
+        <div>${escapeHtml(currentOrder.email || '—')}</div>
+
+        <div class="label">聯絡電話</div>
+        <div>${escapeHtml(currentOrder.phone || '—')}</div>
+
+        <div class="label">建立時間</div>
+        <div>${escapeHtml(formatOrderDate(currentOrder.createdAt))}</div>
+
+        <div class="label">領票狀態</div>
+        <div>${currentOrder.delivered ? '已領票' : '未領票'}</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>票券明細</h2>
+
+      <table>
+        <thead>
+          <tr>
+            <th>票券</th>
+            <th class="center">數量</th>
+            <th class="right">小計</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${items}
+        </tbody>
+      </table>
+
+      <div class="total">
+        <span>應付總額</span>
+        <span>NT$ ${Number(currentOrder.total || 0).toLocaleString()}</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>活動資訊</h2>
+
+      <div class="info">
+        <div class="label">活動</div>
+        <div>CK PARTY NIGHT</div>
+
+        <div class="label">日期</div>
+        <div>2026 年 12 月 13 日</div>
+
+        <div class="label">地點</div>
+        <div>建中明道樓後停車場</div>
+      </div>
+    </div>
+
+    <div class="note">
+      請依主辦單位公告之方式及時間辦理領票。
+      入場時請依現場工作人員指示出示相關購票資訊。
+    </div>
+
+    <div class="footer">
+      <span>臺北市立建國高級中學班聯會</span>
+      <span>CK PARTY NIGHT 2026</span>
+    </div>
+  </div>
+</body>
+</html>
+  `
+}
+
+function downloadReceipt() {
+  if (!order.value) return
+
+  const html = buildReceiptHtml()
+  const blob = new Blob([html], {
+    type: 'text/html;charset=utf-8'
+  })
+
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+
+  anchor.href = url
+  anchor.download = `CK-PARTY-NIGHT-${order.value.id}.html`
+
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+
+  URL.revokeObjectURL(url)
+}
+
+function printReceipt() {
+  if (!order.value) return
+
+  const html = buildReceiptHtml()
+  const printWindow = window.open('', '_blank', 'width=900,height=900')
+
+  if (!printWindow) {
+    toast.show('無法開啟列印視窗，請確認瀏覽器未封鎖彈出視窗')
+    return
+  }
+
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
+
+  printWindow.focus()
+
+  setTimeout(() => {
+    printWindow.print()
+  }, 300)
 }
 
 function goBack() {
-  router.push(isAdminRoute.value ? '/admin' : '/orders')
-}
-
-async function setDelivered(delivered) {
-  if (!isAdminView.value || !order.value || order.value.delivered === delivered) return
-  try {
-    const patch = await updateOrderDelivery(order.value.id, delivered, {
-      deliveryUpdatedByName: auth.user?.name || '管理員',
-    })
-    order.value = { ...order.value, ...patch, delivered }
-    toast.show(delivered ? '已標記為已交貨' : '已標記為未交貨')
-  } catch {
-    toast.show('更新失敗')
+  if (window.history.length > 1) {
+    router.back()
+    return
   }
-}
 
-async function setPaid(paid) {
-  if (!isAdminView.value || !order.value || order.value.paid === paid) return
-  try {
-    const patch = await updateOrderPayment(order.value.id, paid, {
-      paymentUpdatedByName: auth.user?.name || '管理員',
-    })
-    order.value = { ...order.value, ...patch, paid }
-    toast.show(paid ? '已標記為已付款' : '已標記為未付款')
-  } catch {
-    toast.show('更新失敗')
-  }
+  router.push('/')
 }
 </script>
 
 <style scoped>
-@import 'src/css/app.scss';
 @import 'src/css/orderdetailpage.scss';
 </style>

@@ -34,7 +34,7 @@
 
     <div class="page-heading">
       <p class="eyebrow">後台管理</p>
-      <h1>{{ canManageOrders ? '訂單統計' : '發送通知' }}</h1>
+      <h1>{{ canManageOrders ? '後台管理' : '通知管理' }}</h1>
     </div>
 
     <div

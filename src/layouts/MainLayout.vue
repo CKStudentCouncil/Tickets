@@ -7,10 +7,14 @@
       </router-link>
 
       <div class="header-actions">
-        <router-link to="/cart" class="bag-link" aria-label="開啟購物袋">
-          <q-icon name="shopping_bag" size="1.1rem" />
-          <span class="bag-label">購物袋</span>
-          <span v-if="itemCount" class="bag-count">{{ itemCount }}</span>
+        <router-link to="/about" class="about-link" aria-label="關於我們">
+          About
+        </router-link>
+        <router-link to="/story" class="story-link" aria-label="舞會故事">
+          Story
+        </router-link>
+        <router-link to="/orders" class="order-link" aria-label="我的訂單">
+          Tickets
         </router-link>
 
         <div class="menu-wrapper">
@@ -27,7 +31,7 @@
 
           <nav class="primary-nav" :class="{ open: menuOpen }" aria-label="主要導覽">
             <router-link to="/" exact-active-class="is-active" @click="menuOpen = false">首頁</router-link>
-            <router-link to="/orders" active-class="is-active" @click="menuOpen = false">我的訂單</router-link>
+            <router-link to="/orders" active-class="is-active" @click="menuOpen = false">已購門票</router-link>
             <router-link to="/about" active-class="is-active" @click="menuOpen = false">關於我們</router-link>
 
             <div class="nav-divider" role="separator" />
@@ -57,7 +61,7 @@
               to="/admin"
               @click="menuOpen = false"
             >
-              訂單管理
+              後台管理
             </router-link>
 
             <router-link
@@ -117,7 +121,6 @@
           <p class="footer-heading">Legal</p>
           <nav class="footer-links">
             <router-link to="/terms">使用者條款</router-link>
-            <router-link to="/policy">銷售與退貨條款</router-link>
           </nav>
         </div>
 
