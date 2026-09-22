@@ -4,27 +4,61 @@
       <q-icon name="arrow_back" size="18px" />
     </router-link>
 
-    <div class="product-detail">
+    <div v-if="loading" class="ticket-state">
+      <p><span class="loading-dot" />票種載入中…</p>
+    </div>
+
+    <div v-else-if="loadError" class="ticket-state">
+      <h3>票種資訊載入失敗</h3>
+      <p>請重新整理頁面後再試。</p>
+      <button type="button" class="btn" @click="loadTicketTypes">
+        重新載入
+      </button>
+    </div>
+
+    <div v-else-if="!ticketType" class="ticket-state">
+      <h3>找不到這個票種</h3>
+      <p>這個票種可能已下架，或連結有誤。</p>
+      <router-link to="/" class="btn">回到票種列表</router-link>
+    </div>
+
+    <div v-else class="product-detail">
       <div class="image-frame">
-        <img :src="`/images/product-${config.imageId}.png`" :alt="config.product.name">
+        <img
+          :src="`/images/ticket-${ticketType.id}.png`"
+          :alt="ticketType.name"
+          :class="{ 'is-muted-img': status.state !== 'selling' }"
+          @error="handleImageError"
+        >
+        <span class="status-chip" :class="`status-${status.className}`">
+          <span class="status-dot" />
+          <span>{{ status.label }}</span>
+        </span>
       </div>
 
       <section class="purchase-card">
-        <p class="eyebrow eyebrow-en">CK PARTY NIGHT</p>
-        <h1>{{ config.product.name }}</h1>
+        <p class="eyebrow">CK PARTY NIGHT</p>
+        <h1>{{ ticketType.name }}</h1>
 
-        <div class="price-row">
-          <span class="price num">NT$ {{ config.price }}</span>
-          <del v-if="!config.hideOrPrice" class="price-original num">NT$ {{ config.orPrice }}</del>
-        </div>
+        <p
+          v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson"
+          class="ticket-limit"
+        >
+          每人限購 {{ ticketType.purchaseLimitPerPerson }} 張
+        </p>
 
         <div class="divider" />
 
         <p class="description">本票種為站票，請於開賣期間完成下單，並依通知完成後續流程。</p>
 
-        <button type="button" class="primary-button" @click="add">
-          加入購票清單
-          <q-icon name="add_shopping_cart" size="18px" />
+        <button
+          type="button"
+          class="primary-button"
+          :disabled="status.state !== 'selling'"
+          @click="add"
+        >
+          {{ status.state === 'selling' ? '加入購票清單' : status.label }}
+          <q-icon v-if="status.state === 'selling'" name="add_shopping_cart" size="18px" />
         </button>
       </section>
     </div>
@@ -32,166 +66,121 @@
 </template>
 
 <script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from 'src/boot/firebase'
 import { useCartStore } from 'src/stores/cart'
 import { useToastStore } from 'src/stores/toast'
 
-const props = defineProps({ config: { type: Object, required: true } })
+const route = useRoute()
 const cart = useCartStore()
 const toast = useToastStore()
 
-function add() {
-  cart.addToCart(props.config.product)
-  toast.show(`已將「${props.config.product.name}」加入購票清單。`)
+const ticketTypes = ref([])
+const loading = ref(true)
+const loadError = ref(false)
+
+const ticketType = computed(() =>
+  ticketTypes.value.find((type) => type.id === route.params.id) || null
+)
+
+const status = computed(() =>
+  ticketType.value ? getTicketStatus(ticketType.value) : null
+)
+
+async function loadTicketTypes() {
+  loading.value = true
+  loadError.value = false
+
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'settings', 'ticketTypes')
+    )
+
+    if (!snapshot.exists()) {
+      ticketTypes.value = []
+      return
+    }
+
+    const data = snapshot.data()
+
+    ticketTypes.value = Array.isArray(data.types)
+      ? data.types.filter(
+          (type) =>
+            type &&
+            type.id &&
+            type.name
+        )
+      : []
+  } catch (error) {
+    console.error('Load ticket types error:', error)
+    loadError.value = true
+    ticketTypes.value = []
+  } finally {
+    loading.value = false
+  }
 }
+
+function getTicketStatus(type) {
+  const now = new Date()
+
+  if (!type.salesStartTime || !type.salesEndTime) {
+    return {
+      state: 'unavailable',
+      label: '尚未開放',
+      className: 'upcoming'
+    }
+  }
+
+  const start = new Date(type.salesStartTime)
+  const end = new Date(type.salesEndTime)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return {
+      state: 'unavailable',
+      label: '尚未開放',
+      className: 'upcoming'
+    }
+  }
+
+  if (now < start) {
+    return {
+      state: 'upcoming',
+      label: '尚未開賣',
+      className: 'upcoming'
+    }
+  }
+
+  if (now > end) {
+    return {
+      state: 'ended',
+      label: '已結束',
+      className: 'ended'
+    }
+  }
+
+  return {
+    state: 'selling',
+    label: '販售中',
+    className: 'selling'
+  }
+}
+
+function handleImageError(event) {
+  event.target.style.display = 'none'
+}
+
+function add() {
+  if (!ticketType.value || status.value.state !== 'selling') return
+
+  cart.addToCart(ticketType.value)
+  toast.show(`已將「${ticketType.value.name}」加入購票清單。`)
+}
+
+onMounted(loadTicketTypes)
 </script>
 
 <style scoped>
-.product-page {
-  position: relative;
-  max-width: 1120px;
-  margin: auto;
-  padding: 90px 24px 96px;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'Noto Sans TC',
-    'Microsoft JhengHei', 'Helvetica Neue', Arial, sans-serif;
-  color: #1d1d1f;
-}
-
-.num {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Noto Sans TC', Arial, sans-serif;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-}
-
-.back-button {
-  position: absolute;
-  top: 32px;
-  left: 24px;
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #e5e5e7;
-  border-radius: 50%;
-  background: #fff;
-  color: #1d1d1f;
-  text-decoration: none;
-}
-
-.back-button:hover { background: #f5f5f7; }
-
-.product-detail {
-  display: grid;
-  grid-template-columns: 1.05fr .95fr;
-  gap: 56px;
-  align-items: center;
-}
-
-.image-frame {
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: 32px;
-  background: #ececee;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, .08);
-}
-
-.image-frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.purchase-card {
-  max-width: 420px;
-  padding: 36px;
-  border: 1px solid #e5e5e7;
-  border-radius: 28px;
-  background: #fff;
-}
-
-.eyebrow {
-  margin: 0 0 12px;
-  color: #6e6e73;
-  font-size: .72rem;
-  font-weight: 700;
-  letter-spacing: .06em;
-}
-
-.eyebrow-en {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Arial, sans-serif;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-}
-
-h1 {
-  margin: 0 0 18px;
-  font-size: clamp(1.9rem, 4vw, 2.8rem);
-  line-height: 1.2;
-  letter-spacing: -.01em;
-  font-weight: 700;
-}
-
-.price-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.price {
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-
-.price-original {
-  color: #a1a1a6;
-  font-size: .95rem;
-  font-weight: 400;
-}
-
-.divider {
-  height: 1px;
-  margin: 0 0 24px;
-  background: #ececee;
-}
-
-.description {
-  margin: 0 0 28px;
-  color: #6e6e73;
-  line-height: 1.65;
-}
-
-.primary-button {
-  width: 100%;
-  padding: 15px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 999px;
-  background: #1d1d1f;
-  color: #fff;
-  cursor: pointer;
-  font: 600 1rem inherit;
-}
-
-.primary-button:hover { background: #333336; }
-
-.reassurance {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 16px 0 0;
-  color: #86868b;
-  font-size: .8rem;
-  text-align: center;
-}
-
-@media (max-width: 760px) {
-  .product-page { padding: 76px 16px 56px; }
-  .product-detail { grid-template-columns: 1fr; gap: 28px; }
-  .image-frame { border-radius: 24px; }
-  .purchase-card { max-width: 100%; padding: 28px; }
-}
+@import 'src/css/productpage.scss';
 </style>
