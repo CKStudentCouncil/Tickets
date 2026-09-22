@@ -6,21 +6,6 @@
         <span>建中舞會購票系統</span>
       </router-link>
 
-      <button
-        class="nav-toggle"
-        type="button"
-        aria-label="切換導覽選單"
-        @click="mobileNavOpen = !mobileNavOpen"
-      >
-        <span /><span />
-      </button>
-
-      <nav class="primary-nav" :class="{ open: mobileNavOpen }" aria-label="主要導覽">
-        <router-link to="/" exact-active-class="is-active" @click="mobileNavOpen = false">首頁</router-link>
-        <router-link to="/orders" active-class="is-active" @click="mobileNavOpen = false">我的訂單</router-link>
-        <router-link to="/about" active-class="is-active" @click="mobileNavOpen = false">關於我們</router-link>
-      </nav>
-
       <div class="header-actions">
         <router-link to="/cart" class="bag-link" aria-label="開啟購物袋">
           <q-icon name="shopping_bag" size="1.1rem" />
@@ -30,22 +15,30 @@
 
         <div class="menu-wrapper">
           <button
-            class="more-button"
+            class="menu-toggle"
             type="button"
-            aria-label="更多選項"
+            aria-label="切換導覽選單"
+            aria-haspopup="true"
+            :aria-expanded="menuOpen"
             @click.stop="menuOpen = !menuOpen"
           >
-            <q-icon name="more_horiz" size="1.3rem" />
+            <q-icon name="menu" size="1.3rem" />
           </button>
 
-          <div v-if="menuOpen" class="menu-popover">
+          <nav class="primary-nav" :class="{ open: menuOpen }" aria-label="主要導覽">
+            <router-link to="/" exact-active-class="is-active" @click="menuOpen = false">首頁</router-link>
+            <router-link to="/orders" active-class="is-active" @click="menuOpen = false">我的訂單</router-link>
+            <router-link to="/about" active-class="is-active" @click="menuOpen = false">關於我們</router-link>
+
+            <div class="nav-divider" role="separator" />
+
             <router-link to="/terms" @click="menuOpen = false">
               使用者條款
             </router-link>
 
-            <router-link to="/policy" @click="menuOpen = false">
+            <!--<router-link to="/policy" @click="menuOpen = false">
               銷售與退貨條款
-            </router-link>
+            </router-link>-->
 
             <router-link to="/survey" @click="menuOpen = false">
               使用者問卷
@@ -98,7 +91,7 @@
             >
               登出
             </button>
-          </div>
+          </nav>
         </div>
       </div>
     </header>
@@ -167,7 +160,6 @@ const cart = useCartStore()
 const toast = useToastStore()
 
 const menuOpen = ref(false)
-const mobileNavOpen = ref(false)
 const currentYear = computed(() => new Date().getFullYear())
 
 const itemCount = computed(() =>

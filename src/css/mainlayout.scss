@@ -49,37 +49,6 @@
   object-fit: contain;
   filter: drop-shadow(0 0 6px rgba(228, 164, 104, 0.45));
 }
-.nav-toggle {
-  display: none;
-}
-.primary-nav {
-  display: flex;
-  gap: clamp(18px, 3vw, 40px);
-}
-.primary-nav a {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(242, 240, 233, 0.72);
-  position: relative;
-  padding-bottom: 4px;
-  transition: color .3s ease;
-
-  &::after {
-    content: '';
-    position: absolute;
-    left: 0; bottom: 0;
-    width: 0%;
-    height: 1px;
-    background: var(--ember);
-    transition: width .3s ease;
-  }
-  &:hover { color: var(--off-white); }
-  &:hover::after { width: 100%; }
-  &.is-active { color: var(--ember); }
-  &.is-active::after { width: 100%; }
-}
 .header-actions {
   display: flex;
   align-items: center;
@@ -109,33 +78,51 @@
   font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
+
+/* ---------- unified menu (single toggle → single dropdown/panel) ---------- */
 .menu-wrapper { position: relative; }
-.more-button {
-  background: none; border: none;
+
+.menu-toggle {
+  background: none;
+  border: none;
   color: rgba(242, 240, 233, 0.85);
-  width: 30px; height: 30px;
+  width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  z-index: 60;
   transition: color .3s ease;
 
   &:hover { color: var(--ember); }
 }
-.menu-popover {
+
+.primary-nav {
   position: absolute;
   top: calc(100% + 12px); right: 0;
+  min-width: 220px;
   background: rgba(10, 12, 16, 0.94);
   backdrop-filter: blur(12px);
   border: 1px solid var(--line-soft);
-  min-width: 190px;
   padding: 8px 0;
   display: flex;
   flex-direction: column;
   z-index: 60;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: opacity .25s ease, transform .25s ease, visibility .25s;
+
+  &.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
 
   a, button {
     padding: 11px 18px;
-    font-size: 12.5px;
-    letter-spacing: 0.02em;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: rgba(242, 240, 233, 0.75);
     background: none;
     border: none;
@@ -144,7 +131,14 @@
     transition: color .2s ease, background .2s ease;
 
     &:hover { color: var(--off-white); background: rgba(228, 164, 104, 0.08); }
+    &.is-active { color: var(--ember); }
   }
+}
+
+.nav-divider {
+  height: 1px;
+  margin: 6px 18px;
+  background: var(--line-soft);
 }
 
 /* ---------- page container ---------- */
@@ -221,36 +215,28 @@
   .num { color: rgba(242, 240, 233, 0.5); }
 }
 
-/* ---------- responsive ---------- */
+/* ---------- responsive: dropdown becomes a full slide-in panel ---------- */
 @media (max-width: 640px) {
-  .nav-toggle {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    background: none;
-    border: none;
-    padding: 6px;
-    z-index: 60;
-
-    span { width: 20px; height: 1px; background: var(--off-white); display: block; }
-  }
   .primary-nav {
     position: fixed;
     top: 0; right: 0;
     height: 100vh; height: 100svh;
     width: min(78vw, 320px);
+    min-width: 0;
     background: rgba(8, 10, 14, 0.97);
     backdrop-filter: blur(10px);
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 28px;
-    padding: 0 36px;
+    border: none;
+    padding: calc(90px + env(safe-area-inset-top, 0px)) 36px 36px;
+    justify-content: flex-start;
+    gap: 6px;
+    opacity: 1;
+    visibility: visible;
     transform: translateX(100%);
     transition: transform .4s cubic-bezier(.16, .7, .3, 1);
 
     &.open { transform: translateX(0); }
-    a { font-size: 13px; }
+
+    a, button { font-size: 13px; padding: 11px 0; }
   }
   .footer-grid { grid-template-columns: 1fr; gap: 32px; }
 }

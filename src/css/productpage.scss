@@ -174,17 +174,27 @@ h1 {
   position: relative;
   width: min(420px, 92vw);
   padding: 32px;
-  background: var(--charcoal);
+  background: var(--charcoal) !important;
   border: 1px solid var(--line-soft);
-  color: var(--off-white);
+  color: var(--off-white) !important;
   font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  /* tells the browser to use dark UI chrome for any native bits
+     (scrollbars, select arrows, etc.) instead of defaulting to light */
+  color-scheme: dark;
 
   h3 {
     margin: 0 0 20px;
     font-family: 'Noto Sans TC', 'Manrope', sans-serif;
     font-size: 1.3rem;
     font-weight: 800;
+    color: var(--off-white);
   }
+}
+
+/* Quasar's dialog backdrop/transition wrapper can carry its own default
+   background/color; pin them so the card never inherits light-mode values */
+:deep(.q-dialog__inner) {
+  color: var(--off-white);
 }
 
 .order-dialog-close {
@@ -223,13 +233,21 @@ h1 {
   input, select {
     padding: 11px 12px;
     border: 1px solid var(--line);
-    background: var(--void);
-    color: var(--off-white);
+    background: var(--void) !important;
+    color: var(--off-white) !important;
     font: 500 13.5px 'Manrope', 'Noto Sans TC', sans-serif;
     outline: none;
+    color-scheme: dark;
     transition: border-color .2s ease;
 
     &:focus { border-color: var(--ember); }
+
+    /* autofill (esp. Chrome) forces its own light background otherwise */
+    &:-webkit-autofill {
+      -webkit-text-fill-color: var(--off-white);
+      -webkit-box-shadow: 0 0 0 1000px var(--void) inset;
+      transition: background-color 9999s ease-in-out 0s;
+    }
   }
 
   select {
@@ -239,6 +257,14 @@ h1 {
     background-position: calc(100% - 18px) center, calc(100% - 13px) center;
     background-size: 5px 5px, 5px 5px;
     background-repeat: no-repeat;
+
+    /* the dropdown's own option list is native chrome most browsers won't
+       let you restyle beyond color/background — set both so it isn't
+       black-text-on-black or white-on-white depending on OS theme */
+    option {
+      background: var(--charcoal);
+      color: var(--off-white);
+    }
   }
 }
 

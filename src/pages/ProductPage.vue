@@ -5,12 +5,12 @@
     </router-link>
 
     <div v-if="loading" class="ticket-state">
-      <p><span class="loading-dot" />票種載入中…</p>
+      <p><span class="loading-dot" />載入中…</p>
     </div>
 
     <div v-else-if="loadError" class="ticket-state">
-      <h3>票種資訊載入失敗</h3>
-      <p>請重新整理頁面後再試。</p>
+      <h3>資訊載入失敗</h3>
+      <p>請重新整理頁面後再試</p>
       <button type="button" class="btn" @click="loadTicketTypes">
         重新載入
       </button>
@@ -18,8 +18,8 @@
 
     <div v-else-if="!ticketType" class="ticket-state">
       <h3>找不到這個票種</h3>
-      <p>這個票種可能已下架，或連結有誤。</p>
-      <router-link to="/" class="btn">回到票種列表</router-link>
+      <p>這個票種可能已下架，或連結有誤</p>
+      <router-link to="/" class="btn">回到列表</router-link>
     </div>
 
     <div v-else class="product-detail">
@@ -49,9 +49,7 @@
 
         <div class="divider" />
 
-        <p class="description">本票種為站票，請於開賣期間完成下單，並依通知完成後續流程。</p>
-
-        <button
+        <!--<button
           type="button"
           class="primary-button"
           :disabled="status.state !== 'selling'"
@@ -59,15 +57,15 @@
         >
           {{ status.state === 'selling' ? '加入購票清單' : status.label }}
           <q-icon v-if="status.state === 'selling'" name="add_shopping_cart" size="18px" />
-        </button>
+        </button>-->
 
         <button
           v-if="status.state === 'selling'"
           type="button"
-          class="secondary-button"
+          class="primary-button"
           @click="openOrderForm"
         >
-          直接送出訂單
+          購買 {{ ticketType.name }}
         </button>
       </section>
     </div>

@@ -2,8 +2,8 @@
   <div class="static-page">
     <article class="content-card" ref="termsContent">
       <p class="eyebrow">User Terms</p>
-      <h1 class="text-bold">臺北市立建國高級中學班聯會<br />校慶紀念品訂購系統使用者條款</h1>
-      <p class="intro">歡迎您使用臺北市立建國高級中學班聯會校慶紀念品訂購系統（以下簡稱「本系統」）。為保障使用者權益並維護系統運作秩序，請您在使用本系統前，詳閱以下使用者條款。當您使用本系統，即表示您已閱讀、瞭解並同意遵守本條款之所有內容。</p>
+      <h1 class="text-bold">臺北市立建國高級中學班聯會<br />建中舞會購票系統使用者條款</h1>
+      <p class="intro">歡迎您使用臺北市立建國高級中學班聯會建中舞會購票系統（以下簡稱「本系統」）。為保障使用者權益並維護系統運作秩序，請您在使用本系統前，詳閱以下使用者條款。當您使用本系統，即表示您已閱讀、瞭解並同意遵守本條款之所有內容。</p>
       <div class="terms-body">
         <section><h2 class="text-bold">一、個人資料保護</h2>
           <ul>
@@ -41,7 +41,7 @@
           </ul>
         </section>
       </div>
-      <p class="updated">最後更新：<span class="num">2026 年 07 月 26 日</span></p>
+      <p class="updated">最後更新：<span class="num">2026 年 09 月 22 日</span></p>
 
       <div class="action-row">
         <router-link to="/" class="primary-button">回到首頁</router-link>
