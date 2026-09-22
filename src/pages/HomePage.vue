@@ -28,7 +28,7 @@
     <section id="collection" class="collection">
       <div class="section-heading">
         <p class="eyebrow">商品系列</p>
-        <h2 class="text-bold">選擇你的站票票種</h2>
+        <h2 class="text-bold">購買舞會門票</h2>
       </div>
       <div class="product-grid">
         <router-link
