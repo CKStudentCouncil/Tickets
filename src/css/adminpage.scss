@@ -1105,3 +1105,352 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   Ticket Type Management — layout fix
+   ========================================================= */
+
+/* Prevent grid children from overflowing their grid tracks */
+.ticket-type-panel,
+.ticket-type-card,
+.ticket-type-grid,
+.field,
+.ticket-time-field,
+.time-range,
+.time-group,
+.time-inputs,
+.ticket-limit-field {
+  min-width: 0;
+}
+
+/* Ticket type card */
+.ticket-type-card {
+  width: 100%;
+  padding: 34px 0 38px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Header of each ticket type */
+.ticket-type-card-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Ticket name */
+.ticket-name-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Main ticket settings grid */
+.ticket-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 30px 30px;
+  width: 100%;
+  margin-top: 30px;
+}
+
+/* Every field must be allowed to shrink */
+.ticket-type-grid > .field {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Labels */
+.ticket-type-grid .field > span,
+.ticket-name-field > span,
+.ticket-time-field > span {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--lunar);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+/* =========================================================
+   Date / Time range
+   ========================================================= */
+
+.ticket-time-field {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Start and end sections */
+.time-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+/* Each start/end group */
+.time-group {
+  min-width: 0;
+  width: 100%;
+}
+
+/* 「開始」 / 「結束」 */
+.time-label {
+  margin-bottom: 8px;
+  color: var(--lunar);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/*
+ * IMPORTANT:
+ * The date and time inputs must have their own grid columns.
+ * minmax(0, 1fr) prevents them from pushing each other outside
+ * the parent container.
+ */
+.time-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+/* Override possible global input width rules */
+.time-inputs > input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: rgba(255, 255, 255, .025);
+  color: var(--off-white);
+  box-sizing: border-box;
+}
+
+/* iOS/Safari date/time controls can have intrinsic width */
+.time-inputs > input[type="date"],
+.time-inputs > input[type="time"] {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Keep the native calendar/clock controls inside the box */
+.time-inputs > input::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+.time-inputs > input:focus {
+  border-color: rgba(228, 164, 104, .6);
+  outline: none;
+  background: rgba(228, 164, 104, .035);
+}
+
+/* Time quick buttons */
+.time-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.time-chip {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--lunar);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    color .2s ease,
+    border-color .2s ease,
+    background-color .2s ease;
+}
+
+.time-chip:hover {
+  border-color: rgba(228, 164, 104, .55);
+  color: var(--ember);
+  background: rgba(228, 164, 104, .035);
+}
+
+/* Sale status */
+.time-summary {
+  margin: 12px 0 0;
+  color: var(--ember);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.time-summary.ok {
+  color: #9bbda3;
+}
+
+.time-summary.error {
+  color: var(--danger);
+}
+
+/* =========================================================
+   Normal inputs / selects
+   ========================================================= */
+
+.ticket-type-card input,
+.ticket-type-card select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Number fields */
+.ticket-type-card input[type="number"] {
+  min-height: 44px;
+}
+
+/* Select */
+.ticket-type-card .select-field {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* =========================================================
+   Purchase limit
+   ========================================================= */
+
+.ticket-limit-field {
+  min-width: 0;
+}
+
+.ticket-limit-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  margin-bottom: 9px;
+  color: var(--lunar);
+  font-size: 12px;
+}
+
+.ticket-limit-controls input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  margin: 0;
+  accent-color: var(--ember);
+  cursor: pointer;
+}
+
+.ticket-limit-field > input[type="number"] {
+  width: 100%;
+}
+
+/* =========================================================
+   Header buttons
+   ========================================================= */
+
+.ticket-type-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.ticket-type-header-actions .btn,
+.ticket-type-header-actions .btn-outline {
+  white-space: nowrap;
+}
+
+/* =========================================================
+   Tablet
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .ticket-type-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .ticket-time-field {
+    grid-column: auto;
+  }
+
+  .time-range {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================
+   iPad / smaller screens
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .ticket-type-card-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .ticket-type-header-actions {
+    width: 100%;
+  }
+
+  .ticket-type-header-actions .btn,
+  .ticket-type-header-actions .btn-outline {
+    flex: 1 1 0;
+    width: 100%;
+  }
+
+  .time-range {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .time-inputs {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+}
+
+/* =========================================================
+   iPhone / narrow screens
+   ========================================================= */
+
+@media (max-width: 480px) {
+  .ticket-type-card {
+    padding-top: 28px;
+    padding-bottom: 30px;
+  }
+
+  .ticket-type-grid {
+    gap: 24px;
+  }
+
+  .time-inputs {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .time-inputs > input {
+    width: 100%;
+  }
+
+  .ticket-type-header-actions {
+    flex-direction: column;
+  }
+
+  .ticket-type-header-actions .btn,
+  .ticket-type-header-actions .btn-outline {
+    flex: none;
+  }
+}
