@@ -964,5 +964,9 @@ textarea::placeholder {
   .notify-actions .btn,
   .notify-actions .btn-outline {
     width: 100%;
+  
+  .time-range {
+    grid-template-columns: 1fr;
+  }
   }
 }
