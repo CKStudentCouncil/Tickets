@@ -97,7 +97,7 @@
             </router-link>
 
             <button
-              v-if="auth.isManager || auth.isSuperAdmin || auth.isAdmin"
+              v-if="auth.isLoggedIn"
               type="button"
               @click="handleSignOut"
             >
