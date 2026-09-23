@@ -64,6 +64,14 @@
               後台管理
             </router-link>
 
+						<router-link
+							v-if="auth.isSuperAdmin"
+							to="/management"
+							@click=menuOpen = false"
+						>
+							資訊管理
+						</router-link>
+
             <router-link
               v-if="auth.isSuperAdmin"
               to="/admin/account"
