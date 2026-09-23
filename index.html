@@ -3,48 +3,128 @@
   <head>
     <script type="text/javascript">
       (function(l) {
-        if (l.search[1] === '/' ) {
-          var decoded = l.search.slice(1).split('&').map(function(s) { 
+        if (l.search[1] === '/') {
+          var decoded = l.search.slice(1).split('&').map(function(s) {
             return s.replace(/~and~/g, '&')
           }).join('?');
-          window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + decoded + l.hash
+
+          window.history.replaceState(
+            null,
+            null,
+            l.pathname.slice(0, -1) + decoded + l.hash
           );
         }
       }(window.location));
     </script>
+
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-J8LM25YKVM"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
+
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+
       gtag('js', new Date());
       gtag('config', 'G-J8LM25YKVM');
     </script>
 
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width<% if (ctx.mode.cordova || ctx.mode.capacitor) { %>, viewport-fit=cover<% } %>" />
-    
-    <meta property="og:title" content="建中舞會購票系統" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://souvenir.cksc.tw/" />
+    <meta
+      charset="UTF-8"
+    />
 
-<meta property="og:type" content="website" />
-<meta property="og:title" content="CK Party Nicket Tickets" />
-<meta property="og:description" content="Official CK Party Night oredring system." />
-<meta property="og:image" content="https://souvenir.cksc.tw/cksclogo.png" />
+    <meta
+      name="viewport"
+      content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width<% if (ctx.mode.cordova || ctx.mode.capacitor) { %>, viewport-fit=cover<% } %>"
+    />
 
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:image" content="https://souvenir.cksc.tw/cksclogo.png" />
-    <meta property="og:description" content="A platform for buying CK Party Night tickets." />
+    <meta
+      name="description"
+      content="2026 CK PARTY NIGHT 建中舞會官方購票系統。"
+    />
 
-    <link rel="icon" type="image/png" sizes="128x128" href="cksclogo.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="cksclogo.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="cksclogo.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="cksclogo.png" />
-    <link rel="icon" type="image/ico" href="cksclogo.png" />
+    <meta
+      property="og:type"
+      content="website"
+    />
 
-    <title>建中舞會購票系統</title>
+    <meta
+      property="og:title"
+      content="CK PARTY NIGHT｜建中舞會購票系統"
+    />
+
+    <meta
+      property="og:description"
+      content="2026 CK PARTY NIGHT 建中舞會官方購票系統。"
+    />
+
+    <meta
+      property="og:url"
+      content="https://tickets.cksc.tw/"
+    />
+
+    <meta
+      property="og:image"
+      content="https://tickets.cksc.tw/cksclogo.png"
+    />
+
+    <meta
+      name="twitter:card"
+      content="summary_large_image"
+    />
+
+    <meta
+      name="twitter:title"
+      content="CK PARTY NIGHT｜建中舞會購票系統"
+    />
+
+    <meta
+      name="twitter:description"
+      content="2026 CK PARTY NIGHT 建中舞會官方購票系統。"
+    />
+
+    <meta
+      name="twitter:image"
+      content="https://tickets.cksc.tw/cksclogo.png"
+    />
+
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="128x128"
+      href="cksclogo.png"
+    />
+
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="96x96"
+      href="cksclogo.png"
+    />
+
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="cksclogo.png"
+    />
+
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="cksclogo.png"
+    />
+
+    <link
+      rel="icon"
+      type="image/png"
+      href="cksclogo.png"
+    />
+
+    <title>CK PARTY NIGHT｜建中舞會購票系統</title>
   </head>
+
   <body>
     <!-- quasar:entry-point -->
   </body>
