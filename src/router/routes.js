@@ -78,7 +78,7 @@ const routes = [
       },
       
       {
-        path: '',
+        path: '/managemant',
         name: 'management',
         component: () => import('pages/ManagementPage.vue'),
         meta: {
