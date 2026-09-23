@@ -1,0 +1,371 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+.static-page {
+  --void: #050608;
+  --lunar: #9aa3ac;
+  --off-white: #f2f0e9;
+  --ember: #e4a468;
+  --line: rgba(242, 240, 233, 0.14);
+  --line-soft: rgba(242, 240, 233, 0.08);
+
+  min-height: 100vh;
+
+  background: var(--void);
+
+  padding: 140px 24px 110px;
+
+  font-family:
+    'Manrope',
+    'Noto Sans TC',
+    sans-serif;
+
+  color: var(--off-white);
+
+  a,
+  button {
+    color: inherit;
+  }
+}
+
+.content-card {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* ---------- header ---------- */
+
+.story-header {
+  margin-bottom: 70px;
+}
+
+.eyebrow {
+  margin: 0 0 16px;
+
+  color: var(--ember);
+
+  font-size: 11.5px;
+  font-weight: 700;
+
+  letter-spacing: 0.28em;
+
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 24px;
+
+  font-family:
+    'Noto Sans TC',
+    'Manrope',
+    sans-serif;
+
+  font-size: clamp(1.9rem, 4.2vw, 3rem);
+
+  line-height: 1.25;
+
+  letter-spacing: 0.01em;
+
+  font-weight: 800;
+
+  color: var(--off-white);
+}
+
+.intro {
+  margin: 0;
+
+  max-width: 56ch;
+
+  font-size: 14.5px;
+
+  line-height: 1.9;
+
+  color: rgba(242, 240, 233, 0.58);
+}
+
+/* ---------- stories ---------- */
+
+.stories {
+  border-top: 1px solid var(--line-soft);
+}
+
+.story {
+  padding: 54px 0 58px;
+
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.story-heading {
+  display: grid;
+
+  grid-template-columns: 52px minmax(0, 1fr);
+
+  gap: 20px;
+
+  align-items: start;
+}
+
+.story-number {
+  padding-top: 3px;
+
+  color: rgba(242, 240, 233, 0.22);
+
+  font-family: 'Manrope', sans-serif;
+
+  font-size: 13px;
+
+  font-weight: 600;
+
+  letter-spacing: 0.08em;
+}
+
+.story-label {
+  margin: 0 0 10px;
+
+  color: var(--ember);
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.25em;
+
+  text-transform: uppercase;
+}
+
+.story-heading h2 {
+  margin: 0;
+
+  font-family:
+    'Noto Sans TC',
+    'Manrope',
+    sans-serif;
+
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+
+  line-height: 1.45;
+
+  font-weight: 800;
+
+  color: var(--off-white);
+}
+
+.story-subtitle {
+  margin: 9px 0 0;
+
+  font-size: 13px;
+
+  line-height: 1.6;
+
+  color: var(--lunar);
+}
+
+.story-date {
+  display: block;
+
+  margin-top: 14px;
+
+  color: rgba(242, 240, 233, 0.35);
+
+  font-size: 11px;
+
+  letter-spacing: 0.04em;
+}
+
+/* ---------- content ---------- */
+
+.story-content {
+  margin:
+    32px 0 0
+    72px;
+
+  max-width: 56ch;
+}
+
+.story-content p {
+  margin: 0 0 18px;
+
+  color: rgba(242, 240, 233, 0.67);
+
+  font-size: 14.5px;
+
+  line-height: 2;
+
+  letter-spacing: 0.01em;
+}
+
+.story-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- states ---------- */
+
+.story-state {
+  min-height: 180px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 10px;
+
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+
+  color: rgba(242, 240, 233, 0.45);
+
+  font-size: 13px;
+}
+
+.story-state.empty {
+  flex-direction: column;
+
+  gap: 8px;
+
+  text-align: center;
+}
+
+.state-title {
+  margin: 0;
+
+  color: var(--off-white);
+
+  font-size: 14px;
+
+  font-weight: 600;
+}
+
+.story-state.empty p:last-child {
+  margin: 0;
+
+  color: rgba(242, 240, 233, 0.42);
+
+  font-size: 13px;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background: var(--ember);
+
+  box-shadow:
+    0 0 8px
+    rgba(228, 164, 104, 0.55);
+
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---------- actions ---------- */
+
+.actions {
+  display: flex;
+
+  align-items: center;
+
+  gap: 14px;
+
+  margin-top: 56px;
+
+  padding-top: 40px;
+
+  border-top: 1px solid var(--line-soft);
+}
+
+.ghost-button {
+  display: inline-flex;
+
+  align-items: center;
+
+  padding: 12px 20px;
+
+  border: 1px solid var(--line);
+
+  background: transparent;
+
+  color: var(--off-white);
+
+  font-size: 12.5px;
+
+  font-weight: 600;
+
+  letter-spacing: 0.02em;
+
+  text-decoration: none;
+
+  transition:
+    border-color 0.3s ease,
+    background 0.3s ease;
+}
+
+.ghost-button:hover {
+  border-color: var(--ember);
+
+  background:
+    rgba(228, 164, 104, 0.08);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 640px) {
+  .static-page {
+    padding: 120px 20px 90px;
+  }
+
+  .story-header {
+    margin-bottom: 52px;
+  }
+
+  .story {
+    padding: 42px 0 46px;
+  }
+
+  .story-heading {
+    grid-template-columns: 40px minmax(0, 1fr);
+
+    gap: 14px;
+  }
+
+  .story-number {
+    font-size: 12px;
+  }
+
+  .story-content {
+    margin-left: 54px;
+    margin-top: 26px;
+  }
+
+  .story-content p {
+    font-size: 14px;
+    line-height: 1.9;
+  }
+
+  .actions {
+    margin-top: 44px;
+    padding-top: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-dot {
+    animation: none;
+  }
+
+  .ghost-button {
+    transition: none;
+  }
+}

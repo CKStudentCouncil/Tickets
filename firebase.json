@@ -2,15 +2,15 @@
   "functions": [
     {
       "codebase": "default",
-      "source": "functions",
-      "runtime": "nodejs20",
       "ignore": [
         "node_modules",
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"
-      ]
+      ],
+      "source": "functions",
+      "runtime": "nodejs20"
     }
   ],
   "hosting": {

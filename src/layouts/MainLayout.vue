@@ -10,11 +10,11 @@
         <router-link to="/about" class="about-link" aria-label="關於我們">
           About
         </router-link>
-        <router-link to="/story" class="story-link" aria-label="舞會故事">
-          Story
+        <router-link to="/intro" class="intro-link" aria-label="舞會故事">
+          Intro
         </router-link>
-        <router-link to="/orders" class="order-link" aria-label="我的訂單">
-          Tickets
+        <router-link to="/performer" class="order-link" aria-label="演出陣容">
+          Lineup
         </router-link>
 
         <div class="menu-wrapper">
@@ -33,6 +33,8 @@
             <router-link to="/" exact-active-class="is-active" @click="menuOpen = false">首頁</router-link>
             <router-link to="/orders" active-class="is-active" @click="menuOpen = false">已購門票</router-link>
             <router-link to="/about" active-class="is-active" @click="menuOpen = false">關於我們</router-link>
+            <router-link to="/intro" active-class="is-active" @click="menuOpen = false">舞會介紹</router-link>
+            <router-link to="/performer" active-class="is-active" @click="menuOpen = false">社團與藝人</router-link>
 
             <div class="nav-divider" role="separator" />
 
@@ -69,8 +71,24 @@
 							to="/admin/management"
 							@click="menuOpen = false"
 						>
-							資訊管理
+							票務管理
 						</router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/performer"
+              @click="menuOpen = false"
+            >
+              社團與藝人管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/intromanagement"
+              @click="menuOpen = false"
+            >
+              舞會介紹管理
+            </router-link>
 
             <router-link
               v-if="auth.isSuperAdmin"
@@ -119,16 +137,18 @@
           <p class="footer-heading">Navigation</p>
           <nav class="footer-links">
             <router-link to="/">首頁</router-link>
-            <router-link to="/orders">我的訂單</router-link>
+            <router-link to="/orders">已購門票</router-link>
             <router-link to="/about">關於我們</router-link>
             <router-link to="/survey">使用者問卷</router-link>
           </nav>
         </div>
 
         <div class="footer-col">
-          <p class="footer-heading">Legal</p>
+          <div class="footer-heading"><br /></div>
           <nav class="footer-links">
+            <router-link to="/intro">舞會介紹</router-link>
             <router-link to="/terms">使用者條款</router-link>
+            <router-link to="/performer">社團與藝人</router-link>
           </nav>
         </div>
 
@@ -151,7 +171,7 @@
           <p class="footer-meta">Developed by Chris Sun and Jim Tang</p>
         </div>
       </div>
-      <div class="footer-bottom">
+      <div class="footer-bottom text-center">
         <span>© <span class="num">{{ currentYear }}</span> CK Tickets. All rights reserved.</span>
       </div>
     </footer>

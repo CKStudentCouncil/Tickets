@@ -1,11 +1,58 @@
 <template>
   <div class="coming-soon">
-    <p class="eyebrow">2026 CK Party Night</p>
-    <h1>Coming Soon</h1>
+    <div class="hero-content">
+        <div class="title-lockup">
+          <p class="title-lockup-sub">2026 · CK PARTY NIGHT</p><br />
+          <h1 class="title-lockup-brand">COMING SOON</h1>
+        </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.hero-content {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(22px, 3.4vh, 36px);
+  text-align: center;
+  padding: 0 24px;
+}
+
+.title-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2.2vh, 24px);
+}
+
+.title-lockup-sub {
+  margin: 0;
+  font-size: clamp(0.65rem, 1.2vw, 0.9rem);
+  font-weight: 400;
+  letter-spacing: 0.8em;
+  text-indent: 0.8em;
+  line-height: 1;
+  color: var(--lunar);
+  white-space: nowrap;
+  text-shadow: 0 3px 20px rgba(0, 0, 0, 0.45);
+}
+
+.title-lockup-brand {
+  margin: 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: clamp(2rem, 5vw, 4.5rem);
+  font-weight: 400;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  line-height: 1;
+  color: var(--off-white);
+  white-space: nowrap;
+  text-shadow: 0 3px 30px rgba(0, 0, 0, 0.55);
+}
+
 .coming-soon {
   min-height: calc(100vh - 56px);
   padding: 24px;

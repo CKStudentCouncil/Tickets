@@ -13,40 +13,15 @@ import { generateOrderNotificationHTML } from './paymentNotificationTemplate.js'
 initializeApp()
 
 const db = getFirestore()
+
+/* =========================================================
+ * Constants
+ * ========================================================= */
+
 const ELIGIBLE_IDENTITIES = {
   CAMPUS_STUDENTS: 'campus_students',
   ALL_USERS: 'all_users'
 }
-
-const DEFAULT_TICKET_TYPES = [
-  {
-    id: 'campus_ticket',
-    name: '校內票',
-    eligibleBuyerIdentity: ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS,
-    salesStartTime: null,
-    salesEndTime: null,
-    totalTicketQuantity: 1200,
-    purchaseLimitPerPerson: 2
-  },
-  {
-    id: 'first_release',
-    name: '一階票',
-    eligibleBuyerIdentity: ELIGIBLE_IDENTITIES.ALL_USERS,
-    salesStartTime: null,
-    salesEndTime: null,
-    totalTicketQuantity: 1500,
-    purchaseLimitPerPerson: 4
-  },
-  {
-    id: 'second_release',
-    name: '二階票',
-    eligibleBuyerIdentity: ELIGIBLE_IDENTITIES.ALL_USERS,
-    salesStartTime: null,
-    salesEndTime: null,
-    totalTicketQuantity: 1500,
-    purchaseLimitPerPerson: null
-  }
-]
 
 const CAMPUS_SCHOOLS = new Set([
   '建國中學',
@@ -56,505 +31,6 @@ const CAMPUS_SCHOOLS = new Set([
   '成功高中',
   '師大附中'
 ])
-
-const SENDER_EMAIL = process.env.SENDER_EMAIL || process.env.GMAIL_EMAIL
-
-function parseTimestamp(value) {
-  if (!value) return null
-  if (value.toDate) return value.toDate()
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-function normalizeTicketTypeConfig(ticketType) {
-  return {
-    ...ticketType,
-    totalTicketQuantity: Number(ticketType.totalTicketQuantity || 0),
-    purchaseLimitPerPerson:
-      ticketType.purchaseLimitPerPerson === null || ticketType.purchaseLimitPerPerson === undefined
-        ? null
-        : Number(ticketType.purchaseLimitPerPerson),
-    salesStartTime: ticketType.salesStartTime || null,
-    salesEndTime: ticketType.salesEndTime || null
-  }
-}
-
-async function loadTicketTypeConfigs() {
-  const defaultMap = new Map(
-    DEFAULT_TICKET_TYPES.map((ticketType) => [ticketType.id, normalizeTicketTypeConfig(ticketType)])
-  )
-
-  const snapshot = await db.collection('ticketTypes').get()
-  if (snapshot.empty) return defaultMap
-
-  snapshot.forEach((ticketDoc) => {
-    defaultMap.set(ticketDoc.id, normalizeTicketTypeConfig({ id: ticketDoc.id, ...ticketDoc.data() }))
-  })
-
-  return defaultMap
-}
-
-function getTicketTypeIdFromItem(item) {
-  if (item.ticketTypeId) return String(item.ticketTypeId)
-  if (item.id) return String(item.id)
-  return ''
-}
-
-function getBuyerIdentity(orderPayload) {
-  if (CAMPUS_SCHOOLS.has(orderPayload.school)) return ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
-  return ELIGIBLE_IDENTITIES.ALL_USERS
-}
-
-async function validateOrderAgainstTicketRules(orderPayload) {
-  const items = Array.isArray(orderPayload.items) ? orderPayload.items : []
-  if (items.length === 0) {
-    throw new functions.https.HttpsError('invalid-argument', '訂單內容為空')
-  }
-
-  const ticketTypeConfigMap = await loadTicketTypeConfigs()
-  const now = new Date()
-  const buyerIdentity = getBuyerIdentity(orderPayload)
-
-  const currentOrderQuantityByType = new Map()
-  items.forEach((item) => {
-    const ticketTypeId = getTicketTypeIdFromItem(item)
-    if (!ticketTypeId) return
-    const quantity = Number(item.quantity || 0)
-    if (!quantity) return
-    currentOrderQuantityByType.set(
-      ticketTypeId,
-      (currentOrderQuantityByType.get(ticketTypeId) || 0) + quantity
-    )
-  })
-
-  if (currentOrderQuantityByType.size === 0) {
-    throw new functions.https.HttpsError('invalid-argument', '票種資料無效')
-  }
-
-  for (const ticketTypeId of currentOrderQuantityByType.keys()) {
-    if (!ticketTypeConfigMap.has(ticketTypeId)) {
-      throw new functions.https.HttpsError('invalid-argument', `無效的票種：${ticketTypeId}`)
-    }
-  }
-
-  for (const [ticketTypeId, quantity] of currentOrderQuantityByType.entries()) {
-    if (quantity <= 0) {
-      throw new functions.https.HttpsError('invalid-argument', '票券數量必須大於 0')
-    }
-
-    const config = ticketTypeConfigMap.get(ticketTypeId)
-    const startTime = parseTimestamp(config.salesStartTime)
-    const endTime = parseTimestamp(config.salesEndTime)
-
-    if (startTime && now < startTime) {
-      throw new functions.https.HttpsError('failed-precondition', `${config.name}尚未開賣`)
-    }
-    if (endTime && now > endTime) {
-      throw new functions.https.HttpsError('failed-precondition', `${config.name}已結束販售`)
-    }
-    if (config.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS && buyerIdentity !== ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS) {
-      throw new functions.https.HttpsError('permission-denied', `${config.name}僅限校內學生購買`)
-    }
-  }
-
-  const email = String(orderPayload.customerEmail || '').trim().toLowerCase()
-  const userId = String(orderPayload.userId || '').trim()
-  const ordersSnapshot = await db.collection('orders').get()
-  const soldQuantityByType = new Map()
-  const buyerQuantityByType = new Map()
-
-  ordersSnapshot.forEach((orderDoc) => {
-    const orderData = orderDoc.data()
-    const orderItems = Array.isArray(orderData.items) ? orderData.items : []
-    const matchesBuyer =
-      (email && String(orderData.customerEmail || '').trim().toLowerCase() === email) ||
-      (userId && String(orderData.userId || '').trim() === userId)
-
-    orderItems.forEach((item) => {
-      const ticketTypeId = getTicketTypeIdFromItem(item)
-      if (!ticketTypeConfigMap.has(ticketTypeId)) return
-      const quantity = Number(item.quantity || 0)
-      if (!quantity) return
-      soldQuantityByType.set(ticketTypeId, (soldQuantityByType.get(ticketTypeId) || 0) + quantity)
-      if (matchesBuyer) {
-        buyerQuantityByType.set(ticketTypeId, (buyerQuantityByType.get(ticketTypeId) || 0) + quantity)
-      }
-    })
-  })
-
-  for (const [ticketTypeId, quantity] of currentOrderQuantityByType.entries()) {
-    const config = ticketTypeConfigMap.get(ticketTypeId)
-    const sold = soldQuantityByType.get(ticketTypeId) || 0
-    const alreadyBought = buyerQuantityByType.get(ticketTypeId) || 0
-
-    if (config.totalTicketQuantity && sold + quantity > config.totalTicketQuantity) {
-      throw new functions.https.HttpsError('resource-exhausted', `${config.name}剩餘票量不足`)
-    }
-
-    if (config.purchaseLimitPerPerson !== null && alreadyBought + quantity > config.purchaseLimitPerPerson) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        `${config.name}超過每人限購 ${config.purchaseLimitPerPerson} 張`
-      )
-    }
-  }
-}
-
-const createTransporter = () => {
-  // Configure AWS SES. Prefer providing AWS credentials via Secret Manager
-  // (requested below) or via an attached IAM role to the Cloud Functions runtime.
-  const region = process.env.AWS_REGION || 'us-east-1'
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
-
-  if (accessKeyId && secretAccessKey) {
-    AWS.config.update({ accessKeyId, secretAccessKey, region })
-  } else {
-    AWS.config.update({ region })
-  }
-
-  const ses = new AWS.SES({ apiVersion: '2010-12-01', region })
-
-  return nodemailer.createTransport({
-    SES: { ses, aws: AWS }
-  })
-}
-
-export const sendOrderQRCode = functions
-  .region('asia-east1')
-  .runWith({
-      secrets: ['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','SENDER_EMAIL','AWS_REGION']
-  })
-  .firestore
-  .document('orders/{orderId}')
-  .onCreate(async (snap, context) => {
-    const order = snap.data()
-    const orderId = context.params.orderId
-
-    console.log(
-          `Sending email using account: ${SENDER_EMAIL}`
-    )
-
-    if (!order.customerEmail) {
-      console.log(
-        `Order ${orderId} has no customer email, skipping`
-      )
-      return
-    }
-
-    try {
-      const transporter = createTransporter()
-
-      const orderUrl =
-        `https://souvenir.cksc.tw/admin/orders/${orderId}`
-
-      const qrCodeBuffer = await QRCode.toBuffer(orderUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: '#1d1d1f',
-          light: '#ffffff'
-        },
-        errorCorrectionLevel: 'H',
-        type: 'png'
-      })
-
-      const qrPngBuffer = await sharp(qrCodeBuffer)
-        .flatten({
-          background: '#ffffff'
-        })
-        .png()
-        .toBuffer()
-
-
-      const mailOptions = {
-        from: `"建國中學班聯會" <${SENDER_EMAIL}>`,
-        to: order.customerEmail,
-        subject:
-          `建中舞會購票系統訂單確認 - 訂單編號：${orderId}`,
-        html: generateEmailHTML(orderId, order),
-
-        attachments: [
-          {
-            filename: 'order-qrcode.png',
-            content: qrPngBuffer,
-            contentType: 'image/png',
-            cid: 'qrcode',
-            contentDisposition: 'inline'
-          }
-        ]
-      }
-
-
-      await transporter.sendMail(mailOptions)
-
-      console.log(
-        `Successfully sent order confirmation email to ${order.customerEmail}`
-      )
-
-    } catch (error) {
-      console.error(
-        `Error sending email for order ${orderId}:`,
-        error
-      )
-    }
-  })
-
-const MAX_BCC_PER_BATCH = 49
-
-// AWS SES default sending rate limit is commonly 14 messages/second.
-// Each batched sendMail() call counts as one "message" toward that quota,
-// so we throttle to at most MAX_SENDS_PER_SECOND sendMail() calls per second.
-const MAX_SENDS_PER_SECOND = 14
-const MIN_MS_BETWEEN_SENDS = Math.ceil(1000 / MAX_SENDS_PER_SECOND)
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-
-function chunk(array, size) {
-  const result = []
-
-  for (let i = 0; i < array.length; i += size) {
-    result.push(array.slice(i, i + size))
-  }
-
-  return result
-}
-
-
-async function assertIsAdmin(context) {
-
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      '請先登入'
-    )
-  }
-
-
-  const userDoc = await db
-    .collection('users')
-    .doc(context.auth.uid)
-    .get()
-
-
-  const role =
-    userDoc.exists
-      ? userDoc.data()?.role
-      : null
-
-
-  if (role !== 'admin' && role !== 'super_admin') {
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      '無管理員權限'
-    )
-  }
-}
-
-
-
-const NOTIFY_SUBJECTS = {
-  payment: '【建中舞會購票系統】繳費通知',
-  pickup: '【建中舞會購票系統】領票通知',
-  both: '【建中舞會購票系統】繳費暨領票通知',
-  custom: '【建中舞會購票系統】購票通知'
-}
-
-
-
-export const sendOrderNotification = functions
-  .region('asia-east1')
-  .runWith({
-      secrets: ['AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','SENDER_EMAIL','AWS_REGION']
-  })
-  .https.onCall(async (data, context) => {
-
-    await assertIsAdmin(context)
-
-
-    const type =
-      ['payment', 'pickup', 'both', 'custom'].includes(data.type)
-        ? data.type
-        : 'payment'
-
-    const school =
-      String(data.school || 'all').trim()
-
-    const subject =
-      String(data.subject || '').trim()
-
-    const paymentTime =
-      String(data.paymentTime || '').trim()
-
-    const pickupTime =
-      String(data.pickupTime || '').trim()
-
-    const location =
-      String(data.location || '').trim()
-
-    const message =
-      String(data.message || '').trim()
-
-
-    if (type === 'custom') {
-      if (!message) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          '請提供訊息內容'
-        )
-      }
-    } else {
-      if (!location) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          '請提供地點'
-        )
-      }
-
-
-      if (
-        (type === 'payment' || type === 'both')
-        && !paymentTime
-      ) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          '請提供繳費時間'
-        )
-      }
-
-
-      if (
-        (type === 'pickup' || type === 'both')
-        && !pickupTime
-      ) {
-        throw new functions.https.HttpsError(
-          'invalid-argument',
-          '請提供領貨時間'
-        )
-      }
-    }
-
-
-
-    const snapshot =
-      await db.collection('orders').get()
-
-
-    const emailSet = new Set()
-
-
-    snapshot.forEach(doc => {
-
-      const order = doc.data()
-
-      if (school !== 'all' && order.school !== school) {
-        return
-      }
-
-      const email = order.customerEmail
-
-      if (email) {
-        emailSet.add(email)
-      }
-
-    })
-
-
-    const recipients =
-      Array.from(emailSet).filter(email => {
-        const normalizedEmail = email.trim().toLowerCase()
-        const senderEmail = SENDER_EMAIL.trim().toLowerCase()
-
-        return (
-          normalizedEmail !== senderEmail &&
-          !normalizedEmail.startsWith('no-reply@') &&
-          !normalizedEmail.startsWith('noreply@')
-        )
-      })
-
-
-
-    if (recipients.length === 0) {
-      return {
-        sentCount: 0
-      }
-    }
-
-
-
-    console.log(
-          `Sending order notification (${type}) using account: ${SENDER_EMAIL}`
-    )
-
-
-
-    const transporter =
-      createTransporter()
-
-
-
-    const html =
-      generateOrderNotificationHTML({
-        type,
-        paymentTime,
-        pickupTime,
-        location,
-        message
-      })
-
-
-
-    const batches =
-      chunk(
-        recipients,
-        MAX_BCC_PER_BATCH
-      )
-
-
-
-    let lastSendAt = 0
-
-    for (const batch of batches) {
-
-      const now = Date.now()
-      const elapsed = now - lastSendAt
-      const waitMs = MIN_MS_BETWEEN_SENDS - elapsed
-
-      if (lastSendAt !== 0 && waitMs > 0) {
-        await sleep(waitMs)
-      }
-
-      lastSendAt = Date.now()
-
-      await transporter.sendMail({
-
-        from: `"建國中學班聯會" <${SENDER_EMAIL}>`,
-        to: SENDER_EMAIL,
-        bcc: batch,
-
-        subject:
-          subject || NOTIFY_SUBJECTS[type],
-        html
-
-      })
-
-    }
-
-
-
-    console.log(
-      `Successfully sent order notification to ${recipients.length} recipients`
-    )
-
-
-    return {
-      sentCount: recipients.length
-    }
-
-  })
 
 const SCHOOL_IDENTITIES = {
   '建國中學': 'CKS',
@@ -568,88 +44,1143 @@ const SCHOOL_IDENTITIES = {
   '其他學校或社會人士': 'O'
 }
 
-function getTaiwanDateString() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(new Date())
+const SENDER_EMAIL =
+  process.env.SENDER_EMAIL ||
+  process.env.GMAIL_EMAIL
 
-  const values = Object.fromEntries(
-    parts
-      .filter(part => part.type !== 'literal')
-      .map(part => [part.type, part.value])
-  )
+const MAX_BCC_PER_BATCH = 49
 
-  return `${values.year}${values.month}${values.day}`
+// AWS SES sending rate limit
+const MAX_SENDS_PER_SECOND = 14
+const MIN_MS_BETWEEN_SENDS =
+  Math.ceil(1000 / MAX_SENDS_PER_SECOND)
+
+const NOTIFY_SUBJECTS = {
+  payment: '【建中舞會購票系統】繳費通知',
+  pickup: '【建中舞會購票系統】取票通知',
+  both: '【建中舞會購票系統】繳費暨取票通知',
+  custom: '【建中舞會購票系統】購票通知'
 }
 
-function getSchoolIdentity(school) {
-  return SCHOOL_IDENTITIES[school] || 'O'
+/* =========================================================
+ * Utility
+ * ========================================================= */
+
+function parseTimestamp(value) {
+  if (!value) return null
+
+  if (value.toDate) {
+    return value.toDate()
+  }
+
+  const date = new Date(value)
+
+  return Number.isNaN(date.getTime())
+    ? null
+    : date
 }
 
-async function generateOrderId(school) {
-  const identity = getSchoolIdentity(school)
-  const date = getTaiwanDateString()
+function normalizeTicketTypeConfig(ticketType) {
+  return {
+    ...ticketType,
 
-  const counterRef = db
-    .collection('orderCounters')
-    .doc(date)
+    id: String(ticketType.id || ''),
 
-  const serialNumber = await db.runTransaction(async transaction => {
-    const counterSnap = await transaction.get(counterRef)
+    name: String(ticketType.name || ''),
 
-    const currentSerial = counterSnap.exists
-      ? Number(counterSnap.data()?.serialNumber || 0)
-      : 0
+    totalTicketQuantity:
+      Number(ticketType.totalTicketQuantity || 0),
 
-    const nextSerial = currentSerial + 1
+    purchaseLimitPerPerson:
+      ticketType.purchaseLimitPerPerson === null ||
+      ticketType.purchaseLimitPerPerson === undefined
+        ? null
+        : Number(ticketType.purchaseLimitPerPerson),
 
-    transaction.set(
-      counterRef,
-      {
-        date,
-        serialNumber: nextSerial,
-        updatedAt: new Date()
-      },
-      { merge: true }
+    salesStartTime:
+      ticketType.salesStartTime || null,
+
+    salesEndTime:
+      ticketType.salesEndTime || null,
+
+    eligibleBuyerIdentity:
+      ticketType.eligibleBuyerIdentity ||
+      ELIGIBLE_IDENTITIES.ALL_USERS
+  }
+}
+
+/**
+ * 票種資料唯一來源：
+ *
+ * settings/ticketTypes
+ *
+ * 文件格式：
+ *
+ * {
+ *   types: [
+ *     {
+ *       id: "campus_ticket",
+ *       name: "校內票",
+ *       eligibleBuyerIdentity: "campus_students",
+ *       salesStartTime: "...",
+ *       salesEndTime: "...",
+ *       totalTicketQuantity: 1200,
+ *       purchaseLimitPerPerson: 2
+ *     }
+ *   ]
+ * }
+ */
+async function loadTicketTypeConfigs() {
+  const snapshot = await db
+    .collection('settings')
+    .doc('ticketTypes')
+    .get()
+
+  if (!snapshot.exists) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      '票種設定不存在'
     )
+  }
 
-    return nextSerial
+  const data = snapshot.data()
+
+  const types = Array.isArray(data?.types)
+    ? data.types
+    : []
+
+  const ticketTypeMap = new Map()
+
+  types.forEach((ticketType) => {
+    if (!ticketType || !ticketType.id) {
+      return
+    }
+
+    const normalized =
+      normalizeTicketTypeConfig(ticketType)
+
+    ticketTypeMap.set(
+      normalized.id,
+      normalized
+    )
   })
 
-  return `${identity}${date}${String(serialNumber).padStart(4, '0')}`
+  if (ticketTypeMap.size === 0) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      '目前沒有有效的票種設定'
+    )
+  }
+
+  return ticketTypeMap
 }
 
-export const createOrder = functions
-  .region('asia-east1')
-  .https.onCall(async (data, context) => {
-    const orderPayload = data?.orderPayload
+function getTicketTypeIdFromItem(item) {
+  if (item?.ticketTypeId) {
+    return String(item.ticketTypeId)
+  }
 
-    if (!orderPayload || typeof orderPayload !== 'object') {
+  if (item?.id) {
+    return String(item.id)
+  }
+
+  return ''
+}
+
+function getBuyerIdentity(orderPayload) {
+  if (
+    CAMPUS_SCHOOLS.has(
+      orderPayload.school
+    )
+  ) {
+    return ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
+  }
+
+  return ELIGIBLE_IDENTITIES.ALL_USERS
+}
+
+function sleep(ms) {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
+
+function chunk(array, size) {
+  const result = []
+
+  for (let i = 0; i < array.length; i += size) {
+    result.push(
+      array.slice(i, i + size)
+    )
+  }
+
+  return result
+}
+
+/* =========================================================
+ * Ticket validation
+ * ========================================================= */
+
+async function validateOrderAgainstTicketRules(
+  orderPayload
+) {
+  const items =
+    Array.isArray(orderPayload.items)
+      ? orderPayload.items
+      : []
+
+  if (items.length === 0) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      '訂單內容為空'
+    )
+  }
+
+  const ticketTypeConfigMap =
+    await loadTicketTypeConfigs()
+
+  const now = new Date()
+
+  const buyerIdentity =
+    getBuyerIdentity(orderPayload)
+
+  /*
+   * Calculate quantity in current order
+   */
+  const currentOrderQuantityByType =
+    new Map()
+
+  items.forEach((item) => {
+    const ticketTypeId =
+      getTicketTypeIdFromItem(item)
+
+    if (!ticketTypeId) {
+      return
+    }
+
+    const quantity =
+      Number(item.quantity || 0)
+
+    if (!quantity) {
+      return
+    }
+
+    currentOrderQuantityByType.set(
+      ticketTypeId,
+      (
+        currentOrderQuantityByType.get(
+          ticketTypeId
+        ) || 0
+      ) + quantity
+    )
+  })
+
+  if (
+    currentOrderQuantityByType.size === 0
+  ) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      '票種資料無效'
+    )
+  }
+
+  /*
+   * Check whether ticket types exist
+   */
+  for (
+    const ticketTypeId of
+    currentOrderQuantityByType.keys()
+  ) {
+    if (
+      !ticketTypeConfigMap.has(
+        ticketTypeId
+      )
+    ) {
       throw new functions.https.HttpsError(
         'invalid-argument',
-        '訂單資料無效'
+        `無效的票種：${ticketTypeId}`
+      )
+    }
+  }
+
+  /*
+   * Validate time, eligibility and quantity
+   */
+  for (
+    const [
+      ticketTypeId,
+      quantity
+    ] of currentOrderQuantityByType.entries()
+  ) {
+    if (quantity <= 0) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '票券數量必須大於 0'
       )
     }
 
-    await validateOrderAgainstTicketRules(orderPayload)
+    const config =
+      ticketTypeConfigMap.get(
+        ticketTypeId
+      )
 
-    const orderId = await generateOrderId(
-      orderPayload.school
+    const startTime =
+      parseTimestamp(
+        config.salesStartTime
+      )
+
+    const endTime =
+      parseTimestamp(
+        config.salesEndTime
+      )
+
+    if (
+      startTime &&
+      now < startTime
+    ) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `${config.name}尚未開賣`
+      )
+    }
+
+    if (
+      endTime &&
+      now > endTime
+    ) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `${config.name}已結束販售`
+      )
+    }
+
+    if (
+      config.eligibleBuyerIdentity ===
+        ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS &&
+      buyerIdentity !==
+        ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
+    ) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        `${config.name}僅限校內學生購買`
+      )
+    }
+  }
+
+  /*
+   * Existing orders
+   *
+   * 注意：
+   * 目前仍以 orders collection 計算已售票數。
+   * 如果未來訂單量很大，建議改成
+   * Firestore transaction + inventory counter。
+   */
+  const email =
+    String(
+      orderPayload.customerEmail || ''
     )
+      .trim()
+      .toLowerCase()
 
+  const userId =
+    String(
+      orderPayload.userId || ''
+    ).trim()
+
+  const ordersSnapshot =
     await db
       .collection('orders')
-      .doc(orderId)
-      .set({
-        ...orderPayload,
-        createdAt: new Date()
-      })
+      .get()
 
-    return {
-      status: 201,
-      id: orderId
+  const soldQuantityByType =
+    new Map()
+
+  const buyerQuantityByType =
+    new Map()
+
+  ordersSnapshot.forEach(
+    (orderDoc) => {
+      const orderData =
+        orderDoc.data()
+
+      const orderItems =
+        Array.isArray(orderData.items)
+          ? orderData.items
+          : []
+
+      const matchesBuyer =
+        (
+          email &&
+          String(
+            orderData.customerEmail || ''
+          )
+            .trim()
+            .toLowerCase() === email
+        ) ||
+        (
+          userId &&
+          String(
+            orderData.userId || ''
+          ).trim() === userId
+        )
+
+      orderItems.forEach(
+        (item) => {
+          const ticketTypeId =
+            getTicketTypeIdFromItem(
+              item
+            )
+
+          if (
+            !ticketTypeConfigMap.has(
+              ticketTypeId
+            )
+          ) {
+            return
+          }
+
+          const quantity =
+            Number(
+              item.quantity || 0
+            )
+
+          if (!quantity) {
+            return
+          }
+
+          soldQuantityByType.set(
+            ticketTypeId,
+            (
+              soldQuantityByType.get(
+                ticketTypeId
+              ) || 0
+            ) + quantity
+          )
+
+          if (matchesBuyer) {
+            buyerQuantityByType.set(
+              ticketTypeId,
+              (
+                buyerQuantityByType.get(
+                  ticketTypeId
+                ) || 0
+              ) + quantity
+            )
+          }
+        }
+      )
+    }
+  )
+
+  /*
+   * Check inventory and purchase limits
+   */
+  for (
+    const [
+      ticketTypeId,
+      quantity
+    ] of currentOrderQuantityByType.entries()
+  ) {
+    const config =
+      ticketTypeConfigMap.get(
+        ticketTypeId
+      )
+
+    const sold =
+      soldQuantityByType.get(
+        ticketTypeId
+      ) || 0
+
+    const alreadyBought =
+      buyerQuantityByType.get(
+        ticketTypeId
+      ) || 0
+
+    if (
+      config.totalTicketQuantity &&
+      sold + quantity >
+        config.totalTicketQuantity
+    ) {
+      throw new functions.https.HttpsError(
+        'resource-exhausted',
+        `${config.name}剩餘票量不足`
+      )
+    }
+
+    if (
+      config.purchaseLimitPerPerson !== null &&
+      alreadyBought + quantity >
+        config.purchaseLimitPerPerson
+    ) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `${config.name}超過每人限購 ${config.purchaseLimitPerPerson} 張`
+      )
+    }
+  }
+}
+
+/* =========================================================
+ * AWS SES / Nodemailer
+ * ========================================================= */
+
+function createTransporter() {
+  const region =
+    process.env.AWS_REGION ||
+    'us-east-1'
+
+  const accessKeyId =
+    process.env.AWS_ACCESS_KEY_ID
+
+  const secretAccessKey =
+    process.env.AWS_SECRET_ACCESS_KEY
+
+  if (
+    accessKeyId &&
+    secretAccessKey
+  ) {
+    AWS.config.update({
+      accessKeyId,
+      secretAccessKey,
+      region
+    })
+  } else {
+    AWS.config.update({
+      region
+    })
+  }
+
+  const ses =
+    new AWS.SES({
+      apiVersion: '2010-12-01',
+      region
+    })
+
+  return nodemailer.createTransport({
+    SES: {
+      ses,
+      aws: AWS
     }
   })
+}
+
+/* =========================================================
+ * Send ticket QR Code email
+ * ========================================================= */
+
+export const sendOrderQRCode =
+  functions
+    .region('asia-east1')
+    .runWith({
+      secrets: [
+        'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY',
+        'SENDER_EMAIL',
+        'AWS_REGION'
+      ]
+    })
+    .firestore
+    .document('orders/{orderId}')
+    .onCreate(
+      async (snap, context) => {
+        const order =
+          snap.data()
+
+        const orderId =
+          context.params.orderId
+
+        console.log(
+          `Sending ticket confirmation email using account: ${SENDER_EMAIL}`
+        )
+
+        if (
+          !order.customerEmail
+        ) {
+          console.log(
+            `Order ${orderId} has no customer email, skipping`
+          )
+
+          return
+        }
+
+        try {
+          const transporter =
+            createTransporter()
+
+          /*
+           * Ticket URL
+           */
+          const orderUrl =
+            `https://souvenir.cksc.tw/admin/orders/${orderId}`
+
+          /*
+           * Generate QR code
+           */
+          const qrCodeBuffer =
+            await QRCode.toBuffer(
+              orderUrl,
+              {
+                width: 300,
+                margin: 2,
+                color: {
+                  dark: '#1d1d1f',
+                  light: '#ffffff'
+                },
+                errorCorrectionLevel: 'H',
+                type: 'png'
+              }
+            )
+
+          /*
+           * Flatten PNG background
+           */
+          const qrPngBuffer =
+            await sharp(
+              qrCodeBuffer
+            )
+              .flatten({
+                background: '#ffffff'
+              })
+              .png()
+              .toBuffer()
+
+          /*
+           * Email
+           */
+          const mailOptions = {
+            from:
+              `"建國中學班聯會" <${SENDER_EMAIL}>`,
+
+            to:
+              order.customerEmail,
+
+            subject:
+              `建中舞會購票系統購票成功 - 票券編號：${orderId}`,
+
+            html:
+              generateEmailHTML(
+                orderId,
+                order
+              ),
+
+            attachments: [
+              {
+                filename:
+                  'ticket-qrcode.png',
+
+                content:
+                  qrPngBuffer,
+
+                contentType:
+                  'image/png',
+
+                cid:
+                  'qrcode',
+
+                contentDisposition:
+                  'inline'
+              }
+            ]
+          }
+
+          await transporter.sendMail(
+            mailOptions
+          )
+
+          console.log(
+            `Successfully sent ticket confirmation email to ${order.customerEmail}`
+          )
+        } catch (error) {
+          console.error(
+            `Error sending ticket confirmation email for order ${orderId}:`,
+            error
+          )
+        }
+      }
+    )
+
+/* =========================================================
+ * Admin authentication
+ * ========================================================= */
+
+async function assertIsAdmin(
+  context
+) {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      '請先登入'
+    )
+  }
+
+  const userDoc =
+    await db
+      .collection('users')
+      .doc(context.auth.uid)
+      .get()
+
+  const role =
+    userDoc.exists
+      ? userDoc.data()?.role
+      : null
+
+  if (
+    role !== 'admin' &&
+    role !== 'super_admin'
+  ) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      '無管理員權限'
+    )
+  }
+}
+
+/* =========================================================
+ * Admin notification email
+ * ========================================================= */
+
+export const sendOrderNotification =
+  functions
+    .region('asia-east1')
+    .runWith({
+      secrets: [
+        'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY',
+        'SENDER_EMAIL',
+        'AWS_REGION'
+      ]
+    })
+    .https
+    .onCall(
+      async (data, context) => {
+        await assertIsAdmin(
+          context
+        )
+
+        const type =
+          [
+            'payment',
+            'pickup',
+            'both',
+            'custom'
+          ].includes(data.type)
+            ? data.type
+            : 'payment'
+
+        const school =
+          String(
+            data.school || 'all'
+          ).trim()
+
+        const subject =
+          String(
+            data.subject || ''
+          ).trim()
+
+        const paymentTime =
+          String(
+            data.paymentTime || ''
+          ).trim()
+
+        const pickupTime =
+          String(
+            data.pickupTime || ''
+          ).trim()
+
+        const location =
+          String(
+            data.location || ''
+          ).trim()
+
+        const message =
+          String(
+            data.message || ''
+          ).trim()
+
+        /*
+         * Validate notification data
+         */
+        if (
+          type === 'custom'
+        ) {
+          if (!message) {
+            throw new functions.https.HttpsError(
+              'invalid-argument',
+              '請提供訊息內容'
+            )
+          }
+        } else {
+          if (!location) {
+            throw new functions.https.HttpsError(
+              'invalid-argument',
+              '請提供地點'
+            )
+          }
+
+          if (
+            (
+              type === 'payment' ||
+              type === 'both'
+            ) &&
+            !paymentTime
+          ) {
+            throw new functions.https.HttpsError(
+              'invalid-argument',
+              '請提供繳費時間'
+            )
+          }
+
+          if (
+            (
+              type === 'pickup' ||
+              type === 'both'
+            ) &&
+            !pickupTime
+          ) {
+            throw new functions.https.HttpsError(
+              'invalid-argument',
+              '請提供取票時間'
+            )
+          }
+        }
+
+        /*
+         * Load orders
+         */
+        const snapshot =
+          await db
+            .collection('orders')
+            .get()
+
+        const emailSet =
+          new Set()
+
+        snapshot.forEach(
+          (doc) => {
+            const order =
+              doc.data()
+
+            if (
+              school !== 'all' &&
+              order.school !== school
+            ) {
+              return
+            }
+
+            const email =
+              order.customerEmail
+
+            if (email) {
+              emailSet.add(
+                email
+              )
+            }
+          }
+        )
+
+        /*
+         * Remove invalid / sender addresses
+         */
+        const recipients =
+          Array
+            .from(emailSet)
+            .filter(
+              (email) => {
+                const normalizedEmail =
+                  email
+                    .trim()
+                    .toLowerCase()
+
+                const senderEmail =
+                  SENDER_EMAIL
+                    .trim()
+                    .toLowerCase()
+
+                return (
+                  normalizedEmail !==
+                    senderEmail &&
+                  !normalizedEmail.startsWith(
+                    'no-reply@'
+                  ) &&
+                  !normalizedEmail.startsWith(
+                    'noreply@'
+                  )
+                )
+              }
+            )
+
+        if (
+          recipients.length === 0
+        ) {
+          return {
+            sentCount: 0
+          }
+        }
+
+        console.log(
+          `Sending order notification (${type}) using account: ${SENDER_EMAIL}`
+        )
+
+        const transporter =
+          createTransporter()
+
+        const html =
+          generateOrderNotificationHTML(
+            {
+              type,
+              paymentTime,
+              pickupTime,
+              location,
+              message
+            }
+          )
+
+        const batches =
+          chunk(
+            recipients,
+            MAX_BCC_PER_BATCH
+          )
+
+        let lastSendAt = 0
+
+        for (
+          const batch of batches
+        ) {
+          const now =
+            Date.now()
+
+          const elapsed =
+            now - lastSendAt
+
+          const waitMs =
+            MIN_MS_BETWEEN_SENDS -
+            elapsed
+
+          if (
+            lastSendAt !== 0 &&
+            waitMs > 0
+          ) {
+            await sleep(
+              waitMs
+            )
+          }
+
+          lastSendAt =
+            Date.now()
+
+          await transporter.sendMail(
+            {
+              from:
+                `"建國中學班聯會" <${SENDER_EMAIL}>`,
+
+              to:
+                SENDER_EMAIL,
+
+              bcc:
+                batch,
+
+              subject:
+                subject ||
+                NOTIFY_SUBJECTS[type],
+
+              html
+            }
+          )
+        }
+
+        console.log(
+          `Successfully sent order notification to ${recipients.length} recipients`
+        )
+
+        return {
+          sentCount:
+            recipients.length
+        }
+      }
+    )
+
+/* =========================================================
+ * Order ID
+ * ========================================================= */
+
+function getTaiwanDateString() {
+  const parts =
+    new Intl.DateTimeFormat(
+      'en-CA',
+      {
+        timeZone:
+          'Asia/Taipei',
+
+        year:
+          'numeric',
+
+        month:
+          '2-digit',
+
+        day:
+          '2-digit'
+      }
+    ).formatToParts(
+      new Date()
+    )
+
+  const values =
+    Object.fromEntries(
+      parts
+        .filter(
+          part =>
+            part.type !== 'literal'
+        )
+        .map(
+          part => [
+            part.type,
+            part.value
+          ]
+        )
+    )
+
+  return (
+    `${values.year}${values.month}${values.day}`
+  )
+}
+
+function getSchoolIdentity(
+  school
+) {
+  return (
+    SCHOOL_IDENTITIES[school] ||
+    'O'
+  )
+}
+
+async function generateOrderId(
+  school
+) {
+  const identity =
+    getSchoolIdentity(
+      school
+    )
+
+  const date =
+    getTaiwanDateString()
+
+  const counterRef =
+    db
+      .collection(
+        'orderCounters'
+      )
+      .doc(date)
+
+  const serialNumber =
+    await db.runTransaction(
+      async transaction => {
+        const counterSnap =
+          await transaction.get(
+            counterRef
+          )
+
+        const currentSerial =
+          counterSnap.exists
+            ? Number(
+                counterSnap.data()
+                  ?.serialNumber || 0
+              )
+            : 0
+
+        const nextSerial =
+          currentSerial + 1
+
+        transaction.set(
+          counterRef,
+          {
+            date,
+            serialNumber:
+              nextSerial,
+            updatedAt:
+              new Date()
+          },
+          {
+            merge:
+              true
+          }
+        )
+
+        return nextSerial
+      }
+    )
+
+  return (
+    `${identity}${date}${String(serialNumber).padStart(4, '0')}`
+  )
+}
+
+/* =========================================================
+ * Create Order
+ * ========================================================= */
+
+export const createOrder =
+  functions
+    .region('asia-east1')
+    .https
+    .onCall(
+      async (
+        data,
+        context
+      ) => {
+        const orderPayload =
+          data?.orderPayload
+
+        if (
+          !orderPayload ||
+          typeof orderPayload !==
+            'object'
+        ) {
+          throw new functions.https.HttpsError(
+            'invalid-argument',
+            '訂單資料無效'
+          )
+        }
+
+        /*
+         * Validate ticket rules
+         *
+         * All ticket configuration
+         * comes from:
+         *
+         * settings/ticketTypes
+         */
+        await validateOrderAgainstTicketRules(
+          orderPayload
+        )
+
+        /*
+         * Generate order ID
+         */
+        const orderId =
+          await generateOrderId(
+            orderPayload.school
+          )
+
+        /*
+         * Create order
+         */
+        await db
+          .collection('orders')
+          .doc(orderId)
+          .set({
+            ...orderPayload,
+
+            createdAt:
+              new Date()
+          })
+
+        console.log(
+          `Order created successfully: ${orderId}`
+        )
+
+        return {
+          status: 201,
+          id: orderId
+        }
+      }
+    )

@@ -514,7 +514,7 @@ textarea::placeholder {
   align-items: center;
   gap: 8px;
 
-  min-height: 42px;
+  min-height: 20px;
 
   color: rgba(242, 240, 233, 0.58);
   font-size: 12px;
@@ -968,7 +968,8 @@ textarea::placeholder {
 
 @media (max-width: 900px) {
   .ticket-type-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+    gap: 28px;
   }
 
   .ticket-time-field {
@@ -1394,8 +1395,8 @@ textarea::placeholder {
 
 .ticket-limit-controls input[type="checkbox"] {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  max-width: 28px;
+  max-height: 28px;
   min-width: 28px;
   margin: 0;
   accent-color: var(--ember);

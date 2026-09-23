@@ -1,3 +1,0 @@
-<template>
-    story page
-</template>

@@ -49,6 +49,16 @@ const routes = [
         component: () => import('pages/TermsPage.vue')
       },
       {
+        path: 'intro',
+        name: 'intro',
+        component: () => import('pages/IntroPage.vue')
+      },
+      {
+        path: 'performer',
+        name: 'performer',
+        component: () => import('pages/PerformerPage.vue') 
+      },
+      {
         path: 'about',
         name: 'about',
         component: () => import('pages/AboutPage.vue')
@@ -85,6 +95,24 @@ const routes = [
           requiresSuperAdmin: true,
         }
       },
+
+      {
+        path: 'intromanagement',
+        name: 'intro-management',
+        component: () => import('pages/IntroManagementPage.vue'),
+        meta: {
+          requiresSuperAdmin: true,
+        }
+      },
+
+      {
+        path: 'performer',
+        name: 'performer-management',
+        component: () => import('pages/PerformerManagementPage.vue'),
+        meta: {
+          requiresSuperAdmin: true,
+        }
+      }, 
 
       {
         path: 'orders/:id',
