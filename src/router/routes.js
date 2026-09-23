@@ -76,6 +76,14 @@ const routes = [
         name: 'admin',
         component: () => import('pages/AdminPage.vue')
       },
+      
+      {
+        path: '',
+        name: 'management'
+        component: () => import('pages/ManagementPage.vue')
+        meta: {
+        requiresSuperAdmin: true
+      },
 
       {
         path: 'orders/:id',
