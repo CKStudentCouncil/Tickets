@@ -966,8 +966,25 @@ textarea::placeholder {
   .notify-actions .btn-outline {
     width: 100%;
   
-  .time-range {
+    .time-range {
     grid-template-columns: 1fr;
   }
+}
+
+/* fixes native date/time input overflow regardless of screen size */
+.time-inputs {
+  min-width: 0;
+}
+
+.time-inputs input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}
+
+/* stack date above time once space gets tight */
+@media (max-width: 420px) {
+  .time-inputs {
+    grid-template-columns: 1fr;
   }
 }
