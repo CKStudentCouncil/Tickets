@@ -300,7 +300,11 @@ textarea::placeholder {
 
 .ticket-type-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 0.8fr) minmax(380px, 1.8fr) minmax(150px, .7fr) minmax(180px, .8fr);
+  grid-template-columns:
+    minmax(180px, 0.8fr)
+    minmax(380px, 1.8fr)
+    minmax(150px, .7fr)
+    minmax(180px, .8fr);
   gap: 24px;
 
   margin-top: 26px;
@@ -366,8 +370,9 @@ textarea::placeholder {
 .time-inputs input {
   box-sizing: border-box;
   min-width: 0;
-	max-width: 400px;
+  max-width: 400px;
 }
+
 @media (max-width: 200px) {
   .time-inputs {
     grid-template-columns: 1fr;
@@ -965,13 +970,11 @@ textarea::placeholder {
   .notify-actions .btn,
   .notify-actions .btn-outline {
     width: 100%;
-  
-    .time-range {
-    grid-template-columns: 1fr;
   }
 }
 
 /* fixes native date/time input overflow regardless of screen size */
+
 .time-inputs {
   min-width: 0;
 }
@@ -983,6 +986,7 @@ textarea::placeholder {
 }
 
 /* stack date above time once space gets tight */
+
 @media (max-width: 420px) {
   .time-inputs {
     grid-template-columns: 1fr;
