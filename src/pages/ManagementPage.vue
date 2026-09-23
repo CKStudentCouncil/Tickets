@@ -185,7 +185,7 @@ import { USE_MOCK_ORDERS, MOCK_ALLOW_ADMIN_WITHOUT_AUTH } from 'src/config/app'
 
 const auth = useAuthStore()
 const canManageOrders = computed(
-  () => auth.isAdmin || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
+  () => auth.isSuperAdmin || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
 )
 const toast = useToastStore()
 const displayName = ref('管理員')
