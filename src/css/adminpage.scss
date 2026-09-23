@@ -364,7 +364,13 @@ textarea::placeholder {
 }
 
 .time-inputs input {
+  box-sizing: border-box;
   min-width: 0;
+}
+@media (max-width: 400px) {
+  .time-inputs {
+    grid-template-columns: 1fr;
+  }
 }
 
 .time-presets {
