@@ -79,10 +79,10 @@ const routes = [
       
       {
         path: '',
-        name: 'management'
-        component: () => import('pages/ManagementPage.vue')
+        name: 'management',
+        component: () => import('pages/ManagementPage.vue'),
         meta: {
-          requiresSuperAdmin: true
+          requiresSuperAdmin: true,
         }
       },
 
