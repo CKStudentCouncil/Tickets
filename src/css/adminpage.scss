@@ -1232,19 +1232,69 @@ textarea::placeholder {
   box-sizing: border-box;
 }
 
-/* iOS/Safari date/time controls can have intrinsic width */
-.time-inputs > input[type="date"],
-.time-inputs > input[type="time"] {
+/* =========================================================
+   Date / Time input — visual refinement
+   ========================================================= */
+
+.time-inputs > input {
+  display: block;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
-  width: 100%;
-  appearance: none;
-  -webkit-appearance: none;
+  height: 44px;
+  padding: 0 13px;
+  box-sizing: border-box;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+
+  background: rgba(255, 255, 255, .025);
+  color: var(--off-white);
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  transition:
+    border-color .2s ease,
+    background-color .2s ease;
 }
 
-/* Keep the native calendar/clock controls inside the box */
+/* 保留 Safari / iPadOS 原生 date & time 控制項 */
+.time-inputs > input[type="date"],
+.time-inputs > input[type="time"] {
+  appearance: auto;
+  -webkit-appearance: auto;
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--off-white);
+}
+
+/* Safari words */
 .time-inputs > input::-webkit-date-and-time-value {
   text-align: left;
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Focus */
+.time-inputs > input:focus {
+  border-color: rgba(228, 164, 104, .6);
+  outline: none;
+  background: rgba(228, 164, 104, .035);
+}
+
+/* Disabled */
+.time-inputs > input:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
 
 .time-inputs > input:focus {
@@ -1453,4 +1503,14 @@ textarea::placeholder {
   .ticket-type-header-actions .btn-outline {
     flex: none;
   }
+}
+
+.ticket-type-card input,
+.ticket-type-card select {
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
