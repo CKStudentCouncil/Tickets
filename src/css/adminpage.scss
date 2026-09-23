@@ -366,8 +366,9 @@ textarea::placeholder {
 .time-inputs input {
   box-sizing: border-box;
   min-width: 0;
+	max-width: 400px;
 }
-@media (max-width: 400px) {
+@media (max-width: 200px) {
   .time-inputs {
     grid-template-columns: 1fr;
   }
