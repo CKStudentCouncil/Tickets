@@ -1,27 +1,111 @@
+:root {
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --canvas: #f5f5f7;
+  --surface: #ffffff;
+  --line: #e5e5e7;
+  --link: #06c;
+  --success: #19703a;
+  --danger: #a12622;
+}
+
+/* =========================================================
+   GLOBAL
+   ========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #050608;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: #050608;
+  color: #f2f0e9;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro TC",
+    "PingFang TC",
+    "Noto Sans TC",
+    "Microsoft JhengHei",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(228, 164, 104, 0.28);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(228, 164, 104, 0.18);
+}
+
+
+/* =========================================================
+   ACCOUNT PAGE
+   ========================================================= */
+
 .account-page {
-  --void: #050608;
-  --surface: #0d1015;
-  --surface-soft: #11151b;
-  --lunar: #9aa3ac;
-  --off-white: #f2f0e9;
-  --ember: #e4a468;
-  --line: rgba(242, 240, 233, .14);
-  --line-soft: rgba(242, 240, 233, .08);
-  --danger: #c97878;
+  --account-void: #050608;
+  --account-surface: #0d1015;
+  --account-surface-soft: #11151b;
+  --account-lunar: #9aa3ac;
+  --account-white: #f2f0e9;
+  --account-ember: #e4a468;
+  --account-line: rgba(242, 240, 233, 0.14);
+  --account-line-soft: rgba(242, 240, 233, 0.08);
+  --account-danger: #c97878;
 
   min-height: 100vh;
-  padding: 120px clamp(20px, 5vw, 64px) 100px;
+
+  padding:
+    120px
+    clamp(20px, 5vw, 64px)
+    100px;
+
   background:
     radial-gradient(
       ellipse 60% 40% at 90% 0%,
-      rgba(228, 164, 104, .07),
+      rgba(228, 164, 104, 0.07),
       transparent 65%
     ),
-    var(--void);
-  color: var(--off-white);
-  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+    var(--account-void);
+
+  color: var(--account-white);
+
+  font-family:
+    "Manrope",
+    "Noto Sans TC",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
+
+
+/* =========================================================
+   CONTENT WIDTH
+   ========================================================= */
 
 .account-page > * {
   width: min(100%, 1100px);
@@ -29,499 +113,801 @@
   margin-left: auto;
 }
 
-.header-row {
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.account-page .header-row {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+
   gap: 32px;
+
   padding-bottom: 34px;
-  border-bottom: 1px solid var(--line);
+
+  border-bottom: 1px solid var(--account-line);
 }
 
-.header-row h1 {
+.account-page .header-row h1 {
   margin: 0;
-  color: var(--off-white);
-  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+
+  color: var(--account-white);
+
+  font-family:
+    "Noto Sans TC",
+    "Manrope",
+    sans-serif;
+
   font-size: clamp(2rem, 4vw, 3rem);
   font-weight: 800;
   line-height: 1.25;
-  letter-spacing: .01em;
+
+  letter-spacing: 0.01em;
 }
 
-.header-actions {
+.account-page .header-actions {
   display: flex;
   flex-wrap: wrap;
+
   justify-content: flex-end;
+
   gap: 8px;
 }
 
-.btn,
-.btn-outline,
-.btn-sm {
+
+/* =========================================================
+   BUTTON BASE
+   ========================================================= */
+
+.account-page .btn,
+.account-page .btn-outline,
+.account-page .btn-sm {
   border-radius: 0;
-  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+
+  font-family:
+    "Manrope",
+    "Noto Sans TC",
+    sans-serif;
+
   font-weight: 700;
+
   cursor: pointer;
+
   transition:
-    color .2s ease,
-    background-color .2s ease,
-    border-color .2s ease,
-    opacity .2s ease;
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
-.btn {
+.account-page .btn:active,
+.account-page .btn-outline:active,
+.account-page .btn-sm:active {
+  transform: translateY(1px);
+}
+
+
+/* =========================================================
+   PRIMARY BUTTON
+   ========================================================= */
+
+.account-page .btn {
   min-height: 40px;
+
   padding: 0 16px;
-  border: 1px solid var(--ember);
-  background: var(--ember);
+
+  border: 1px solid var(--account-ember);
+
+  background: var(--account-ember);
   color: #111;
+
   font-size: 11px;
-  letter-spacing: .04em;
+  letter-spacing: 0.04em;
 }
 
-.btn:hover {
+.account-page .btn:hover {
   border-color: #efb57d;
   background: #efb57d;
 }
 
-.btn:disabled {
+.account-page .btn:disabled {
   cursor: not-allowed;
-  opacity: .4;
+  opacity: 0.4;
 }
 
-.btn.danger {
-  border-color: var(--danger);
-  background: var(--danger);
+
+/* =========================================================
+   DANGER BUTTON
+   ========================================================= */
+
+.account-page .btn.danger {
+  border-color: var(--account-danger);
+
+  background: var(--account-danger);
   color: #160e0e;
 }
 
-.btn.danger:hover {
+.account-page .btn.danger:hover {
   border-color: #d68a8a;
   background: #d68a8a;
 }
 
-.btn-outline {
+
+/* =========================================================
+   OUTLINE BUTTON
+   ========================================================= */
+
+.account-page .btn-outline {
   min-height: 40px;
+
   padding: 0 15px;
-  border: 1px solid var(--line);
+
+  border: 1px solid var(--account-line);
+
   background: transparent;
-  color: var(--off-white);
+  color: var(--account-white);
+
   font-size: 11px;
-  letter-spacing: .03em;
+  letter-spacing: 0.03em;
 }
 
-.btn-outline:hover {
-  border-color: rgba(228, 164, 104, .55);
-  color: var(--ember);
+.account-page .btn-outline:hover {
+  border-color: rgba(228, 164, 104, 0.55);
+  color: var(--account-ember);
 }
 
-.btn-outline:disabled {
+.account-page .btn-outline:disabled {
   cursor: not-allowed;
-  opacity: .4;
+  opacity: 0.4;
 }
 
-.btn-outline.danger-outline {
-  border-color: rgba(201, 120, 120, .28);
-  color: var(--danger);
+
+/* =========================================================
+   DANGER OUTLINE
+   ========================================================= */
+
+.account-page .btn-outline.danger-outline {
+  border-color: rgba(201, 120, 120, 0.28);
+  color: var(--account-danger);
 }
 
-.btn-outline.danger-outline:hover {
-  border-color: rgba(201, 120, 120, .65);
-  background: rgba(201, 120, 120, .04);
+.account-page .btn-outline.danger-outline:hover {
+  border-color: rgba(201, 120, 120, 0.65);
+  background: rgba(201, 120, 120, 0.04);
 }
 
-.stats {
+
+/* =========================================================
+   STATISTICS
+   ========================================================= */
+
+.account-page .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
   margin-top: 42px;
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
+
+  border-top: 1px solid var(--account-line-soft);
+  border-bottom: 1px solid var(--account-line-soft);
 }
 
-.stat-card {
+.account-page .stat-card {
   min-height: 130px;
+
   padding: 26px 24px;
-  border-right: 1px solid var(--line-soft);
+
+  border-right: 1px solid var(--account-line-soft);
 }
 
-.stat-card:first-child {
+.account-page .stat-card:first-child {
   padding-left: 0;
 }
 
-.stat-card:last-child {
+.account-page .stat-card:last-child {
   border-right: 0;
 }
 
-.stat-card strong {
+.account-page .stat-card strong {
   display: block;
+
   margin-bottom: 9px;
-  color: var(--off-white);
-  font-family: 'Manrope', sans-serif;
+
+  color: var(--account-white);
+
+  font-family: "Manrope", sans-serif;
+
   font-size: 30px;
   font-weight: 700;
+
   line-height: 1;
 }
 
-.stat-card span {
-  color: var(--lunar);
+.account-page .stat-card span {
+  color: var(--account-lunar);
+
   font-size: 11px;
 }
 
-.num {
+.account-page .num {
   font-variant-numeric: tabular-nums;
 }
 
-.panel {
+
+/* =========================================================
+   PANEL
+   ========================================================= */
+
+.account-page .panel {
   margin-top: 52px;
+
   padding-top: 30px;
-  border-top: 1px solid var(--line-soft);
+
+  border-top: 1px solid var(--account-line-soft);
 }
 
-.filters {
+
+/* =========================================================
+   FILTERS
+   ========================================================= */
+
+.account-page .filters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    220px;
+
   gap: 12px;
 }
 
-.filters input,
-.filters select,
-.modal input,
-.modal select {
+.account-page .filters input,
+.account-page .filters select,
+.account-page .modal input,
+.account-page .modal select {
   width: 100%;
+
   min-height: 44px;
+
   padding: 0 13px;
-  border: 1px solid var(--line);
+
+  border: 1px solid var(--account-line);
   border-radius: 0;
+
   outline: none;
-  background: rgba(255, 255, 255, .025);
-  color: var(--off-white);
+
+  background: rgba(255, 255, 255, 0.025);
+
+  color: var(--account-white);
+
   font: inherit;
   font-size: 13px;
+
   transition:
-    border-color .2s ease,
-    background-color .2s ease;
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.filters input:focus,
-.filters select:focus,
-.modal input:focus,
-.modal select:focus {
-  border-color: rgba(228, 164, 104, .6);
-  background: rgba(228, 164, 104, .035);
+.account-page .filters input:focus,
+.account-page .filters select:focus,
+.account-page .modal input:focus,
+.account-page .modal select:focus {
+  border-color: rgba(228, 164, 104, 0.6);
+
+  background: rgba(228, 164, 104, 0.035);
+
+  box-shadow:
+    0 0 0 3px rgba(228, 164, 104, 0.06);
 }
 
-.filters input::placeholder,
-.modal input::placeholder {
-  color: rgba(154, 163, 172, .55);
+.account-page .filters input::placeholder,
+.account-page .modal input::placeholder {
+  color: rgba(154, 163, 172, 0.55);
 }
 
-.filters select,
-.modal select {
+.account-page .filters select,
+.account-page .modal select {
   appearance: auto;
 }
 
-.table-wrap {
+
+/* =========================================================
+   TABLE
+   ========================================================= */
+
+.account-page .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.table-wrap table {
+.account-page .table-wrap table {
   width: 100%;
+
   border-collapse: collapse;
+
   table-layout: auto;
 }
 
-.table-wrap th {
+.account-page .table-wrap th {
   padding: 0 16px 14px;
-  border-bottom: 1px solid var(--line);
-  color: var(--lunar);
+
+  border-bottom: 1px solid var(--account-line);
+
+  color: var(--account-lunar);
+
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .14em;
+
+  letter-spacing: 0.14em;
+
   text-align: left;
   text-transform: uppercase;
+
   white-space: nowrap;
 }
 
-.table-wrap th:first-child,
-.table-wrap td:first-child {
+.account-page .table-wrap th:first-child,
+.account-page .table-wrap td:first-child {
   padding-left: 0;
 }
 
-.table-wrap th:last-child,
-.table-wrap td:last-child {
+.account-page .table-wrap th:last-child,
+.account-page .table-wrap td:last-child {
   padding-right: 0;
 }
 
-.table-wrap td {
+.account-page .table-wrap td {
   padding: 18px 16px;
-  border-bottom: 1px solid var(--line-soft);
-  color: rgba(242, 240, 233, .85);
+
+  border-bottom: 1px solid var(--account-line-soft);
+
+  color: rgba(242, 240, 233, 0.85);
+
   font-size: 13px;
+
   vertical-align: middle;
 }
 
-.table-wrap tbody tr {
-  transition: background-color .2s ease;
+.account-page .table-wrap tbody tr {
+  transition: background-color 0.2s ease;
 }
 
-.table-wrap tbody tr:hover {
-  background: rgba(255, 255, 255, .018);
+.account-page .table-wrap tbody tr:hover {
+  background: rgba(255, 255, 255, 0.018);
 }
 
-.mono {
-  font-family: 'SFMono-Regular', 'Roboto Mono', monospace;
+
+/* =========================================================
+   MONOSPACE
+   ========================================================= */
+
+.account-page .mono {
+  font-family:
+    "SFMono-Regular",
+    "Roboto Mono",
+    monospace;
+
   font-size: 12px;
-  letter-spacing: .01em;
+
+  letter-spacing: 0.01em;
 }
 
-.badge {
+
+/* =========================================================
+   BADGES
+   ========================================================= */
+
+.account-page .badge {
   display: inline-flex;
+
   align-items: center;
+
   min-height: 25px;
+
   padding: 0 9px;
+
   border: 1px solid;
+
   border-radius: 0;
+
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .04em;
+
+  letter-spacing: 0.04em;
 }
 
-.badge.pending {
-  border-color: rgba(228, 164, 104, .35);
-  color: var(--ember);
-  background: rgba(228, 164, 104, .045);
+.account-page .badge.pending {
+  border-color: rgba(228, 164, 104, 0.35);
+
+  color: var(--account-ember);
+
+  background: rgba(228, 164, 104, 0.045);
 }
 
-.badge.active {
-  border-color: rgba(130, 175, 145, .28);
+.account-page .badge.active {
+  border-color: rgba(130, 175, 145, 0.28);
+
   color: #9bbda3;
-  background: rgba(130, 175, 145, .04);
+
+  background: rgba(130, 175, 145, 0.04);
 }
 
-.btn-sm {
+
+/* =========================================================
+   SMALL BUTTON
+   ========================================================= */
+
+.account-page .btn-sm {
   min-height: 32px;
+
   padding: 0 12px;
-  border: 1px solid var(--line);
+
+  border: 1px solid var(--account-line);
+
   background: transparent;
-  color: var(--off-white);
+
+  color: var(--account-white);
+
   font-size: 10px;
 }
 
-.btn-sm:hover {
-  border-color: rgba(228, 164, 104, .55);
-  color: var(--ember);
+.account-page .btn-sm:hover {
+  border-color: rgba(228, 164, 104, 0.55);
+  color: var(--account-ember);
 }
 
-.empty {
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
+
+.account-page .empty {
   margin: 0;
+
   padding: 48px 0;
-  color: var(--lunar);
+
+  color: var(--account-lunar);
+
   font-size: 13px;
+
   text-align: center;
 }
 
-.state {
+
+/* =========================================================
+   GENERAL STATE
+   ========================================================= */
+
+.account-page .state {
   display: flex;
+
   min-height: 100vh;
+
   align-items: center;
   justify-content: center;
+
   flex-direction: column;
+
   gap: 20px;
+
   padding: 24px;
-  background: var(--void);
-  color: var(--off-white);
-  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+
+  background: var(--account-void);
+
+  color: var(--account-white);
+
+  font-family:
+    "Manrope",
+    "Noto Sans TC",
+    sans-serif;
+
   text-align: center;
 }
 
-.state h2 {
+.account-page .state h2 {
   margin: 0;
-  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+
+  font-family:
+    "Noto Sans TC",
+    "Manrope",
+    sans-serif;
+
   font-size: 1.5rem;
 }
 
-.state .btn {
+.account-page .state .btn {
   min-width: 120px;
 }
 
-.modal-overlay {
+
+/* =========================================================
+   MODAL OVERLAY
+   ========================================================= */
+
+.account-page .modal-overlay {
   position: fixed;
+
   z-index: 1000;
+
   inset: 0;
+
   display: flex;
+
   align-items: center;
   justify-content: center;
+
   padding: 24px;
-  background: rgba(0, 0, 0, .78);
+
+  background: rgba(0, 0, 0, 0.78);
+
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.modal {
+
+/* =========================================================
+   MODAL
+   ========================================================= */
+
+.account-page .modal {
   width: min(100%, 520px);
-  max-height: min(760px, calc(100vh - 48px));
+
+  max-height:
+    min(
+      760px,
+      calc(100vh - 48px)
+    );
+
   overflow-y: auto;
+
   padding: 34px;
-  border: 1px solid var(--line);
+
+  border: 1px solid var(--account-line);
+
   background: #0a0d11;
-  color: var(--off-white);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
+
+  color: var(--account-white);
+
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.5);
 }
 
-.modal h2 {
+.account-page .modal h2 {
   margin: 0 0 28px;
-  color: var(--off-white);
-  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+
+  color: var(--account-white);
+
+  font-family:
+    "Noto Sans TC",
+    "Manrope",
+    sans-serif;
+
   font-size: 1.35rem;
+
   font-weight: 800;
 }
 
-.modal p {
+.account-page .modal p {
   margin: 0 0 15px;
-  color: rgba(242, 240, 233, .7);
+
+  color: rgba(242, 240, 233, 0.7);
+
   font-size: 13px;
+
   line-height: 1.8;
 }
 
-.modal p strong {
-  color: var(--off-white);
+.account-page .modal p strong {
+  color: var(--account-white);
 }
 
-.modal .hint {
+
+/* =========================================================
+   MODAL HINT
+   ========================================================= */
+
+.account-page .modal .hint {
   padding: 13px 14px;
-  border-left: 2px solid var(--line);
-  background: rgba(255, 255, 255, .025);
-  color: var(--lunar);
+
+  border-left: 2px solid var(--account-line);
+
+  background: rgba(255, 255, 255, 0.025);
+
+  color: var(--account-lunar);
+
   font-size: 12px;
+
   line-height: 1.75;
 }
 
-.modal .hint.warn {
-  border-left-color: var(--ember);
-  color: rgba(242, 240, 233, .72);
+.account-page .modal .hint.warn {
+  border-left-color: var(--account-ember);
+
+  color: rgba(242, 240, 233, 0.72);
 }
 
-.field-label {
+
+/* =========================================================
+   FIELD LABEL
+   ========================================================= */
+
+.account-page .field-label {
   display: block;
+
   margin: 24px 0 9px;
-  color: var(--lunar);
+
+  color: var(--account-lunar);
+
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .04em;
+
+  letter-spacing: 0.04em;
 }
 
-.modal > .btn,
-.modal > .btn-outline {
+
+/* =========================================================
+   MODAL BUTTONS
+   ========================================================= */
+
+.account-page .modal > .btn,
+.account-page .modal > .btn-outline {
   width: 100%;
+
   margin-top: 12px;
 }
 
-.modal > .btn:first-of-type {
+.account-page .modal > .btn:first-of-type {
   margin-top: 24px;
 }
 
-.modal > .btn.danger {
+.account-page .modal > .btn.danger {
   margin-top: 10px;
 }
 
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
 @media (max-width: 850px) {
-  .header-row {
+
+  .account-page .header-row {
     align-items: flex-start;
+
     flex-direction: column;
   }
 
-  .header-actions {
+  .account-page .header-actions {
     width: 100%;
+
     justify-content: flex-start;
   }
 
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .account-page .stats {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
   }
 
-  .stat-card:nth-child(2) {
+  .account-page .stat-card:nth-child(2) {
     border-right: 0;
   }
 
-  .stat-card:nth-child(n + 3) {
-    border-top: 1px solid var(--line-soft);
+  .account-page .stat-card:nth-child(n + 3) {
+    border-top: 1px solid var(--account-line-soft);
   }
 
-  .stat-card:nth-child(3) {
+  .account-page .stat-card:nth-child(3) {
     padding-left: 0;
   }
 
-  .filters {
+  .account-page .filters {
     grid-template-columns: 1fr;
   }
 }
 
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
 @media (max-width: 600px) {
+
   .account-page {
-    padding: 92px 18px 72px;
+    padding:
+      92px
+      18px
+      72px;
   }
 
-  .header-row {
+  .account-page .header-row {
     padding-bottom: 26px;
   }
 
-  .header-row h1 {
+  .account-page .header-row h1 {
     font-size: 2rem;
   }
 
-  .header-actions {
+  .account-page .header-actions {
     display: grid;
+
     grid-template-columns: 1fr 1fr;
+
     width: 100%;
   }
 
-  .header-actions .btn-outline {
+  .account-page .header-actions .btn-outline {
     width: 100%;
   }
 
-  .header-actions .btn-outline:last-child {
+  .account-page .header-actions .btn-outline:last-child {
     grid-column: 1 / -1;
   }
 
-  .stats {
+  .account-page .stats {
     grid-template-columns: 1fr 1fr;
+
     margin-top: 32px;
   }
 
-  .stat-card {
+  .account-page .stat-card {
     min-height: 105px;
+
     padding: 20px 14px;
   }
 
-  .stat-card:first-child,
-  .stat-card:nth-child(3) {
+  .account-page .stat-card:first-child,
+  .account-page .stat-card:nth-child(3) {
     padding-left: 0;
   }
 
-  .stat-card:nth-child(2),
-  .stat-card:last-child {
+  .account-page .stat-card:nth-child(2),
+  .account-page .stat-card:last-child {
     padding-right: 0;
   }
 
-  .stat-card strong {
+  .account-page .stat-card strong {
     font-size: 25px;
   }
 
-  .table-wrap {
+  .account-page .table-wrap {
     margin-right: -18px;
     margin-left: -18px;
+
     padding-right: 18px;
     padding-left: 18px;
   }
 
-  .table-wrap table {
+  .account-page .table-wrap table {
     min-width: 700px;
   }
 
-  .modal-overlay {
+  .account-page .modal-overlay {
     padding: 14px;
   }
 
-  .modal {
+  .account-page .modal {
     padding: 26px 20px;
+  }
+}
+
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .account-page,
+  .account-page * {
+    scroll-behavior: auto !important;
+
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
