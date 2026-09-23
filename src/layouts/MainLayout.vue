@@ -66,7 +66,7 @@
 
 						<router-link
 							v-if="auth.isSuperAdmin"
-							to="/management"
+							to="/admin/management"
 							@click="menuOpen = false"
 						>
 							資訊管理
