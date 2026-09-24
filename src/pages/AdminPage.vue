@@ -83,7 +83,7 @@
         :class="{ active: activeTab === 'delivered' }"
         @click="setActiveTab('delivered')"
       >
-        已交貨 (<span class="num">{{ deliveredTabCount }}</span>)
+        已領票 (<span class="num">{{ deliveredTabCount }}</span>)
       </button>
     </div>
 
@@ -242,14 +242,14 @@
       class="panel export-panel"
     >
       <div>
-        <h2>{{ activeTab === 'delivered' ? '已交貨統計與匯出' : '匯出與總覽' }}</h2>
+        <h2>{{ activeTab === 'delivered' ? '已領票統計與匯出' : '匯出與總覽' }}</h2>
         <div class="stats-row">
           <div class="stat">
-            <div>{{ activeTab === 'delivered' ? '已交貨數' : '訂單數' }}</div>
+            <div>{{ activeTab === 'delivered' ? '已領票數' : '訂單數' }}</div>
             <div class="num">{{ currentOrders.length }}</div>
           </div>
           <div class="stat">
-            <div>{{ activeTab === 'delivered' ? '已交貨營收' : '總營收' }}</div>
+            <div>{{ activeTab === 'delivered' ? '已領票營收' : '總營收' }}</div>
             <div class="num">NT$ {{ currentStats.totalRevenue }}</div>
           </div>
           <div class="stat">
@@ -267,7 +267,7 @@
       </button>
     </div>
 
-    <div v-if="canManageOrders" class="panel export-panel">
+    <!--<div v-if="canManageOrders" class="panel export-panel">
       <div>
         <h2>班代領取收據</h2>
         <p class="panel-copy">依目前的學校篩選，產生所有班級的領取收據；每個班級會有獨立頁面。</p>
@@ -280,13 +280,13 @@
       >
         {{ generatingClassReceipts ? '開啟中...' : '產生所有班級收據' }}
       </button>
-    </div>
+    </div>-->
 
     <div
       v-if="canManageOrders && activeTab === 'delivered' && Object.keys(deliveryStats).length > 0"
       class="panel"
     >
-      <h2>交貨人員統計</h2>
+      <h2>領票人員統計</h2>
       <div class="personnel-grid">
         <div
           v-for="(stats, personnel) in deliveryStats"
@@ -304,7 +304,7 @@
       v-if="canManageOrders"
       class="panel"
     >
-      <h2>{{ activeTab === 'delivered' ? '已交貨商品統計' : '商品總數量' }}</h2>
+      <h2>{{ activeTab === 'delivered' ? '已領票統計' : '票券總數量' }}</h2>
       <ul
         v-if="Object.keys(currentStats.productCounts).length"
         class="product-stats"
@@ -324,7 +324,7 @@
       v-if="canManageOrders"
       class="orders-section"
     >
-      <h2>{{ activeTab === 'delivered' ? '已交貨訂單' : '所有訂單' }}</h2>
+      <h2>{{ activeTab === 'delivered' ? '已領跳訂單' : '所有訂單' }}</h2>
       <div
         v-for="order in currentOrders"
         :key="order.id"
@@ -335,7 +335,7 @@
           :class="order.delivered ? 'delivered' : 'pending'"
         >
           <span class="status-dot" />
-          <span>交貨狀態：{{ order.delivered ? '已交貨' : '未交貨' }}</span>
+          <span>領票狀態：{{ order.delivered ? '已領票' : '未領票' }}</span>
           <div
             v-if="activeTab === 'all'"
             class="delivery-actions"
@@ -346,7 +346,7 @@
               :disabled="order.delivered"
               @click="updateDeliveryStatus(order.id, true)"
             >
-              標記已交貨
+              標記已領票
             </button>
             <button
               type="button"
@@ -354,11 +354,11 @@
               :disabled="!order.delivered"
               @click="updateDeliveryStatus(order.id, false)"
             >
-              標記未交貨
+              標記未領票
             </button>
           </div>
         </div>
-        <div
+        <!--<div
           class="delivery-bar"
           :class="order.paid ? 'paid' : 'pending'"
         >
@@ -385,14 +385,14 @@
               標記未付款
             </button>
           </div>
-        </div>
+        </div>-->
         <p><strong>訂單ID：</strong><span class="mono">{{ order.id }}</span></p>
         <p><strong>折扣後金額：</strong><span class="num">NT$ {{ order.finalTotal }}</span></p>
         <p><strong>購買時間：</strong><span class="num">{{ formatDate(order.createdAt) }}</span></p>
-        <p><strong>最後付款更新者：</strong>{{ order.paymentUpdatedByName || '—' }}</p>
-        <p><strong>最後付款更新時間：</strong>{{ order.paymentUpdatedAt ? formatDate(order.paymentUpdatedAt) : '—' }}</p>
-        <p><strong>最後交貨更新者：</strong>{{ order.deliveryUpdatedByName || '—' }}</p>
-        <p><strong>最後交貨更新時間：</strong>{{ order.deliveryUpdatedAt ? formatDate(order.deliveryUpdatedAt) : '—' }}</p>
+        <!--<p><strong>最後付款更新者：</strong>{{ order.paymentUpdatedByName || '—' }}</p>
+        <p><strong>最後付款更新時間：</strong>{{ order.paymentUpdatedAt ? formatDate(order.paymentUpdatedAt) : '—' }}</p>-->
+        <p><strong>最後領票更新者：</strong>{{ order.deliveryUpdatedByName || '—' }}</p>
+        <p><strong>最後領票更新時間：</strong>{{ order.deliveryUpdatedAt ? formatDate(order.deliveryUpdatedAt) : '—' }}</p>
         <div
           v-if="order.customerName || order.customerEmail"
           class="customer-box"
@@ -408,7 +408,7 @@
           </ul>
         </div>
         <div class="items-box">
-          <strong>購買商品：</strong>
+          <strong>購買票券：</strong>
           <ul>
             <li
               v-for="item in order.items"

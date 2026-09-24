@@ -756,8 +756,8 @@
 </template>
 
 
-<script setup>
 
+<script setup>
 import {
   addDoc,
   collection,
@@ -769,11 +769,8 @@ import {
 } from 'firebase/firestore'
 
 import {
-  deleteObject,
-  getDownloadURL,
-  ref as storageRef,
-  uploadBytesResumable
-} from 'firebase/storage'
+  httpsCallable
+} from 'firebase/functions'
 
 import {
   computed,
@@ -785,7 +782,7 @@ import {
 
 import {
   db,
-  storage
+  functions
 } from 'src/boot/firebase'
 
 import {
@@ -801,14 +798,8 @@ import {
   MOCK_ALLOW_ADMIN_WITHOUT_AUTH
 } from 'src/config/app'
 
-
 const auth = useAuthStore()
 const toast = useToastStore()
-
-
-/* =========================
-   State
-   ========================= */
 
 const checkingAdmin = ref(true)
 const loading = ref(true)
@@ -836,17 +827,13 @@ const selectedFile = ref(null)
 const isDragging = ref(false)
 
 const oldImageUrl = ref('')
+const oldImageStoragePath = ref('')
 
 const localPreviewUrl = ref('')
 
 const form = ref(
   createEmptyForm('club')
 )
-
-
-/* =========================
-   Computed
-   ========================= */
 
 const canManageOrders = computed(
   () =>
@@ -860,7 +847,7 @@ const canManageOrders = computed(
 const clubItems = computed(() =>
   items.value
     .filter(
-      (item) =>
+      item =>
         item.type === 'club'
     )
     .sort(sortItems)
@@ -869,7 +856,7 @@ const clubItems = computed(() =>
 const artistItems = computed(() =>
   items.value
     .filter(
-      (item) =>
+      item =>
         item.type === 'artist'
     )
     .sort(sortItems)
@@ -886,15 +873,11 @@ const previewParagraphs = computed(() =>
     form.value.content || ''
   )
     .split(/\r?\n/)
-    .map(
-      (text) =>
-        text.trim()
-    )
+    .map(text => text.trim())
     .filter(Boolean)
 )
 
 const publishSummary = computed(() => {
-
   if (!form.value.publishAt) {
     return {
       text: '尚未設定公開時間。',
@@ -939,13 +922,7 @@ const publishSummary = computed(() => {
   }
 })
 
-
-/* =========================
-   Lifecycle
-   ========================= */
-
 onMounted(async () => {
-
   if (!canManageOrders.value) {
     checkingAdmin.value = false
     loading.value = false
@@ -958,19 +935,11 @@ onMounted(async () => {
   checkingAdmin.value = false
 })
 
-
 onBeforeUnmount(() => {
   revokeLocalPreview()
 })
 
-
-/* =========================
-   Form
-   ========================= */
-
-function createEmptyForm(
-  type = 'club'
-) {
+function createEmptyForm(type = 'club') {
   return {
     type,
     name: '',
@@ -981,25 +950,18 @@ function createEmptyForm(
   }
 }
 
-
 async function scrollToEditor() {
-
   await nextTick()
 
   requestAnimationFrame(() => {
-
     editorSection.value?.scrollIntoView({
       behavior: 'smooth',
       block: 'start'
     })
-
   })
-
 }
 
-
 function startCreate() {
-
   isCreating.value = true
   editing.value = true
   editingId.value = null
@@ -1007,6 +969,7 @@ function startCreate() {
   selectedFile.value = null
 
   oldImageUrl.value = ''
+  oldImageStoragePath.value = ''
 
   revokeLocalPreview()
 
@@ -1018,9 +981,7 @@ function startCreate() {
   scrollToEditor()
 }
 
-
 function editItem(item) {
-
   isCreating.value = false
   editing.value = true
   editingId.value = item.id
@@ -1029,6 +990,11 @@ function editItem(item) {
 
   oldImageUrl.value =
     item.imageUrl || ''
+
+  oldImageStoragePath.value =
+    item.imageStoragePath ||
+    item.imageFileId ||
+    ''
 
   revokeLocalPreview()
 
@@ -1065,9 +1031,7 @@ function editItem(item) {
   scrollToEditor()
 }
 
-
 function cancelEdit() {
-
   revokeLocalPreview()
 
   editing.value = false
@@ -1077,6 +1041,7 @@ function cancelEdit() {
   selectedFile.value = null
 
   oldImageUrl.value = ''
+  oldImageStoragePath.value = ''
 
   form.value =
     createEmptyForm(
@@ -1092,22 +1057,12 @@ function cancelEdit() {
   }
 }
 
-
 function changeType(type) {
-
   form.value.type = type
-
   activeTab.value = type
-
 }
 
-
-/* =========================
-   File selection
-   ========================= */
-
 function openFilePicker() {
-
   if (
     saving.value ||
     uploading.value
@@ -1116,12 +1071,9 @@ function openFilePicker() {
   }
 
   fileInput.value?.click()
-
 }
 
-
 function handleFileChange(event) {
-
   const file =
     event.target.files?.[0]
 
@@ -1130,12 +1082,9 @@ function handleFileChange(event) {
   }
 
   selectFile(file)
-
 }
 
-
 function handleDrop(event) {
-
   isDragging.value = false
 
   const file =
@@ -1146,12 +1095,9 @@ function handleDrop(event) {
   }
 
   selectFile(file)
-
 }
 
-
 function selectFile(file) {
-
   const allowedTypes = [
     'image/jpeg',
     'image/png',
@@ -1163,7 +1109,6 @@ function selectFile(file) {
       file.type
     )
   ) {
-
     toast.error?.(
       '只允許 JPG、PNG 或 WEBP 圖片。'
     )
@@ -1171,22 +1116,18 @@ function selectFile(file) {
     return
   }
 
-
   const maxSize =
     10 * 1024 * 1024
-
 
   if (
     file.size > maxSize
   ) {
-
     toast.error?.(
       '圖片大小不能超過 10 MB。'
     )
 
     return
   }
-
 
   revokeLocalPreview()
 
@@ -1197,12 +1138,9 @@ function selectFile(file) {
 
   form.value.imageUrl =
     localPreviewUrl.value
-
 }
 
-
 function clearSelectedFile() {
-
   revokeLocalPreview()
 
   selectedFile.value = null
@@ -1213,260 +1151,123 @@ function clearSelectedFile() {
   if (fileInput.value) {
     fileInput.value.value = ''
   }
-
 }
 
-
 function revokeLocalPreview() {
-
   if (
     localPreviewUrl.value
   ) {
-
     URL.revokeObjectURL(
       localPreviewUrl.value
     )
 
     localPreviewUrl.value = ''
-
   }
-
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader =
+      new FileReader()
 
-/* =========================
-   Firebase Storage
-   ========================= */
+    reader.onload = () => {
+      const result =
+        String(
+          reader.result || ''
+        )
 
-async function uploadImage(
-  itemId
-) {
+      const base64 =
+        result.split(',')[1] || ''
 
-  if (
-    !selectedFile.value
-  ) {
-    return (
-      form.value.imageUrl || ''
-    )
+      resolve(base64)
+    }
+
+    reader.onerror = () => {
+      reject(
+        reader.error ||
+        new Error(
+          '讀取檔案失敗'
+        )
+      )
+    }
+
+    reader.readAsDataURL(file)
+  })
+}
+
+async function uploadImage(itemId) {
+  if (!selectedFile.value) {
+    return {
+      url:
+        form.value.imageUrl || '',
+
+      storagePath:
+        oldImageStoragePath.value || ''
+    }
   }
-
 
   const file =
     selectedFile.value
 
   uploading.value = true
-
-  uploadProgress.value = 0
-
+  uploadProgress.value = 10
 
   try {
+    const fileData =
+      await fileToBase64(file)
 
-    const extension =
-      getFileExtension(
-        file.name
+    uploadProgress.value = 55
+
+    const uploadLineupImage =
+      httpsCallable(
+        functions,
+        'uploadLineupImage'
       )
 
+    const response =
+      await uploadLineupImage({
+        itemId,
+        filename:
+          file.name,
+        contentType:
+          file.type,
+        fileData
+      })
 
-    const imagePath =
-      `partyLineup/${itemId}/cover.${extension}`
+    uploadProgress.value = 100
 
+    return {
+      url:
+        response.data?.url || '',
 
-    const imageRef =
-      storageRef(
-        storage,
-        imagePath
-      )
-
-
-    const metadata = {
-      contentType:
-        file.type,
-
-      cacheControl:
-        'public,max-age=31536000'
+      storagePath:
+        response.data?.storagePath ||
+        response.data?.fileId ||
+        ''
     }
-
-
-    const downloadUrl =
-      await new Promise(
-        (resolve, reject) => {
-
-          const uploadTask =
-            uploadBytesResumable(
-              imageRef,
-              file,
-              metadata
-            )
-
-
-          let settled = false
-
-
-          const fail = (
-            error
-          ) => {
-
-            if (settled) {
-              return
-            }
-
-            settled = true
-
-            reject(error)
-
-          }
-
-
-          uploadTask.on(
-
-            'state_changed',
-
-            (snapshot) => {
-
-              if (
-                !snapshot.totalBytes
-              ) {
-
-                uploadProgress.value = 0
-
-                return
-              }
-
-
-              uploadProgress.value =
-                Math.round(
-                  (
-                    snapshot.bytesTransferred /
-                    snapshot.totalBytes
-                  ) * 100
-                )
-
-            },
-
-
-            (error) => {
-
-              console.error(
-                'Firebase Storage upload failed:',
-                error
-              )
-
-              fail(error)
-
-            },
-
-
-            async () => {
-
-              if (settled) {
-                return
-              }
-
-
-              try {
-
-                const url =
-                  await getDownloadURL(
-                    uploadTask.snapshot.ref
-                  )
-
-
-                settled = true
-
-                uploadProgress.value = 100
-
-                resolve(url)
-
-              } catch (error) {
-
-                console.error(
-                  'Failed to get download URL:',
-                  error
-                )
-
-                fail(error)
-
-              }
-
-            }
-
-          )
-
-        }
-      )
-
-
-    return downloadUrl
-
   } catch (error) {
-
     console.error(
-      'Image upload error:',
+      'Storage upload failed:',
       error
     )
 
+    const message =
+      error?.details ||
+      error?.message ||
+      '圖片上傳失敗，請稍後再試。'
+
     throw new Error(
-      getStorageErrorMessage(
-        error
-      )
+      `圖片上傳失敗：${message}`
     )
-
   } finally {
-
     uploading.value = false
-
   }
-
 }
-
-
-function getStorageErrorMessage(
-  error
-) {
-
-  switch (
-    error?.code
-  ) {
-
-    case 'storage/unauthorized':
-      return '沒有圖片上傳權限，請確認管理員權限。'
-
-    case 'storage/canceled':
-      return '圖片上傳已取消。'
-
-    case 'storage/quota-exceeded':
-      return 'Firebase Storage 容量不足。'
-
-    case 'storage/retry-limit-exceeded':
-      return '圖片上傳逾時，請檢查網路後再試。'
-
-    case 'storage/invalid-checksum':
-      return '圖片傳輸失敗，請重新選擇圖片。'
-
-    case 'storage/unknown':
-      return '圖片上傳失敗，請稍後再試。'
-
-    default:
-      return (
-        error?.message ||
-        '圖片上傳失敗，請稍後再試。'
-      )
-
-  }
-
-}
-
-
-/* =========================
-   Save
-   ========================= */
 
 async function saveItem() {
-
   if (
     !form.value.name.trim()
   ) {
-
     toast.error?.(
       '請輸入名稱。'
     )
@@ -1474,11 +1275,9 @@ async function saveItem() {
     return
   }
 
-
   if (
     !form.value.title.trim()
   ) {
-
     toast.error?.(
       '請輸入標題。'
     )
@@ -1486,11 +1285,9 @@ async function saveItem() {
     return
   }
 
-
   if (
     !form.value.content.trim()
   ) {
-
     toast.error?.(
       '請輸入介紹內容。'
     )
@@ -1498,11 +1295,9 @@ async function saveItem() {
     return
   }
 
-
   if (
     !form.value.publishAt
   ) {
-
     toast.error?.(
       '請設定公開時間。'
     )
@@ -1510,19 +1305,16 @@ async function saveItem() {
     return
   }
 
-
   const publishDate =
     new Date(
       form.value.publishAt
     )
-
 
   if (
     Number.isNaN(
       publishDate.getTime()
     )
   ) {
-
     toast.error?.(
       '公開時間格式錯誤。'
     )
@@ -1530,14 +1322,10 @@ async function saveItem() {
     return
   }
 
-
   saving.value = true
 
-
   try {
-
     const basePayload = {
-
       type:
         form.value.type,
 
@@ -1558,23 +1346,13 @@ async function saveItem() {
 
       updatedBy:
         displayName.value
-
     }
 
-
     let itemId
-
-
-    /*
-     * =========================
-     * 新增
-     * =========================
-     */
 
     if (
       !editingId.value
     ) {
-
       const newDoc =
         await addDoc(
           collection(
@@ -1587,6 +1365,9 @@ async function saveItem() {
             imageUrl:
               '',
 
+            imageStoragePath:
+              '',
+
             createdAt:
               serverTimestamp(),
 
@@ -1595,55 +1376,33 @@ async function saveItem() {
           }
         )
 
-
       itemId =
         newDoc.id
-
-    }
-
-
-    /*
-     * =========================
-     * 編輯
-     * =========================
-     */
-
-    else {
-
+    } else {
       itemId =
         editingId.value
-
     }
 
-
-    /*
-     * =========================
-     * 上傳圖片
-     * =========================
-     */
-
     let imageUrl =
-      oldImageUrl.value ||
-      ''
+      oldImageUrl.value || ''
 
+    let imageStoragePath =
+      oldImageStoragePath.value || ''
 
     if (
       selectedFile.value
     ) {
-
-      imageUrl =
+      const uploaded =
         await uploadImage(
           itemId
         )
 
+      imageUrl =
+        uploaded.url
+
+      imageStoragePath =
+        uploaded.storagePath
     }
-
-
-    /*
-     * =========================
-     * 更新 Firestore
-     * =========================
-     */
 
     await updateDoc(
       doc(
@@ -1660,29 +1419,23 @@ async function saveItem() {
             'blob:'
           )
             ? imageUrl
-            : ''
+            : '',
+
+        imageStoragePath:
+          imageStoragePath || ''
       }
     )
 
-
-    /*
-     * =========================
-     * 刪除舊圖片
-     * =========================
-     */
-
     if (
       selectedFile.value &&
-      oldImageUrl.value &&
-      oldImageUrl.value !== imageUrl
+      oldImageStoragePath.value &&
+      oldImageStoragePath.value !==
+        imageStoragePath
     ) {
-
-      await deleteOldImageByUrl(
-        oldImageUrl.value
+      await deleteImageByStoragePath(
+        oldImageStoragePath.value
       )
-
     }
-
 
     toast.success?.(
       isCreating.value
@@ -1690,58 +1443,39 @@ async function saveItem() {
         : '介紹已更新。'
     )
 
-
     await loadItems()
 
     cancelEdit()
-
-
   } catch (error) {
-
     console.error(
       'Failed to save lineup item:',
       error
     )
 
-
     toast.error?.(
       error?.message ||
       '儲存失敗，請稍後再試。'
     )
-
   } finally {
-
     saving.value = false
-
     uploading.value = false
-
   }
-
 }
 
-
-/* =========================
-   Delete
-   ========================= */
-
 async function removeItem(item) {
-
   const confirmed =
     window.confirm(
       `確定要刪除「${
         item.title ||
         item.name
-      }」嗎？\n\n此操作會同時刪除圖片，且無法復原。`
+      }」嗎？\n\n此操作會同時刪除 Storage 上的圖片，且無法復原。`
     )
-
 
   if (!confirmed) {
     return
   }
 
-
   try {
-
     await deleteDoc(
       doc(
         db,
@@ -1750,87 +1484,57 @@ async function removeItem(item) {
       )
     )
 
-
-    /*
-     * Storage 圖片刪除失敗
-     * 不阻止 Firestore 資料刪除。
-     */
-
-    await deleteImageByUrl(
-      item.imageUrl
+    await deleteImageByStoragePath(
+      item.imageStoragePath ||
+      item.imageFileId ||
+      ''
     )
-
 
     items.value =
       items.value.filter(
-        (current) =>
+        current =>
           current.id !== item.id
       )
-
 
     if (
       editingId.value === item.id
     ) {
-
       cancelEdit()
-
     }
-
 
     toast.success?.(
       '介紹已刪除。'
     )
-
-
   } catch (error) {
-
     console.error(
       'Failed to delete lineup item:',
       error
     )
 
-
     toast.error?.(
       '刪除失敗，請稍後再試。'
     )
-
   }
-
 }
 
-
-/* =========================
-   Load
-   ========================= */
-
 async function loadAdminProfile() {
-
   try {
-
     displayName.value =
       auth.user?.displayName ||
       auth.user?.email ||
       'Administrator'
-
   } catch (error) {
-
     console.error(
       'Failed to load admin profile:',
       error
     )
-
   }
-
 }
 
-
 async function loadItems() {
-
   loading.value = true
 
-
   try {
-
     const snapshot =
       await getDocs(
         collection(
@@ -1839,251 +1543,108 @@ async function loadItems() {
         )
       )
 
-
     items.value =
       snapshot.docs.map(
-        (document) => ({
+        document => ({
           id:
             document.id,
 
           ...document.data()
         })
       )
-
-
   } catch (error) {
-
     console.error(
       'Failed to load lineup:',
       error
     )
 
-
     toast.error?.(
       '無法載入社團與藝人資料。'
     )
-
-
   } finally {
-
     loading.value = false
-
   }
-
 }
 
-
-/* =========================
-   Storage deletion helpers
-   ========================= */
-
-async function deleteImageByUrl(
-  url
+async function deleteImageByStoragePath(
+  storagePath
 ) {
-
-  if (!url) {
+  if (!storagePath) {
     return
   }
 
-
-  /*
-   * Firebase Storage URL 通常是：
-   *
-   * https://firebasestorage.googleapis.com/...
-   *
-   * 因此不能直接把完整 URL
-   * 傳給 storageRef。
-   *
-   * 使用 URL 解析出 object path。
-   */
-
   try {
-
-    const decodedPath =
-      extractStoragePath(
-        url
+    const deleteLineupImage =
+      httpsCallable(
+        functions,
+        'deleteLineupImage'
       )
 
-
-    if (!decodedPath) {
-      return
-    }
-
-
-    const imageRef =
-      storageRef(
-        storage,
-        decodedPath
-      )
-
-
-    await deleteObject(
-      imageRef
-    )
-
-
+    await deleteLineupImage({
+      storagePath
+    })
   } catch (error) {
-
     console.warn(
       'Failed to delete image:',
       error
     )
-
   }
-
 }
 
-
-async function deleteOldImageByUrl(
-  url
-) {
-
-  await deleteImageByUrl(
-    url
-  )
-
-}
-
-
-function extractStoragePath(
-  url
-) {
-
-  try {
-
-    const parsed =
-      new URL(url)
-
-
-    /*
-     * Firebase Storage download URL：
-     *
-     * /v0/b/<bucket>/o/<encoded-path>
-     */
-
-    const marker =
-      '/o/'
-
-
-    const markerIndex =
-      parsed.pathname.indexOf(
-        marker
-      )
-
-
-    if (
-      markerIndex === -1
-    ) {
-      return ''
-    }
-
-
-    const encodedPath =
-      parsed.pathname.slice(
-        markerIndex +
-        marker.length
-      )
-
-
-    return decodeURIComponent(
-      encodedPath
-    )
-
-  } catch {
-
-    return ''
-
-  }
-
-}
-
-
-/* =========================
-   Status / display
-   ========================= */
-
-function sortItems(
-  a,
-  b
-) {
-
+function sortItems(a, b) {
   const dateA =
     new Date(
       a.publishAt || 0
     ).getTime()
-
 
   const dateB =
     new Date(
       b.publishAt || 0
     ).getTime()
 
-
   return dateB - dateA
-
 }
 
-
-function getStatus(
-  item
-) {
-
-  if (
-    !item.publishAt
-  ) {
-
+function getStatus(item) {
+  if (!item.publishAt) {
     return {
       text: '未設定',
       class: 'draft'
     }
-
   }
-
 
   const date =
     new Date(
       item.publishAt
     )
 
-
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-
     return {
       text: '時間錯誤',
       class: 'draft'
     }
-
   }
-
 
   if (
     date > new Date()
   ) {
-
     return {
       text: '待公開',
       class: 'upcoming'
     }
-
   }
-
 
   return {
     text: '已公開',
     class: 'published'
   }
-
 }
 
-
-function getExcerpt(
-  content
-) {
-
+function getExcerpt(content) {
   const text =
     String(
       content || ''
@@ -2094,15 +1655,11 @@ function getExcerpt(
       )
       .trim()
 
-
   if (
     text.length <= 100
   ) {
-
     return text
-
   }
-
 
   return `${
     text.slice(
@@ -2110,103 +1667,62 @@ function getExcerpt(
       100
     )
   }…`
-
 }
 
-
-/* =========================
-   Date
-   ========================= */
-
-function normalizePublishAt(
-  value
-) {
-
+function normalizePublishAt(value) {
   if (!value) {
     return ''
   }
-
 
   if (
     typeof value === 'string'
   ) {
-
     return value.slice(
       0,
       16
     )
-
   }
-
 
   if (
     value?.toDate
   ) {
-
     return toInputDateTime(
       value.toDate()
     )
-
   }
 
-
   return ''
-
 }
 
-
-function getPart(
-  value,
-  part
-) {
-
+function getPart(value, part) {
   if (!value) {
     return ''
   }
 
-
   const date =
     new Date(value)
-
 
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-
     return ''
-
   }
-
 
   if (
     part === 'date'
   ) {
-
-    return toDateString(
-      date
-    )
-
+    return toDateString(date)
   }
 
-
-  return toTimeString(
-    date
-  )
-
+  return toTimeString(date)
 }
 
-
-function setPart(
-  part,
-  value
-) {
-
+function setPart(part, value) {
   if (!value) {
     return
   }
-
 
   const current =
     form.value.publishAt
@@ -2215,22 +1731,17 @@ function setPart(
         )
       : new Date()
 
-
   if (
     Number.isNaN(
       current.getTime()
     )
   ) {
-
     return
-
   }
-
 
   if (
     part === 'date'
   ) {
-
     const [
       year,
       month,
@@ -2240,15 +1751,12 @@ function setPart(
         .split('-')
         .map(Number)
 
-
     current.setFullYear(
       year,
       month - 1,
       day
     )
-
   } else {
-
     const [
       hour,
       minute
@@ -2257,48 +1765,35 @@ function setPart(
         .split(':')
         .map(Number)
 
-
     current.setHours(
       hour,
       minute,
       0,
       0
     )
-
   }
-
 
   form.value.publishAt =
     toInputDateTime(
       current
     )
-
 }
 
-
 function setPublishNow() {
-
   form.value.publishAt =
     toInputDateTime(
       new Date()
     )
-
 }
 
-
-function setPublishAfter(
-  days
-) {
-
+function setPublishAfter(days) {
   const date =
     new Date()
-
 
   date.setDate(
     date.getDate() +
     days
   )
-
 
   date.setHours(
     0,
@@ -2307,36 +1802,21 @@ function setPublishAfter(
     0
   )
 
-
   form.value.publishAt =
     toInputDateTime(
       date
     )
-
 }
 
-
-function toInputDateTime(
-  date
-) {
-
+function toInputDateTime(date) {
   return `${
-    toDateString(
-      date
-    )
+    toDateString(date)
   }T${
-    toTimeString(
-      date
-    )
+    toTimeString(date)
   }`
-
 }
 
-
-function toDateString(
-  date
-) {
-
+function toDateString(date) {
   return [
     date.getFullYear(),
 
@@ -2353,16 +1833,10 @@ function toDateString(
       2,
       '0'
     )
-
   ].join('-')
-
 }
 
-
-function toTimeString(
-  date
-) {
-
+function toTimeString(date) {
   return [
     String(
       date.getHours()
@@ -2377,35 +1851,24 @@ function toTimeString(
       2,
       '0'
     )
-
   ].join(':')
-
 }
 
-
-function formatDate(
-  value
-) {
-
+function formatDate(value) {
   if (!value) {
     return '未設定'
   }
 
-
   const date =
     new Date(value)
-
 
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-
     return '時間錯誤'
-
   }
-
 
   return new Intl.DateTimeFormat(
     'zh-TW',
@@ -2415,33 +1878,23 @@ function formatDate(
       day: 'numeric'
     }
   ).format(date)
-
 }
 
-
-function formatDateTime(
-  value
-) {
-
+function formatDateTime(value) {
   if (!value) {
     return ''
   }
 
-
   const date =
     new Date(value)
-
 
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-
     return ''
-
   }
-
 
   return new Intl.DateTimeFormat(
     'zh-TW',
@@ -2453,87 +1906,30 @@ function formatDateTime(
       minute: '2-digit'
     }
   ).format(date)
-
 }
 
-
-/* =========================
-   File helpers
-   ========================= */
-
-function getFileExtension(
-  filename
-) {
-
-  const extension =
-    filename
-      .split('.')
-      .pop()
-      ?.toLowerCase()
-
-
-  if (
-    extension === 'jpeg'
-  ) {
-
-    return 'jpg'
-
-  }
-
-
-  if (
-    [
-      'jpg',
-      'png',
-      'webp'
-    ].includes(
-      extension
-    )
-  ) {
-
-    return extension
-
-  }
-
-
-  return 'jpg'
-
-}
-
-
-function formatFileSize(
-  size
-) {
-
+function formatFileSize(size) {
   if (
     size < 1024
   ) {
-
     return `${size} B`
-
   }
-
 
   if (
     size <
     1024 * 1024
   ) {
-
     return `${(
       size / 1024
     ).toFixed(1)} KB`
-
   }
-
 
   return `${(
     size /
     1024 /
     1024
   ).toFixed(1)} MB`
-
 }
-
 </script>
 
 

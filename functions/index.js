@@ -2,10 +2,11 @@ import * as functions from 'firebase-functions'
 import nodemailer from 'nodemailer'
 import QRCode from 'qrcode'
 import sharp from 'sharp'
-import AWS from 'aws-sdk'
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 
 import { generateEmailHTML } from './emailTemplate.js'
 import { generateOrderNotificationHTML } from './paymentNotificationTemplate.js'
@@ -13,10 +14,7 @@ import { generateOrderNotificationHTML } from './paymentNotificationTemplate.js'
 initializeApp()
 
 const db = getFirestore()
-
-/* =========================================================
- * Constants
- * ========================================================= */
+const bucket = getStorage().bucket()
 
 const ELIGIBLE_IDENTITIES = {
   CAMPUS_STUDENTS: 'campus_students',
@@ -44,14 +42,17 @@ const SCHOOL_IDENTITIES = {
   '其他學校或社會人士': 'O'
 }
 
+// Must match the IAM policy condition: ses:FromAddress = *@tickets.cksc.tw
 const SENDER_EMAIL =
-  process.env.SENDER_EMAIL ||
-  process.env.GMAIL_EMAIL
+  'no-reply@tickets.cksc.tw'
+
+const DEFAULT_SES_REGION =
+  'us-east-1'
 
 const MAX_BCC_PER_BATCH = 49
 
-// AWS SES sending rate limit
 const MAX_SENDS_PER_SECOND = 14
+
 const MIN_MS_BETWEEN_SENDS =
   Math.ceil(1000 / MAX_SENDS_PER_SECOND)
 
@@ -61,10 +62,6 @@ const NOTIFY_SUBJECTS = {
   both: '【建中舞會購票系統】繳費暨取票通知',
   custom: '【建中舞會購票系統】購票通知'
 }
-
-/* =========================================================
- * Utility
- * ========================================================= */
 
 function parseTimestamp(value) {
   if (!value) return null
@@ -109,32 +106,12 @@ function normalizeTicketTypeConfig(ticketType) {
   }
 }
 
-/**
- * 票種資料唯一來源：
- *
- * settings/ticketTypes
- *
- * 文件格式：
- *
- * {
- *   types: [
- *     {
- *       id: "campus_ticket",
- *       name: "校內票",
- *       eligibleBuyerIdentity: "campus_students",
- *       salesStartTime: "...",
- *       salesEndTime: "...",
- *       totalTicketQuantity: 1200,
- *       purchaseLimitPerPerson: 2
- *     }
- *   ]
- * }
- */
 async function loadTicketTypeConfigs() {
-  const snapshot = await db
-    .collection('settings')
-    .doc('ticketTypes')
-    .get()
+  const snapshot =
+    await db
+      .collection('settings')
+      .doc('ticketTypes')
+      .get()
 
   if (!snapshot.exists) {
     throw new functions.https.HttpsError(
@@ -145,11 +122,13 @@ async function loadTicketTypeConfigs() {
 
   const data = snapshot.data()
 
-  const types = Array.isArray(data?.types)
-    ? data.types
-    : []
+  const types =
+    Array.isArray(data?.types)
+      ? data.types
+      : []
 
-  const ticketTypeMap = new Map()
+  const ticketTypeMap =
+    new Map()
 
   types.forEach((ticketType) => {
     if (!ticketType || !ticketType.id) {
@@ -157,7 +136,9 @@ async function loadTicketTypeConfigs() {
     }
 
     const normalized =
-      normalizeTicketTypeConfig(ticketType)
+      normalizeTicketTypeConfig(
+        ticketType
+      )
 
     ticketTypeMap.set(
       normalized.id,
@@ -208,7 +189,11 @@ function sleep(ms) {
 function chunk(array, size) {
   const result = []
 
-  for (let i = 0; i < array.length; i += size) {
+  for (
+    let i = 0;
+    i < array.length;
+    i += size
+  ) {
     result.push(
       array.slice(i, i + size)
     )
@@ -216,10 +201,6 @@ function chunk(array, size) {
 
   return result
 }
-
-/* =========================================================
- * Ticket validation
- * ========================================================= */
 
 async function validateOrderAgainstTicketRules(
   orderPayload
@@ -244,9 +225,6 @@ async function validateOrderAgainstTicketRules(
   const buyerIdentity =
     getBuyerIdentity(orderPayload)
 
-  /*
-   * Calculate quantity in current order
-   */
   const currentOrderQuantityByType =
     new Map()
 
@@ -284,9 +262,6 @@ async function validateOrderAgainstTicketRules(
     )
   }
 
-  /*
-   * Check whether ticket types exist
-   */
   for (
     const ticketTypeId of
     currentOrderQuantityByType.keys()
@@ -303,9 +278,6 @@ async function validateOrderAgainstTicketRules(
     }
   }
 
-  /*
-   * Validate time, eligibility and quantity
-   */
   for (
     const [
       ticketTypeId,
@@ -367,14 +339,6 @@ async function validateOrderAgainstTicketRules(
     }
   }
 
-  /*
-   * Existing orders
-   *
-   * 注意：
-   * 目前仍以 orders collection 計算已售票數。
-   * 如果未來訂單量很大，建議改成
-   * Firestore transaction + inventory counter。
-   */
   const email =
     String(
       orderPayload.customerEmail || ''
@@ -472,9 +436,6 @@ async function validateOrderAgainstTicketRules(
     }
   )
 
-  /*
-   * Check inventory and purchase limits
-   */
   for (
     const [
       ticketTypeId,
@@ -520,14 +481,10 @@ async function validateOrderAgainstTicketRules(
   }
 }
 
-/* =========================================================
- * AWS SES / Nodemailer
- * ========================================================= */
-
 function createTransporter() {
   const region =
     process.env.AWS_REGION ||
-    'us-east-1'
+    DEFAULT_SES_REGION
 
   const accessKeyId =
     process.env.AWS_ACCESS_KEY_ID
@@ -535,38 +492,25 @@ function createTransporter() {
   const secretAccessKey =
     process.env.AWS_SECRET_ACCESS_KEY
 
-  if (
-    accessKeyId &&
-    secretAccessKey
-  ) {
-    AWS.config.update({
-      accessKeyId,
-      secretAccessKey,
-      region
-    })
-  } else {
-    AWS.config.update({
-      region
-    })
-  }
-
-  const ses =
-    new AWS.SES({
-      apiVersion: '2010-12-01',
-      region
-    })
+  const sesClient = new SESv2Client({
+    region,
+    ...(accessKeyId && secretAccessKey
+      ? {
+          credentials: {
+            accessKeyId,
+            secretAccessKey
+          }
+        }
+      : {})
+  })
 
   return nodemailer.createTransport({
     SES: {
-      ses,
-      aws: AWS
+      sesClient,
+      SendEmailCommand
     }
   })
 }
-
-/* =========================================================
- * Send ticket QR Code email
- * ========================================================= */
 
 export const sendOrderQRCode =
   functions
@@ -575,7 +519,6 @@ export const sendOrderQRCode =
       secrets: [
         'AWS_ACCESS_KEY_ID',
         'AWS_SECRET_ACCESS_KEY',
-        'SENDER_EMAIL',
         'AWS_REGION'
       ]
     })
@@ -607,15 +550,9 @@ export const sendOrderQRCode =
           const transporter =
             createTransporter()
 
-          /*
-           * Ticket URL
-           */
           const orderUrl =
-            `https://souvenir.cksc.tw/admin/orders/${orderId}`
+            `https://tickets.cksc.tw/admin/orders/${orderId}`
 
-          /*
-           * Generate QR code
-           */
           const qrCodeBuffer =
             await QRCode.toBuffer(
               orderUrl,
@@ -631,9 +568,6 @@ export const sendOrderQRCode =
               }
             )
 
-          /*
-           * Flatten PNG background
-           */
           const qrPngBuffer =
             await sharp(
               qrCodeBuffer
@@ -644,9 +578,6 @@ export const sendOrderQRCode =
               .png()
               .toBuffer()
 
-          /*
-           * Email
-           */
           const mailOptions = {
             from:
               `"建國中學班聯會" <${SENDER_EMAIL}>`,
@@ -699,10 +630,6 @@ export const sendOrderQRCode =
       }
     )
 
-/* =========================================================
- * Admin authentication
- * ========================================================= */
-
 async function assertIsAdmin(
   context
 ) {
@@ -735,10 +662,6 @@ async function assertIsAdmin(
   }
 }
 
-/* =========================================================
- * Admin notification email
- * ========================================================= */
-
 export const sendOrderNotification =
   functions
     .region('asia-east1')
@@ -746,16 +669,13 @@ export const sendOrderNotification =
       secrets: [
         'AWS_ACCESS_KEY_ID',
         'AWS_SECRET_ACCESS_KEY',
-        'SENDER_EMAIL',
         'AWS_REGION'
       ]
     })
     .https
     .onCall(
       async (data, context) => {
-        await assertIsAdmin(
-          context
-        )
+        await assertIsAdmin(context)
 
         const type =
           [
@@ -797,9 +717,6 @@ export const sendOrderNotification =
             data.message || ''
           ).trim()
 
-        /*
-         * Validate notification data
-         */
         if (
           type === 'custom'
         ) {
@@ -844,9 +761,6 @@ export const sendOrderNotification =
           }
         }
 
-        /*
-         * Load orders
-         */
         const snapshot =
           await db
             .collection('orders')
@@ -878,9 +792,6 @@ export const sendOrderNotification =
           }
         )
 
-        /*
-         * Remove invalid / sender addresses
-         */
         const recipients =
           Array
             .from(emailSet)
@@ -960,9 +871,7 @@ export const sendOrderNotification =
             lastSendAt !== 0 &&
             waitMs > 0
           ) {
-            await sleep(
-              waitMs
-            )
+            await sleep(waitMs)
           }
 
           lastSendAt =
@@ -999,188 +908,14 @@ export const sendOrderNotification =
       }
     )
 
-/* =========================================================
- * Order ID
- * ========================================================= */
-
-function getTaiwanDateString() {
-  const parts =
-    new Intl.DateTimeFormat(
-      'en-CA',
-      {
-        timeZone:
-          'Asia/Taipei',
-
-        year:
-          'numeric',
-
-        month:
-          '2-digit',
-
-        day:
-          '2-digit'
-      }
-    ).formatToParts(
-      new Date()
-    )
-
-  const values =
-    Object.fromEntries(
-      parts
-        .filter(
-          part =>
-            part.type !== 'literal'
-        )
-        .map(
-          part => [
-            part.type,
-            part.value
-          ]
-        )
-    )
-
-  return (
-    `${values.year}${values.month}${values.day}`
-  )
+function getTaiwanDateString(date = new Date()) {
+  return new Intl.DateTimeFormat(
+    'en-CA',
+    {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }
+  ).format(date)
 }
-
-function getSchoolIdentity(
-  school
-) {
-  return (
-    SCHOOL_IDENTITIES[school] ||
-    'O'
-  )
-}
-
-async function generateOrderId(
-  school
-) {
-  const identity =
-    getSchoolIdentity(
-      school
-    )
-
-  const date =
-    getTaiwanDateString()
-
-  const counterRef =
-    db
-      .collection(
-        'orderCounters'
-      )
-      .doc(date)
-
-  const serialNumber =
-    await db.runTransaction(
-      async transaction => {
-        const counterSnap =
-          await transaction.get(
-            counterRef
-          )
-
-        const currentSerial =
-          counterSnap.exists
-            ? Number(
-                counterSnap.data()
-                  ?.serialNumber || 0
-              )
-            : 0
-
-        const nextSerial =
-          currentSerial + 1
-
-        transaction.set(
-          counterRef,
-          {
-            date,
-            serialNumber:
-              nextSerial,
-            updatedAt:
-              new Date()
-          },
-          {
-            merge:
-              true
-          }
-        )
-
-        return nextSerial
-      }
-    )
-
-  return (
-    `${identity}${date}${String(serialNumber).padStart(4, '0')}`
-  )
-}
-
-/* =========================================================
- * Create Order
- * ========================================================= */
-
-export const createOrder =
-  functions
-    .region('asia-east1')
-    .https
-    .onCall(
-      async (
-        data,
-        context
-      ) => {
-        const orderPayload =
-          data?.orderPayload
-
-        if (
-          !orderPayload ||
-          typeof orderPayload !==
-            'object'
-        ) {
-          throw new functions.https.HttpsError(
-            'invalid-argument',
-            '訂單資料無效'
-          )
-        }
-
-        /*
-         * Validate ticket rules
-         *
-         * All ticket configuration
-         * comes from:
-         *
-         * settings/ticketTypes
-         */
-        await validateOrderAgainstTicketRules(
-          orderPayload
-        )
-
-        /*
-         * Generate order ID
-         */
-        const orderId =
-          await generateOrderId(
-            orderPayload.school
-          )
-
-        /*
-         * Create order
-         */
-        await db
-          .collection('orders')
-          .doc(orderId)
-          .set({
-            ...orderPayload,
-
-            createdAt:
-              new Date()
-          })
-
-        console.log(
-          `Order created successfully: ${orderId}`
-        )
-
-        return {
-          status: 201,
-          id: orderId
-        }
-      }
-    )

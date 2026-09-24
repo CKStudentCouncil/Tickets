@@ -38,7 +38,7 @@
 
       <section class="purchase-card">
         <p class="eyebrow">CK PARTY NIGHT</p>
-        <h1>{{ ticketType.name }}</h1>
+        <h1>{{ ticketType.name }} {{ ticketType.price ? ` - NT$ ${ticketType.price.toLocaleString()}` : '' }}</h1>
 
         <p
           v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson"
@@ -100,6 +100,11 @@
               <input type="email" v-model="buyer.customerEmail">
             </label>
           </div>
+
+          <p class="order-summary">
+            <span>應付金額</span>
+            <strong>NT$ {{ (ticketType.price || 0) * quantity }}</strong>
+          </p>
 
           <p v-if="orderError" class="order-error">{{ orderError }}</p>
 
@@ -317,7 +322,7 @@ async function submitDirectOrder() {
     setLastSubmittedOrderId(result.id)
     showOrderForm.value = false
     toast.show(`訂單 #${result.id} 已送出。`)
-    router.push(`/orders/${result.id}`)
+    router.push(`/order-success?id=${result.id}`)
   } catch (error) {
     console.error('Submit order error:', error)
     orderError.value = '訂單送出失敗，請稍後再試。'

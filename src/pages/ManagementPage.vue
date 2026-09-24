@@ -24,7 +24,6 @@
     v-else
     class="admin-page"
   >
-
     <div class="page-heading">
       <p class="eyebrow">後台管理</p>
       <h1>票種管理</h1>
@@ -33,6 +32,7 @@
     <div class="panel ticket-type-panel">
       <div class="notify-header">
         <h2>票種管理</h2>
+
         <div class="ticket-type-header-actions">
           <button
             type="button"
@@ -42,6 +42,7 @@
           >
             + 新增票種
           </button>
+
           <button
             type="button"
             class="btn"
@@ -52,9 +53,19 @@
           </button>
         </div>
       </div>
-      <p class="panel-copy">可分類設定票種名稱、購買資格、販售時段、總量與每人限購量</p><br />
 
-      <p v-if="loadingTicketTypes" class="empty">票種設定載入中...</p>
+      <p class="panel-copy">
+        可分類設定票種名稱、購買資格、販售時段、票價、總量與每人限購量
+      </p>
+
+      <br>
+
+      <p
+        v-if="loadingTicketTypes"
+        class="empty"
+      >
+        票種設定載入中...
+      </p>
 
       <template v-else>
         <div
@@ -65,12 +76,14 @@
           <div class="ticket-type-card-header">
             <label class="field ticket-name-field">
               <span>一、票種名稱</span>
+
               <input
                 v-model="ticketType.name"
                 type="text"
                 placeholder="例如：早鳥票"
               >
             </label>
+
             <button
               type="button"
               class="btn-outline danger"
@@ -80,55 +93,126 @@
               刪除此票種
             </button>
           </div>
+
           <div class="ticket-type-grid">
             <label class="field">
               <span>二、可購買資格</span>
-              <select class="select-field" v-model="ticketType.eligibleBuyerIdentity">
-                <option value="campus_students">本校學生</option>
-                <option value="all_users">所有使用者</option>
+
+              <select
+                v-model="ticketType.eligibleBuyerIdentity"
+                class="select-field"
+              >
+                <option value="campus_students">
+                  本校學生
+                </option>
+
+                <option value="all_users">
+                  所有使用者
+                </option>
               </select>
             </label>
 
             <div class="field ticket-time-field">
               <span>三、販售時段</span>
+
               <div class="time-range">
                 <div class="time-group">
-                  <div class="time-label">開始</div>
+                  <div class="time-label">
+                    開始
+                  </div>
+
                   <div class="time-inputs">
                     <input
                       type="date"
                       :value="getPart(ticketType.salesStartTime, 'date')"
-                      @input="setPart(ticketType, 'salesStartTime', 'date', $event.target.value, '00:00')"
+                      @input="setPart(
+                        ticketType,
+                        'salesStartTime',
+                        'date',
+                        $event.target.value,
+                        '00:00'
+                      )"
                     >
+
                     <input
                       type="time"
                       :value="getPart(ticketType.salesStartTime, 'time')"
-                      @input="setPart(ticketType, 'salesStartTime', 'time', $event.target.value, '00:00')"
+                      @input="setPart(
+                        ticketType,
+                        'salesStartTime',
+                        'time',
+                        $event.target.value,
+                        '00:00'
+                      )"
                     >
                   </div>
+
                   <div class="time-presets">
-                    <button type="button" class="time-chip" @click="setStartNow(ticketType)">現在</button>
+                    <button
+                      type="button"
+                      class="time-chip"
+                      @click="setStartNow(ticketType)"
+                    >
+                      現在
+                    </button>
                   </div>
                 </div>
 
                 <div class="time-group">
-                  <div class="time-label">結束</div>
+                  <div class="time-label">
+                    結束
+                  </div>
+
                   <div class="time-inputs">
                     <input
                       type="date"
                       :value="getPart(ticketType.salesEndTime, 'date')"
-                      @input="setPart(ticketType, 'salesEndTime', 'date', $event.target.value, '23:59')"
+                      @input="setPart(
+                        ticketType,
+                        'salesEndTime',
+                        'date',
+                        $event.target.value,
+                        '23:59'
+                      )"
                     >
+
                     <input
                       type="time"
                       :value="getPart(ticketType.salesEndTime, 'time')"
-                      @input="setPart(ticketType, 'salesEndTime', 'time', $event.target.value, '23:59')"
+                      @input="setPart(
+                        ticketType,
+                        'salesEndTime',
+                        'time',
+                        $event.target.value,
+                        '23:59'
+                      )"
                     >
                   </div>
+
                   <div class="time-presets">
-                    <button type="button" class="time-chip" @click="setEndAfter(ticketType, 1)">+1 天</button>
-                    <button type="button" class="time-chip" @click="setEndAfter(ticketType, 7)">+7 天</button>
-                    <button type="button" class="time-chip" @click="setEndAfter(ticketType, 30)">+30 天</button>
+                    <button
+                      type="button"
+                      class="time-chip"
+                      @click="setEndAfter(ticketType, 1)"
+                    >
+                      +1 天
+                    </button>
+
+                    <button
+                      type="button"
+                      class="time-chip"
+                      @click="setEndAfter(ticketType, 7)"
+                    >
+                      +7 天
+                    </button>
+
+                    <button
+                      type="button"
+                      class="time-chip"
+                      @click="setEndAfter(ticketType, 30)"
+                    >
+                      +30 天
+                    </button>
                   </div>
                 </div>
               </div>
@@ -143,7 +227,24 @@
             </div>
 
             <label class="field">
-              <span>四、票券總量</span>
+              <span>四、票價</span>
+
+              <div class="price-input">
+                <span>NT$</span>
+
+                <input
+                  v-model.number="ticketType.price"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="例如：300"
+                >
+              </div>
+            </label>
+
+            <label class="field">
+              <span>五、票券總量</span>
+
               <input
                 v-model.number="ticketType.totalTicketQuantity"
                 type="number"
@@ -152,14 +253,17 @@
             </label>
 
             <label class="field ticket-limit-field">
-              <span>五、每人限購數量</span>
+              <span>六、每人限購數量</span>
+
               <div class="ticket-limit-controls">
                 <input
                   v-model="ticketType.unlimited"
                   type="checkbox"
                 >
+
                 <span>不限購</span>
               </div>
+
               <input
                 v-model.number="ticketType.purchaseLimitPerPerson"
                 type="number"
@@ -169,7 +273,13 @@
             </label>
           </div>
         </div>
-        <p v-if="!ticketTypeForm.length" class="empty">尚無票種，請點選「新增票種」以建立。</p>
+
+        <p
+          v-if="!ticketTypeForm.length"
+          class="empty"
+        >
+          尚無票種，請點選「新增票種」以建立。
+        </p>
       </template>
     </div>
   </div>
@@ -177,23 +287,38 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import {
+  doc,
+  getDoc,
+  setDoc
+} from 'firebase/firestore'
+
 import { db } from 'src/boot/firebase'
+
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { USE_MOCK_ORDERS, MOCK_ALLOW_ADMIN_WITHOUT_AUTH } from 'src/config/app'
+
+import {
+  USE_MOCK_ORDERS,
+  MOCK_ALLOW_ADMIN_WITHOUT_AUTH
+} from 'src/config/app'
 
 const auth = useAuthStore()
+
 const canManageOrders = computed(
-  () => auth.isSuperAdmin || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
+  () =>
+    auth.isSuperAdmin ||
+    (
+      USE_MOCK_ORDERS &&
+      MOCK_ALLOW_ADMIN_WITHOUT_AUTH
+    )
 )
+
 const toast = useToastStore()
+
 const displayName = ref('管理員')
 const checkingAdmin = ref(true)
 
-// ---- Ticket type management ----
-// Stored at a single settings document; adjust the path below if your
-// project keeps ticket type config elsewhere (e.g. per-event subcollection).
 const TICKET_TYPES_COLLECTION = 'settings'
 const TICKET_TYPES_DOC_ID = 'ticketTypes'
 
@@ -204,168 +329,483 @@ const savingTicketTypes = ref(false)
 function createEmptyTicketType() {
   return {
     id:
-      (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
+      (
+        typeof crypto !== 'undefined' &&
+        crypto.randomUUID &&
+        crypto.randomUUID()
+      ) ||
       `ticket-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+
     name: '',
-    eligibleBuyerIdentity: 'campus_students',
+
+    eligibleBuyerIdentity:
+      'campus_students',
+
     salesStartTime: '',
+
     salesEndTime: '',
+
+    price: 0,
+
     totalTicketQuantity: 0,
+
     unlimited: false,
+
     purchaseLimitPerPerson: 1
   }
 }
 
-// ---- time helpers (value format: 'YYYY-MM-DDTHH:mm') ----
 function getPart(value, part) {
-  const [d = '', t = ''] = (value || '').split('T')
-  return part === 'date' ? d : t.slice(0, 5)
+  const [
+    date = '',
+    time = ''
+  ] = (value || '').split('T')
+
+  return part === 'date'
+    ? date
+    : time.slice(0, 5)
 }
 
-function setPart(ticketType, key, part, val, defaultTime) {
-  const [d = '', t = ''] = (ticketType[key] || '').split('T')
-  const date = part === 'date' ? val : d
-  const time = (part === 'time' ? val : t.slice(0, 5)) || defaultTime
-  ticketType[key] = date ? `${date}T${time}` : ''
+function setPart(
+  ticketType,
+  key,
+  part,
+  val,
+  defaultTime
+) {
+  const [
+    currentDate = '',
+    currentTime = ''
+  ] = (ticketType[key] || '').split('T')
+
+  const date =
+    part === 'date'
+      ? val
+      : currentDate
+
+  const time =
+    (
+      part === 'time'
+        ? val
+        : currentTime.slice(0, 5)
+    ) || defaultTime
+
+  ticketType[key] =
+    date
+      ? `${date}T${time}`
+      : ''
 }
 
-function toInputValue(d) {
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+function toInputValue(date) {
+  const pad = (number) =>
+    String(number).padStart(2, '0')
+
+  return (
+    `${date.getFullYear()}-` +
+    `${pad(date.getMonth() + 1)}-` +
+    `${pad(date.getDate())}T` +
+    `${pad(date.getHours())}:` +
+    `${pad(date.getMinutes())}`
+  )
 }
 
 function setStartNow(ticketType) {
-  ticketType.salesStartTime = toInputValue(new Date())
+  ticketType.salesStartTime =
+    toInputValue(new Date())
 }
 
-function setEndAfter(ticketType, days) {
-  const base = ticketType.salesStartTime ? new Date(ticketType.salesStartTime) : new Date()
-  base.setDate(base.getDate() + days)
-  ticketType.salesEndTime = toInputValue(base)
+function setEndAfter(
+  ticketType,
+  days
+) {
+  const base =
+    ticketType.salesStartTime
+      ? new Date(ticketType.salesStartTime)
+      : new Date()
+
+  base.setDate(
+    base.getDate() + days
+  )
+
+  ticketType.salesEndTime =
+    toInputValue(base)
 }
 
 function salePeriodSummary(ticketType) {
-  if (!ticketType.salesStartTime || !ticketType.salesEndTime) return null
-  const start = new Date(ticketType.salesStartTime)
-  const end = new Date(ticketType.salesEndTime)
-  if (end <= start) return { text: '結束時間必須晚於開始時間', level: 'error' }
+  if (
+    !ticketType.salesStartTime ||
+    !ticketType.salesEndTime
+  ) {
+    return null
+  }
+
+  const start =
+    new Date(
+      ticketType.salesStartTime
+    )
+
+  const end =
+    new Date(
+      ticketType.salesEndTime
+    )
+
+  if (end <= start) {
+    return {
+      text:
+        '結束時間必須晚於開始時間',
+      level: 'error'
+    }
+  }
+
   const now = new Date()
-  const status = now < start ? '尚未開始' : now > end ? '已結束' : '販售中'
-  const days = Math.ceil((end - start) / 86400000)
-  return { text: `${status}・共 ${days} 天`, level: status === '販售中' ? 'ok' : '' }
+
+  const status =
+    now < start
+      ? '尚未開始'
+      : now > end
+        ? '已結束'
+        : '販售中'
+
+  const days =
+    Math.ceil(
+      (end - start) /
+      86400000
+    )
+
+  return {
+    text:
+      `${status}・共 ${days} 天`,
+
+    level:
+      status === '販售中'
+        ? 'ok'
+        : ''
+  }
 }
 
 function addTicketType() {
-  ticketTypeForm.value.push(createEmptyTicketType())
+  ticketTypeForm.value.push(
+    createEmptyTicketType()
+  )
 }
 
 function removeTicketType(id) {
-  if (ticketTypeForm.value.length <= 1) return
-  if (!window.confirm('確定要刪除此票種嗎？此動作無法復原。')) return
-  ticketTypeForm.value = ticketTypeForm.value.filter((ticketType) => ticketType.id !== id)
+  if (
+    ticketTypeForm.value.length <= 1
+  ) {
+    return
+  }
+
+  if (
+    !window.confirm(
+      '確定要刪除此票種嗎？此動作無法復原。'
+    )
+  ) {
+    return
+  }
+
+  ticketTypeForm.value =
+    ticketTypeForm.value.filter(
+      (ticketType) =>
+        ticketType.id !== id
+    )
 }
 
 async function loadTicketTypeSettings() {
   loadingTicketTypes.value = true
+
   try {
-    const settingsDoc = await getDoc(doc(db, TICKET_TYPES_COLLECTION, TICKET_TYPES_DOC_ID))
-    const savedTypes = settingsDoc.exists() ? settingsDoc.data().types : null
+    const settingsDoc =
+      await getDoc(
+        doc(
+          db,
+          TICKET_TYPES_COLLECTION,
+          TICKET_TYPES_DOC_ID
+        )
+      )
+
+    const savedTypes =
+      settingsDoc.exists()
+        ? settingsDoc.data().types
+        : null
+
     ticketTypeForm.value =
-      Array.isArray(savedTypes) && savedTypes.length
-        ? savedTypes.map((ticketType) => ({ ...createEmptyTicketType(), ...ticketType }))
-        : [createEmptyTicketType()]
+      Array.isArray(savedTypes) &&
+      savedTypes.length
+        ? savedTypes.map(
+            (ticketType) => ({
+              ...createEmptyTicketType(),
+              ...ticketType,
+              price:
+                Number(
+                  ticketType.price
+                ) || 0
+            })
+          )
+        : [
+            createEmptyTicketType()
+          ]
   } catch (error) {
-    console.error('Load ticket type settings error:', error)
-    toast.show('票種設定載入失敗，請重新整理後再試')
-    ticketTypeForm.value = [createEmptyTicketType()]
+    console.error(
+      'Load ticket type settings error:',
+      error
+    )
+
+    toast.show(
+      '票種設定載入失敗，請重新整理後再試'
+    )
+
+    ticketTypeForm.value = [
+      createEmptyTicketType()
+    ]
   } finally {
     loadingTicketTypes.value = false
   }
 }
 
 function validateTicketTypeForm() {
-  if (!ticketTypeForm.value.length) {
-    toast.show('請至少新增一種票種')
+  if (
+    !ticketTypeForm.value.length
+  ) {
+    toast.show(
+      '請至少新增一種票種'
+    )
+
     return false
   }
-  for (const ticketType of ticketTypeForm.value) {
-    const label = ticketType.name.trim() || '（未命名票種）'
-    if (!ticketType.name.trim()) {
-      toast.show('請填寫每個票種的名稱')
+
+  for (
+    const ticketType
+    of ticketTypeForm.value
+  ) {
+    const label =
+      ticketType.name.trim() ||
+      '（未命名票種）'
+
+    if (
+      !ticketType.name.trim()
+    ) {
+      toast.show(
+        '請填寫每個票種的名稱'
+      )
+
       return false
     }
-    if (!ticketType.salesStartTime || !ticketType.salesEndTime) {
-      toast.show(`請填寫「${label}」的販售起訖時間`)
+
+    if (
+      !ticketType.salesStartTime ||
+      !ticketType.salesEndTime
+    ) {
+      toast.show(
+        `請填寫「${label}」的販售起訖時間`
+      )
+
       return false
     }
-    if (new Date(ticketType.salesEndTime) <= new Date(ticketType.salesStartTime)) {
-      toast.show(`「${label}」的販售結束時間必須晚於開始時間`)
+
+    if (
+      new Date(
+        ticketType.salesEndTime
+      ) <=
+      new Date(
+        ticketType.salesStartTime
+      )
+    ) {
+      toast.show(
+        `「${label}」的販售結束時間必須晚於開始時間`
+      )
+
       return false
     }
-    if (Number(ticketType.totalTicketQuantity) < 0) {
-      toast.show(`「${label}」的票券總量不可為負數`)
+
+    if (
+      Number(ticketType.price) < 0
+    ) {
+      toast.show(
+        `「${label}」的票價不可為負數`
+      )
+
       return false
     }
-    if (!ticketType.unlimited && Number(ticketType.purchaseLimitPerPerson) < 1) {
-      toast.show(`「${label}」的每人限購數量至少為 1`)
+
+    if (
+      Number(
+        ticketType.totalTicketQuantity
+      ) < 0
+    ) {
+      toast.show(
+        `「${label}」的票券總量不可為負數`
+      )
+
+      return false
+    }
+
+    if (
+      !ticketType.unlimited &&
+      Number(
+        ticketType.purchaseLimitPerPerson
+      ) < 1
+    ) {
+      toast.show(
+        `「${label}」的每人限購數量至少為 1`
+      )
+
       return false
     }
   }
+
   return true
 }
 
 async function saveTicketTypeSettings() {
-  if (!validateTicketTypeForm()) return
+  if (
+    !validateTicketTypeForm()
+  ) {
+    return
+  }
 
   savingTicketTypes.value = true
+
   try {
-    await setDoc(doc(db, TICKET_TYPES_COLLECTION, TICKET_TYPES_DOC_ID), {
-      types: ticketTypeForm.value.map((ticketType) => ({
-        id: ticketType.id,
-        name: ticketType.name.trim(),
-        eligibleBuyerIdentity: ticketType.eligibleBuyerIdentity,
-        salesStartTime: ticketType.salesStartTime,
-        salesEndTime: ticketType.salesEndTime,
-        totalTicketQuantity: Number(ticketType.totalTicketQuantity) || 0,
-        unlimited: !!ticketType.unlimited,
-        purchaseLimitPerPerson: ticketType.unlimited
-          ? null
-          : Number(ticketType.purchaseLimitPerPerson) || 1
-      })),
-      updatedAt: new Date(),
-      updatedBy: displayName.value
-    })
-    toast.show('票種設定已儲存')
+    await setDoc(
+      doc(
+        db,
+        TICKET_TYPES_COLLECTION,
+        TICKET_TYPES_DOC_ID
+      ),
+      {
+        types:
+          ticketTypeForm.value.map(
+            (ticketType) => ({
+              id: ticketType.id,
+
+              name:
+                ticketType.name.trim(),
+
+              eligibleBuyerIdentity:
+                ticketType.eligibleBuyerIdentity,
+
+              salesStartTime:
+                ticketType.salesStartTime,
+
+              salesEndTime:
+                ticketType.salesEndTime,
+
+              price:
+                Number(
+                  ticketType.price
+                ) || 0,
+
+              totalTicketQuantity:
+                Number(
+                  ticketType.totalTicketQuantity
+                ) || 0,
+
+              unlimited:
+                !!ticketType.unlimited,
+
+              purchaseLimitPerPerson:
+                ticketType.unlimited
+                  ? null
+                  : Number(
+                      ticketType.purchaseLimitPerPerson
+                    ) || 1
+            })
+          ),
+
+        updatedAt:
+          new Date(),
+
+        updatedBy:
+          displayName.value
+      }
+    )
+
+    toast.show(
+      '票種設定已儲存'
+    )
   } catch (error) {
-    console.error('Save ticket type settings error:', error)
-    toast.show('票種設定儲存失敗，請稍後再試')
+    console.error(
+      'Save ticket type settings error:',
+      error
+    )
+
+    toast.show(
+      '票種設定儲存失敗，請稍後再試'
+    )
   } finally {
     savingTicketTypes.value = false
   }
 }
-// ---- End ticket type management ----
 
 async function loadAdminProfile() {
-  if (auth.user) {
-    try {
-      const userDoc = await getDoc(doc(db, 'users', auth.user.uid))
-      displayName.value = userDoc.exists()
-        ? userDoc.data().name || auth.user.displayName || auth.user.email
-        : auth.user.displayName || auth.user.email
-    } catch {
-      displayName.value = auth.user.displayName || auth.user.email || '管理員'
-    }
+  if (!auth.user) {
+    return
+  }
+
+  try {
+    const userDoc =
+      await getDoc(
+        doc(
+          db,
+          'users',
+          auth.user.uid
+        )
+      )
+
+    displayName.value =
+      userDoc.exists()
+        ? (
+            userDoc.data().name ||
+            auth.user.displayName ||
+            auth.user.email
+          )
+        : (
+            auth.user.displayName ||
+            auth.user.email
+          )
+  } catch {
+    displayName.value =
+      auth.user.displayName ||
+      auth.user.email ||
+      '管理員'
   }
 }
 
-onMounted(async () => {
-  await loadAdminProfile()
-  checkingAdmin.value = false
-  if (canManageOrders.value) loadTicketTypeSettings()
-})
+onMounted(
+  async () => {
+    await loadAdminProfile()
+
+    checkingAdmin.value = false
+
+    if (
+      canManageOrders.value
+    ) {
+      loadTicketTypeSettings()
+    }
+  }
+)
 </script>
 
 <style scoped>
 @import 'src/css/app.scss';
-@import 'src/css/adminpage.scss';
+@import 'src/css/managementpage.scss';
+
+.price-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.price-input span {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lunar, #9aa3ac);
+}
+
+.price-input input {
+  flex: 1;
+  min-width: 0;
+}
 </style>

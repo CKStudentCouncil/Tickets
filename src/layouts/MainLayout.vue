@@ -35,20 +35,10 @@
             <router-link to="/about" active-class="is-active" @click="menuOpen = false">關於我們</router-link>
             <router-link to="/intro" active-class="is-active" @click="menuOpen = false">舞會介紹</router-link>
             <router-link to="/performer" active-class="is-active" @click="menuOpen = false">社團與藝人</router-link>
+            <router-link to="/terms" @click="menuOpen = false">使用者條款</router-link>
+            <router-link to="/survey" @click="menuOpen = false">使用者問卷</router-link>
 
             <div class="nav-divider" role="separator" />
-
-            <router-link to="/terms" @click="menuOpen = false">
-              使用者條款
-            </router-link>
-
-            <!--<router-link to="/policy" @click="menuOpen = false">
-              銷售與退貨條款
-            </router-link>-->
-
-            <router-link to="/survey" @click="menuOpen = false">
-              使用者問卷
-            </router-link>
 
             <router-link
               v-if="auth.isManager && !auth.isAdmin"
@@ -76,22 +66,6 @@
 
             <router-link
               v-if="auth.isSuperAdmin"
-              to="/admin/performer"
-              @click="menuOpen = false"
-            >
-              社團與藝人管理
-            </router-link>
-
-            <router-link
-              v-if="auth.isSuperAdmin"
-              to="/admin/intromanagement"
-              @click="menuOpen = false"
-            >
-              舞會介紹管理
-            </router-link>
-
-            <router-link
-              v-if="auth.isSuperAdmin"
               to="/admin/account"
               @click="menuOpen = false"
             >
@@ -104,6 +78,22 @@
               @click="menuOpen = false"
             >
               問卷管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/intromanagement"
+              @click="menuOpen = false"
+            >
+              舞會介紹管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/performer"
+              @click="menuOpen = false"
+            >
+              社團與藝人管理
             </router-link>
 
             <router-link
@@ -138,16 +128,16 @@
           <nav class="footer-links">
             <router-link to="/">首頁</router-link>
             <router-link to="/orders">已購門票</router-link>
-            <router-link to="/about">關於我們</router-link>
+            <router-link to="/terms">使用者條款</router-link>
             <router-link to="/survey">使用者問卷</router-link>
           </nav>
         </div>
 
         <div class="footer-col">
-          <div class="footer-heading"><br /></div>
+          <p class="footer-heading">Introduction</p>
           <nav class="footer-links">
+            <router-link to="/about">關於我們</router-link>
             <router-link to="/intro">舞會介紹</router-link>
-            <router-link to="/terms">使用者條款</router-link>
             <router-link to="/performer">社團與藝人</router-link>
           </nav>
         </div>

@@ -290,3 +290,39 @@ h1 {
   .purchase-card { max-width: 100%; padding: 28px; }
   .order-panel-actions { grid-template-columns: 1fr; }
 }
+
+.order-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 0 20px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.order-summary span {
+  color: var(--lunar, #9aa3ac);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.order-summary strong {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .order-summary {
+    padding: 16px;
+  }
+
+  .order-summary strong {
+    font-size: 20px;
+  }
+}

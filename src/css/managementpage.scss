@@ -1,0 +1,348 @@
+/* ---------- state screens (loading / no permission) ---------- */
+.state-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: #050608;
+  color: #f2f0e9;
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  text-align: center;
+  padding: 24px;
+
+  p { margin: 0; font-size: 13.5px; color: rgba(242, 240, 233, 0.55); }
+
+  h2 {
+    margin: 0;
+    font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+  }
+
+  .btn {
+    padding: 12px 24px;
+    border: 1px solid #e4a468;
+    background: #e4a468;
+    color: #16110a;
+    font: 700 13px 'Manrope', sans-serif;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+  }
+}
+
+/* ---------- admin shell ---------- */
+.admin-page {
+  --void: #050608;
+  --charcoal: #14171c;
+  --panel: #14171c;
+  --field: #0d0f13;
+  --lunar: #9aa3ac;
+  --off-white: #f2f0e9;
+  --ember: #e4a468;
+  --danger: #e2645a;
+  --line: rgba(242, 240, 233, 0.14);
+  --line-soft: rgba(242, 240, 233, 0.08);
+
+  min-height: 100vh;
+  padding: clamp(24px, 4vw, 48px) clamp(20px, 4vw, 48px) 80px;
+  background: var(--void);
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+
+  a, button { color: inherit; }
+}
+
+.page-heading {
+  max-width: 720px;
+  margin: 0 0 clamp(28px, 4vh, 44px);
+
+  .eyebrow {
+    margin: 0 0 10px;
+    color: var(--ember);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 800;
+  }
+}
+
+/* ---------- panel ---------- */
+.panel {
+  max-width: 960px;
+  padding: clamp(20px, 3vw, 32px);
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+}
+
+.notify-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 6px;
+
+  h2 {
+    margin: 0;
+    font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+}
+
+.ticket-type-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panel-copy {
+  margin: 0 0 28px;
+  font-size: 13px;
+  color: rgba(242, 240, 233, 0.5);
+  line-height: 1.6;
+}
+
+.empty {
+  font-size: 13.5px;
+  color: rgba(242, 240, 233, 0.5);
+  padding: 24px 0;
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  padding: 10px 20px;
+  border: 1px solid var(--ember);
+  background: var(--ember);
+  color: #16110a;
+  font: 700 12.5px 'Manrope', sans-serif;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s ease, opacity .2s ease;
+
+  &:hover { background: #f0b57e; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.btn-outline {
+  padding: 10px 20px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--off-white);
+  font: 700 12.5px 'Manrope', sans-serif;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .2s ease, background .2s ease, color .2s ease, opacity .2s ease;
+
+  &:hover { border-color: var(--ember); background: rgba(228, 164, 104, 0.08); }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  &.danger {
+    border-color: rgba(226, 100, 90, 0.4);
+    color: var(--danger);
+
+    &:hover { border-color: var(--danger); background: rgba(226, 100, 90, 0.08); }
+  }
+}
+
+/* ---------- ticket type cards ---------- */
+.ticket-type-card {
+  padding: 22px 0;
+  border-top: 1px solid var(--line-soft);
+
+  &:first-of-type { border-top: none; padding-top: 4px; }
+}
+
+.ticket-type-card-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.ticket-name-field {
+  flex: 1;
+  min-width: 220px;
+}
+
+/* ---------- fields ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+
+  > span:first-child {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--lunar);
+  }
+
+  input[type='text'],
+  input[type='number'],
+  input[type='date'],
+  input[type='time'] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--off-white);
+    font: 500 13.5px 'Manrope', sans-serif;
+
+    &:focus {
+      outline: none;
+      border-color: var(--ember);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+}
+
+.select-field {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--off-white);
+  font: 500 13.5px 'Manrope', sans-serif;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--lunar) 50%),
+    linear-gradient(135deg, var(--lunar) 50%, transparent 50%);
+  background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+
+  &:focus { outline: none; border-color: var(--ember); }
+
+  option { background: var(--field); color: var(--off-white); }
+}
+
+.ticket-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px 24px;
+}
+
+.ticket-time-field {
+  grid-column: 1 / -1;
+}
+
+.time-range {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.time-group {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.time-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--lunar);
+}
+
+.time-inputs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  input {
+    flex: 1;
+    min-width: 120px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--off-white);
+    font: 500 13px 'Manrope', sans-serif;
+
+    &:focus { outline: none; border-color: var(--ember); }
+  }
+}
+
+.time-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.time-chip {
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: rgba(242, 240, 233, 0.7);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease;
+
+  &:hover { border-color: var(--ember); color: var(--off-white); }
+}
+
+.time-summary {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--lunar);
+
+  &.ok { color: var(--ember); }
+  &.error { color: var(--danger); }
+}
+
+.ticket-limit-field {
+  .ticket-limit-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    color: rgba(242, 240, 233, 0.7);
+
+    input[type='checkbox'] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--ember);
+    }
+  }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 720px) {
+  .notify-header { flex-direction: column; align-items: stretch; }
+  .ticket-type-header-actions { width: 100%; }
+  .ticket-type-header-actions .btn,
+  .ticket-type-header-actions .btn-outline { flex: 1; }
+
+  .ticket-type-card-header { flex-direction: column; align-items: stretch; }
+  .ticket-type-card-header .btn-outline { width: 100%; }
+
+  .ticket-type-grid { grid-template-columns: 1fr; }
+  .time-range { flex-direction: column; gap: 16px; }
+}
+
+@media (max-width: 480px) {
+  .panel { padding: 18px; }
+  .time-inputs input { min-width: 0; }
+}

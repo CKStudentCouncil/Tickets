@@ -524,3 +524,35 @@
     width: 100%;
   }
 }
+
+.order-qr-section {
+  margin-top: 32px;
+}
+
+.order-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 28px 20px;
+  margin-top: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.order-qr {
+  display: block;
+  width: 220px;
+  height: 220px;
+  background: #fff;
+}
+
+.order-qr-card p {
+  max-width: 360px;
+  margin: 0;
+  color: var(--lunar, #9aa3ac);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}

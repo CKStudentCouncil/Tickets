@@ -128,22 +128,28 @@
   line-height: 1.8;
 }
 
-.actions {
-  display: flex;
-  flex-direction: column;
+/* ---------- QR section (canvas itself is sized in the component's
+   own <style> block; this only lays out the surrounding card) ---------- */
+.qr-section {
+  margin: 28px auto 0;
+  max-width: 360px;
   align-items: center;
-  gap: 15px;
-  margin-top: 42px;
+  text-align: center;
 }
 
+/* ---------- action buttons ----------
+   These are plain siblings in the template (no wrapping <div>), so they
+   must be block-level themselves to stack — inline-flex would let them
+   sit side by side on wide screens with no gap between them. */
 .primary-button,
 .feedback-button {
-  width: min(100%, 360px);
-  min-height: 48px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  width: min(100%, 360px);
+  min-height: 48px;
+  margin: 0 auto;
   font-family: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -156,6 +162,7 @@
 }
 
 .primary-button {
+  margin-top: 42px;
   border: 1px solid var(--ember);
   background: var(--ember);
   color: #111;
@@ -167,6 +174,7 @@
 }
 
 .feedback-button {
+  margin-top: 15px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--off-white);
@@ -178,7 +186,8 @@
 }
 
 .secondary-link {
-  margin-top: 5px;
+  display: block;
+  margin-top: 15px;
   color: var(--lunar);
   font-size: 11px;
   line-height: 1.6;
@@ -221,12 +230,51 @@
     align-self: flex-end;
   }
 
-  .actions {
+  .primary-button {
     margin-top: 34px;
   }
+}
 
+@media (max-width: 400px) {
   .primary-button,
   .feedback-button {
     width: 100%;
   }
+}
+
+.qr-title {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.qr-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+  padding: 0;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.order-qr {
+  display: block;
+  width: 220px;
+  height: 220px;
+}
+
+.qr-wrapper canvas {
+  display: block;
+  width: 220px !important;
+  height: 220px !important;
+}
+
+.qr-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  opacity: 0.65;
 }

@@ -4,6 +4,7 @@ import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 import { getAnalytics, isSupported } from 'firebase/analytics'
+import { getFunctions } from 'firebase/functions'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDpURP6Src9JzM5nttBCpA9eCllwRobJtc',
@@ -25,5 +26,7 @@ export let analytics
 isSupported().then((yes) => {
   if (yes) analytics = getAnalytics(app)
 })
+
+export const functions = getFunctions(app, 'asia-east1')
 
 export default boot(() => {})

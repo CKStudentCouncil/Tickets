@@ -101,12 +101,13 @@
           <div class="product-meta">
             <div>
               <p class="product-category">CK PARTY NIGHT</p>
-              <h3>{{ ticketType.name }}</h3>
+              <h3>{{ ticketType.name }} {{ ticketType.price ? ` - NT$ ${ticketType.price.toLocaleString()}` : '' }}</h3>
             </div>
 
             <q-icon name="arrow_forward" />
+            
           </div>
-
+          
           <p
             v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson"
             class="ticket-limit"

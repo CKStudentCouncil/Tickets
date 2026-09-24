@@ -1,4 +1,5 @@
 import { USE_MOCK_ORDERS } from 'src/config/app'
+
 import {
   collection,
   deleteDoc,
@@ -11,15 +12,25 @@ import {
   serverTimestamp,
   updateDoc
 } from 'firebase/firestore'
-import { getFunctions, httpsCallable } from 'firebase/functions'
-import { db, app } from 'src/boot/firebase'
+
+import {
+  getFunctions,
+  httpsCallable
+} from 'firebase/functions'
+
+import {
+  db,
+  app
+} from 'src/boot/firebase'
+
 import {
   addGuestOrderId,
   getGuestOrderIds,
   removeGuestOrderId
 } from 'src/utils/guestOrders'
 
-const MOCK_ORDERS_KEY = 'cksc_mock_orders'
+const MOCK_ORDERS_KEY =
+  'cksc_mock_orders'
 
 const SCHOOL_IDENTITIES = {
   建國中學: 'CKS',
@@ -33,181 +44,317 @@ const SCHOOL_IDENTITIES = {
   其他學校或社會人士: 'O'
 }
 
-const functions = getFunctions(app, 'asia-east1')
-const createOrder = httpsCallable(functions, 'createOrder')
+const functions =
+  getFunctions(
+    app,
+    'asia-east1'
+  )
+
+const createOrder =
+  httpsCallable(
+    functions,
+    'createOrder'
+  )
 
 function loadMockOrders() {
   try {
-    const raw = localStorage.getItem(MOCK_ORDERS_KEY)
-    return raw ? JSON.parse(raw) : []
+    const raw =
+      localStorage.getItem(
+        MOCK_ORDERS_KEY
+      )
+
+    return raw
+      ? JSON.parse(raw)
+      : []
   } catch {
     return []
   }
 }
 
 function saveMockOrders(orders) {
-  localStorage.setItem(MOCK_ORDERS_KEY, JSON.stringify(orders))
+  localStorage.setItem(
+    MOCK_ORDERS_KEY,
+    JSON.stringify(orders)
+  )
 }
 
-function getTaiwanDateString(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(date)
+function getTaiwanDateString(
+  date = new Date()
+) {
+  const parts =
+    new Intl.DateTimeFormat(
+      'en-CA',
+      {
+        timeZone: 'Asia/Taipei',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }
+    ).formatToParts(date)
 
-  const values = Object.fromEntries(
-    parts
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value])
+  const values =
+    Object.fromEntries(
+      parts
+        .filter(
+          (part) =>
+            part.type !== 'literal'
+        )
+        .map(
+          (part) => [
+            part.type,
+            part.value
+          ]
+        )
+    )
+
+  return (
+    `${values.year}` +
+    `${values.month}` +
+    `${values.day}`
   )
-
-  return `${values.year}${values.month}${values.day}`
 }
 
 function getSchoolIdentity(school) {
-  return SCHOOL_IDENTITIES[school] || 'O'
-}
-
-async function generateOrderId(school) {
-  const identity = getSchoolIdentity(school)
-  const date = getTaiwanDateString()
-  const counterRef = doc(db, 'orderCounters', date)
-
-  const serialNumber = await runTransaction(
-    db,
-    async (transaction) => {
-      const counterSnap = await transaction.get(counterRef)
-
-      const currentSerial = counterSnap.exists()
-        ? Number(counterSnap.data().serialNumber || 0)
-        : 0
-
-      const nextSerial = currentSerial + 1
-
-      transaction.set(
-        counterRef,
-        {
-          date,
-          serialNumber: nextSerial,
-          updatedAt: serverTimestamp()
-        },
-        { merge: true }
-      )
-
-      return nextSerial
-    }
+  return (
+    SCHOOL_IDENTITIES[school] ||
+    'O'
   )
-
-  return `${identity}${date}${String(serialNumber).padStart(4, '0')}`
 }
 
-export function parseOrderDate(value) {
-  if (!value) return null
+async function generateOrderId(
+  school
+) {
+  const identity =
+    getSchoolIdentity(school)
+
+  const date =
+    getTaiwanDateString()
+
+  const counterRef =
+    doc(
+      db,
+      'orderCounters',
+      date
+    )
+
+  const serialNumber =
+    await runTransaction(
+      db,
+      async (transaction) => {
+        const counterSnap =
+          await transaction.get(
+            counterRef
+          )
+
+        const currentSerial =
+          counterSnap.exists()
+            ? Number(
+                counterSnap.data()
+                  .serialNumber || 0
+              )
+            : 0
+
+        const nextSerial =
+          currentSerial + 1
+
+        transaction.set(
+          counterRef,
+          {
+            date,
+            serialNumber:
+              nextSerial,
+            updatedAt:
+              serverTimestamp()
+          },
+          {
+            merge: true
+          }
+        )
+
+        return nextSerial
+      }
+    )
+
+  return (
+    `${identity}` +
+    `${date}` +
+    `${String(
+      serialNumber
+    ).padStart(4, '0')}`
+  )
+}
+
+export function parseOrderDate(
+  value
+) {
+  if (!value) {
+    return null
+  }
 
   if (value instanceof Date) {
     return value
   }
 
   if (typeof value === 'string') {
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? null : date
+    const date =
+      new Date(value)
+
+    return Number.isNaN(
+      date.getTime()
+    )
+      ? null
+      : date
   }
 
-  if (typeof value?.toDate === 'function') {
+  if (
+    typeof value?.toDate ===
+    'function'
+  ) {
     return value.toDate()
   }
 
   return null
 }
 
-export function formatOrderDate(value) {
-  const date = parseOrderDate(value)
+export function formatOrderDate(
+  value
+) {
+  const date =
+    parseOrderDate(value)
 
   return date
-    ? date.toLocaleString('zh-TW', {
-        timeZone: 'Asia/Taipei'
-      })
+    ? date.toLocaleString(
+        'zh-TW',
+        {
+          timeZone:
+            'Asia/Taipei'
+        }
+      )
     : ''
 }
 
-function normalizeOrderPayload(payload) {
+function normalizeOrderPayload(
+  payload
+) {
   return {
     ...payload
   }
 }
 
-export async function submitOrder(orderPayload) {
-  const normalizedPayload = normalizeOrderPayload(orderPayload)
+export async function submitOrder(
+  orderPayload
+) {
+  const normalizedPayload =
+    normalizeOrderPayload(
+      orderPayload
+    )
 
   if (!USE_MOCK_ORDERS) {
-    const result = await createOrder({
-      orderPayload: normalizedPayload
-    })
+    const result =
+      await createOrder({
+        orderPayload:
+          normalizedPayload
+      })
 
-    const data = result.data
+    const data =
+      result.data
 
-    addGuestOrderId(data.id)
+    addGuestOrderId(
+      data.id
+    )
 
     return {
-      status: data.status,
-      id: data.id
+      status:
+        data.status,
+      id:
+        data.id
     }
   }
 
-  const orders = loadMockOrders()
-  const date = getTaiwanDateString()
+  const orders =
+    loadMockOrders()
 
-  const todayOrders = orders.filter((order) => {
-    if (!order.id) return false
+  const date =
+    getTaiwanDateString()
 
-    return new RegExp(`^[A-Z]+${date}\\d{4}$`).test(
-      order.id
+  const todayOrders =
+    orders.filter(
+      (order) => {
+        if (!order.id) {
+          return false
+        }
+
+        return new RegExp(
+          `^[A-Z]+${date}\\d{4}$`
+        ).test(
+          order.id
+        )
+      }
     )
-  })
 
   let maxSerial = 0
 
-  for (const order of todayOrders) {
-    const match = order.id.match(
-      new RegExp(`^[A-Z]+${date}(\\d{4})$`)
-    )
+  for (
+    const order of todayOrders
+  ) {
+    const match =
+      order.id.match(
+        new RegExp(
+          `^[A-Z]+${date}(\\d{4})$`
+        )
+      )
 
     if (match) {
-      maxSerial = Math.max(
-        maxSerial,
-        Number(match[1])
-      )
+      maxSerial =
+        Math.max(
+          maxSerial,
+          Number(match[1])
+        )
     }
   }
 
-  const serialNumber = maxSerial + 1
-  const identity = getSchoolIdentity(
-    normalizedPayload.school
-  )
+  const serialNumber =
+    maxSerial + 1
+
+  const identity =
+    getSchoolIdentity(
+      normalizedPayload.school
+    )
 
   const id =
-    `${identity}${date}${String(serialNumber).padStart(4, '0')}`
+    `${identity}` +
+    `${date}` +
+    `${String(
+      serialNumber
+    ).padStart(4, '0')}`
 
-  const createdAt = new Date().toISOString()
+  const createdAt =
+    new Date().toISOString()
 
   const order = {
     ...normalizedPayload,
     id,
     createdAt,
     delivered: false,
-    deliveryUpdatedAt: null,
-    deliveryUpdatedBy: null,
-    deliveryUpdatedByName: null,
+    deliveryUpdatedAt:
+      null,
+    deliveryUpdatedBy:
+      null,
+    deliveryUpdatedByName:
+      null,
     paid: false,
-    paymentUpdatedAt: null,
-    paymentUpdatedBy: null,
-    paymentUpdatedByName: null
+    paymentUpdatedAt:
+      null,
+    paymentUpdatedBy:
+      null,
+    paymentUpdatedByName:
+      null
   }
 
   orders.unshift(order)
+
   saveMockOrders(orders)
+
   addGuestOrderId(id)
 
   return {
@@ -219,86 +366,132 @@ export async function submitOrder(orderPayload) {
 
 export async function fetchAllOrders() {
   if (!USE_MOCK_ORDERS) {
-    const q = query(
-      collection(db, 'orders'),
-      orderBy('createdAt', 'desc')
-    )
+    const q =
+      query(
+        collection(
+          db,
+          'orders'
+        ),
+        orderBy(
+          'createdAt',
+          'desc'
+        )
+      )
 
-    const snapshot = await getDocs(q)
+    const snapshot =
+      await getDocs(q)
 
-    const orders = snapshot.docs.map((item) => ({
-      id: item.id,
-      ...item.data()
-    }))
+    const orders =
+      snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data()
+        })
+      )
 
     return Promise.all(
-      orders.map(async (order) => {
-        const needEnrich =
-          !order.customerName ||
-          !order.customerPhone ||
-          !order.customerEmail
+      orders.map(
+        async (order) => {
+          const needEnrich =
+            !order.customerName ||
+            !order.customerPhone ||
+            !order.customerEmail
 
-        if (!needEnrich || !order.userId) {
-          return order
-        }
-
-        try {
-          const userSnap = await getDoc(
-            doc(db, 'users', order.userId)
-          )
-
-          if (!userSnap.exists()) {
+          if (
+            !needEnrich ||
+            !order.userId
+          ) {
             return order
           }
 
-          const user = userSnap.data()
+          try {
+            const userSnap =
+              await getDoc(
+                doc(
+                  db,
+                  'users',
+                  order.userId
+                )
+              )
 
-          return {
-            ...order,
-            customerName:
-              order.customerName ||
-              user.name ||
-              '',
-            customerPhone:
-              order.customerPhone ||
-              user.phone ||
-              '',
-            customerEmail:
-              order.customerEmail ||
-              user.email ||
-              '',
-            school:
-              order.school ||
-              user.school ||
-              '',
-            class:
-              order.class ||
-              user.class ||
-              '',
-            number:
-              order.number ||
-              user.number ||
-              ''
+            if (
+              !userSnap.exists()
+            ) {
+              return order
+            }
+
+            const user =
+              userSnap.data()
+
+            return {
+              ...order,
+
+              customerName:
+                order.customerName ||
+                user.name ||
+                '',
+
+              customerPhone:
+                order.customerPhone ||
+                user.phone ||
+                '',
+
+              customerEmail:
+                order.customerEmail ||
+                user.email ||
+                '',
+
+              school:
+                order.school ||
+                user.school ||
+                '',
+
+              class:
+                order.class ||
+                user.class ||
+                '',
+
+              number:
+                order.number ||
+                user.number ||
+                ''
+            }
+          } catch {
+            return order
           }
-        } catch {
-          return order
         }
-      })
+      )
     )
   }
 
-  return loadMockOrders().sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() -
-      new Date(a.createdAt).getTime()
-  )
+  return loadMockOrders()
+    .sort(
+      (a, b) =>
+        new Date(
+          b.createdAt
+        ).getTime() -
+        new Date(
+          a.createdAt
+        ).getTime()
+    )
 }
 
-export async function fetchOrderById(orderId) {
+export async function fetchOrderById(
+  orderId
+) {
+  if (!orderId) {
+    return null
+  }
+
   if (!USE_MOCK_ORDERS) {
-    const snap = await getDoc(
-      doc(db, 'orders', orderId)
-    )
+    const snap =
+      await getDoc(
+        doc(
+          db,
+          'orders',
+          orderId
+        )
+      )
 
     if (!snap.exists()) {
       return null
@@ -312,62 +505,104 @@ export async function fetchOrderById(orderId) {
 
   return (
     loadMockOrders().find(
-      (order) => order.id === orderId
+      (order) =>
+        order.id === orderId
     ) || null
   )
 }
 
 export async function fetchBuyerOrders() {
-  const ids = getGuestOrderIds()
+  const ids =
+    getGuestOrderIds()
 
   if (!USE_MOCK_ORDERS) {
     const loaded = []
 
-    for (const id of ids) {
-      const order = await fetchOrderById(id)
+    for (
+      const id of ids
+    ) {
+      try {
+        const order =
+          await fetchOrderById(id)
 
-      if (order) {
-        loaded.push(order)
+        if (order) {
+          loaded.push(order)
+        }
+      } catch (error) {
+        console.error(
+          `載入訂單 ${id} 失敗`,
+          error
+        )
       }
     }
 
     return loaded.sort(
-      (a, b) =>
-        new Date(
-          parseOrderDate(b.createdAt)
-        ).getTime() -
-        new Date(
-          parseOrderDate(a.createdAt)
-        ).getTime()
+      (a, b) => {
+        const dateA =
+          parseOrderDate(
+            a.createdAt
+          )
+
+        const dateB =
+          parseOrderDate(
+            b.createdAt
+          )
+
+        return (
+          (dateB?.getTime() || 0) -
+          (dateA?.getTime() || 0)
+        )
+      }
     )
   }
 
-  const byId = new Map(
-    loadMockOrders().map((order) => [
-      order.id,
-      order
-    ])
-  )
+  const byId =
+    new Map(
+      loadMockOrders().map(
+        (order) => [
+          order.id,
+          order
+        ]
+      )
+    )
 
   return ids
-    .map((id) => byId.get(id))
+    .map(
+      (id) =>
+        byId.get(id)
+    )
     .filter(Boolean)
     .sort(
       (a, b) =>
-        new Date(b.createdAt).getTime() -
-        new Date(a.createdAt).getTime()
+        new Date(
+          b.createdAt
+        ).getTime() -
+        new Date(
+          a.createdAt
+        ).getTime()
     )
 }
 
-export function canViewOrder(orderId) {
+export function canViewOrder(
+  orderId
+) {
+  if (!orderId) {
+    return false
+  }
+
   if (!USE_MOCK_ORDERS) {
-    return getGuestOrderIds().includes(orderId)
+    return getGuestOrderIds().includes(
+      orderId
+    )
   }
 
   return (
-    getGuestOrderIds().includes(orderId) ||
+    getGuestOrderIds().includes(
+      orderId
+    ) ||
     loadMockOrders().some(
-      (order) => order.id === orderId
+      (order) =>
+        order.id === orderId
     )
   )
 }
@@ -378,27 +613,41 @@ export async function updateOrderDelivery(
   meta = {}
 ) {
   if (!USE_MOCK_ORDERS) {
-    const orderRef = doc(db, 'orders', orderId)
+    const orderRef =
+      doc(
+        db,
+        'orders',
+        orderId
+      )
 
     const updateData = {
       delivered,
-      deliveryUpdatedAt: serverTimestamp(),
+      deliveryUpdatedAt:
+        serverTimestamp(),
       ...meta
     }
 
-    await updateDoc(orderRef, updateData)
+    await updateDoc(
+      orderRef,
+      updateData
+    )
 
     return updateData
   }
 
-  const orders = loadMockOrders()
+  const orders =
+    loadMockOrders()
 
-  const index = orders.findIndex(
-    (order) => order.id === orderId
-  )
+  const index =
+    orders.findIndex(
+      (order) =>
+        order.id === orderId
+    )
 
   if (index === -1) {
-    throw new Error('訂單不存在')
+    throw new Error(
+      '訂單不存在'
+    )
   }
 
   const patch = {
@@ -406,9 +655,11 @@ export async function updateOrderDelivery(
     deliveryUpdatedAt:
       new Date().toISOString(),
     deliveryUpdatedBy:
-      meta.deliveryUpdatedBy || null,
+      meta.deliveryUpdatedBy ||
+      null,
     deliveryUpdatedByName:
-      meta.deliveryUpdatedByName || null
+      meta.deliveryUpdatedByName ||
+      null
   }
 
   orders[index] = {
@@ -427,27 +678,41 @@ export async function updateOrderPayment(
   meta = {}
 ) {
   if (!USE_MOCK_ORDERS) {
-    const orderRef = doc(db, 'orders', orderId)
+    const orderRef =
+      doc(
+        db,
+        'orders',
+        orderId
+      )
 
     const updateData = {
       paid,
-      paymentUpdatedAt: serverTimestamp(),
+      paymentUpdatedAt:
+        serverTimestamp(),
       ...meta
     }
 
-    await updateDoc(orderRef, updateData)
+    await updateDoc(
+      orderRef,
+      updateData
+    )
 
     return updateData
   }
 
-  const orders = loadMockOrders()
+  const orders =
+    loadMockOrders()
 
-  const index = orders.findIndex(
-    (order) => order.id === orderId
-  )
+  const index =
+    orders.findIndex(
+      (order) =>
+        order.id === orderId
+    )
 
   if (index === -1) {
-    throw new Error('訂單不存在')
+    throw new Error(
+      '訂單不存在'
+    )
   }
 
   const patch = {
@@ -455,9 +720,11 @@ export async function updateOrderPayment(
     paymentUpdatedAt:
       new Date().toISOString(),
     paymentUpdatedBy:
-      meta.paymentUpdatedBy || null,
+      meta.paymentUpdatedBy ||
+      null,
     paymentUpdatedByName:
-      meta.paymentUpdatedByName || null
+      meta.paymentUpdatedByName ||
+      null
   }
 
   orders[index] = {
@@ -470,20 +737,22 @@ export async function updateOrderPayment(
   return patch
 }
 
-export async function deleteOrderById(orderId) {
+export async function deleteOrderById(
+  orderId
+) {
+  if (!orderId) {
+    return
+  }
+
   if (!USE_MOCK_ORDERS) {
-    await deleteDoc(
-      doc(db, 'orders', orderId)
-    )
-
     removeGuestOrderId(orderId)
-
     return
   }
 
   saveMockOrders(
     loadMockOrders().filter(
-      (order) => order.id !== orderId
+      (order) =>
+        order.id !== orderId
     )
   )
 
@@ -500,13 +769,15 @@ export function getLastSubmittedOrderId() {
   }
 }
 
-export function setLastSubmittedOrderId(id) {
+export function setLastSubmittedOrderId(
+  id
+) {
   try {
     sessionStorage.setItem(
       'cksc_last_order_id',
       id
     )
   } catch {
-    // Ignore storage errors.
+    return
   }
 }
