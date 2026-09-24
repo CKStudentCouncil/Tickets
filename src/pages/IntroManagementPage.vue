@@ -182,15 +182,15 @@
 
         <div>
           <p class="editor-label">
-            {{ editingExisting ? '編輯故事' : '新增故事' }}
+            {{ editingExisting ? '編輯介紹' : '新增介紹' }}
           </p>
 
           <h2>
-            {{ storyForm.title || '故事內容' }}
+            {{ storyForm.title || '介紹內容' }}
           </h2>
 
           <p class="panel-copy">
-            設定故事內容及自動公開時間。
+            設定介紹內容及自動公開時間。
           </p>
         </div>
 
@@ -211,7 +211,7 @@
             :disabled="saving"
             @click="saveStory"
           >
-            {{ saving ? '儲存中...' : '儲存故事' }}
+            {{ saving ? '儲存中...' : '儲存介紹' }}
           </button>
 
         </div>
@@ -222,12 +222,12 @@
 
         <!-- Title -->
         <div class="field">
-          <span>故事標題</span>
+          <span>介紹標題</span>
 
           <input
             v-model="storyForm.title"
             type="text"
-            placeholder="例如：舞會的開始"
+            placeholder=""
           >
         </div>
 
@@ -238,20 +238,20 @@
           <input
             v-model="storyForm.subtitle"
             type="text"
-            placeholder="例如：Before the night begins"
+            placeholder=""
           >
         </div>
 
         <!-- Content -->
         <div class="field">
-          <span>故事內容</span>
+          <span>介紹內容</span>
 
           <textarea
             v-model="storyForm.content"
             rows="18"
-            placeholder="請輸入故事內容...
+            placeholder="請輸入介紹內容...
 
-每一個換行都會在前台呈現為新的段落。"
+每一個換行都會在前台呈現為新的段落"
           ></textarea>
 
           <small class="field-hint">
@@ -380,7 +380,7 @@
           >
 
           <span>
-            <strong>啟用此故事</strong>
+            <strong>啟用此介紹</strong>
 
             <small>
               停用後，即使已經到公開時間，前台也不會顯示。
@@ -416,7 +416,7 @@
               </p>
 
               <h2>
-                {{ storyForm.title || '故事標題' }}
+                {{ storyForm.title || '介紹標題' }}
               </h2>
 
               <p
