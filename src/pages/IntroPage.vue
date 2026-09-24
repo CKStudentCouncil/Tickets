@@ -20,7 +20,7 @@
         class="story-state"
       >
         <span class="loading-dot"></span>
-        <span>載入故事中...</span>
+        <span>載入介紹中...</span>
       </div>
 
       <div
