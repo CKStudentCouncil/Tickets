@@ -883,7 +883,7 @@ export const sendOrderNotification =
                 `"建國中學班聯會" <${SENDER_EMAIL}>`,
 
               to:
-                SENDER_EMAIL,
+                'ckhssc@gl.ck.tp.edu.tw',
 
               bcc:
                 batch,
