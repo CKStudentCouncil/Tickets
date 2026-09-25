@@ -125,8 +125,8 @@ import {
 } from 'vue'
 
 import { useRoute } from 'vue-router'
-
 import QRCode from 'qrcode'
+import { trackEvent } from 'boot/analytics'
 
 import {
   fetchOrderById
@@ -187,6 +187,37 @@ async function generateQrCode() {
   }
 }
 
+function trackGA4Purchase(orderData) {
+  const transactionId = String(orderData.id || '')
+  const storageKey = `ga4_purchased_${transactionId}`
+
+  if (sessionStorage.getItem(storageKey)) {
+    console.log(`GA4 偵測到重複載入，已攔截此訂單的重複追蹤: ${transactionId}`)
+    return
+  }
+
+  const totalValue = Number(orderData.finalTotal || 0)
+
+  // Standardize purchase items payload for GA4 Ecommerce reports
+  const rawItems = orderData.items || orderData.orderItems || []
+  const items = rawItems.map((item) => ({
+    item_id: String(item.id || item.productId || ''),
+    item_name: String(item.title || item.name || ''),
+    price: Number(item.price || 0),
+    quantity: Number(item.quantity || 1)
+  }))
+
+  trackEvent('purchase', {
+    transaction_id: transactionId,
+    value: totalValue,
+    currency: 'TWD',
+    items: items
+  })
+
+  sessionStorage.setItem(storageKey, 'true')
+  console.log(`GA4 金流追蹤成功！訂單號: ${transactionId}, 金額: ${totalValue}`)
+}
+
 async function loadOrder() {
   if (!orderId.value) {
     return
@@ -203,6 +234,8 @@ async function loadOrder() {
     }
 
     order.value = result
+
+    trackGA4Purchase(result)
 
     await nextTick()
 
