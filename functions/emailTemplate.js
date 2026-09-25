@@ -47,6 +47,13 @@ const FONT =
 
 const MONO = "'SF Mono',Consolas,Menlo,monospace";
 
+// Was previously built via sectionLabel.replace('margin:0 0 22px', '...'),
+// which silently stops working if the base margin value ever changes.
+// A parameterized function is the same idea without the fragility.
+function sectionLabel(marginBottom = 22) {
+  return `margin:0 0 ${marginBottom}px;font-family:${FONT};font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.28em;text-transform:uppercase;color:${C.ember};`;
+}
+
 export function generateEmailHTML(orderId, order) {
   const formattedDate = formatOrderDate(order.createdAt);
 
@@ -108,7 +115,10 @@ export function generateEmailHTML(orderId, order) {
     })
     .join('');
 
-  const sectionLabel = `margin:0 0 22px;font-family:${FONT};font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.28em;text-transform:uppercase;color:${C.ember};`;
+  // Padded with zero-width joiners + non-breaking spaces so Gmail (and
+  // similar clients) can't fall through to whatever visible text happens
+  // to come right after this block for their inbox-preview snippet.
+  const preheaderPadding = '&zwnj;&nbsp;'.repeat(40);
 
   return `<!DOCTYPE html>
 <html lang="zh-TW" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -140,6 +150,11 @@ export function generateEmailHTML(orderId, order) {
   >
 
   <style>
+    :root {
+      color-scheme: dark;
+      supported-color-schemes: dark;
+    }
+
     html, body {
       margin: 0 !important;
       padding: 0 !important;
@@ -254,6 +269,7 @@ export function generateEmailHTML(orderId, order) {
   <!-- Preheader -->
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;mso-hide:all;">
     您的 COSMOS 購票已確認，票券編號 ${escapeHtml(orderId)}，共 ${totalTicketCount} 張，總金額 NT$ ${formatCurrency(order.finalTotal)}
+    ${preheaderPadding}
   </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.bg}" style="background:${C.bg};">
@@ -311,7 +327,7 @@ export function generateEmailHTML(orderId, order) {
           <tr>
             <td class="content-pad" style="padding:42px 36px 0;background:${C.bg};">
 
-              <p style="${sectionLabel}">
+              <p style="${sectionLabel()}">
                 Ticket confirmed
               </p>
 
@@ -329,7 +345,7 @@ export function generateEmailHTML(orderId, order) {
                 ${detailRowsHTML}
               </table>
 
-              <p style="${sectionLabel}">
+              <p style="${sectionLabel()}">
                 Ticket details
               </p>
 
@@ -402,7 +418,7 @@ export function generateEmailHTML(orderId, order) {
                 <tr>
                   <td style="padding:30px 0;border-top:1px solid ${C.lineSoft};">
 
-                    <p style="${sectionLabel.replace('margin:0 0 22px', 'margin:0 0 16px')}">
+                    <p style="${sectionLabel(16)}">
                       Your feedback
                     </p>
 
@@ -416,6 +432,7 @@ export function generateEmailHTML(orderId, order) {
                           <a
                             href="https://tickets.cksc.tw/survey"
                             target="_blank"
+                            rel="noopener"
                             style="display:block;padding:11px 22px;font-family:${FONT};font-size:12px;font-weight:700;line-height:1.4;letter-spacing:.08em;color:${C.text};text-decoration:none;"
                           >
                             填寫意見反饋
