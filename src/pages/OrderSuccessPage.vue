@@ -98,14 +98,12 @@
         查看我的訂單
       </router-link>
 
-      <a
-        href="https://souvenir.cksc.tw/survey"
-        target="_blank"
-        rel="noopener"
+      <router-link
+        to="/survey"
         class="feedback-button"
       >
         填寫意見反饋
-      </a>
+      </router-link>
 
       <router-link
         to="/"
@@ -118,133 +116,53 @@
 </template>
 
 <script setup>
-import {
-  nextTick,
-  onMounted,
-  ref
-} from 'vue'
-
+import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import QRCode from 'qrcode'
-import { trackEvent } from 'boot/analytics'
-
-import {
-  fetchOrderById
-} from 'src/services/orderService'
+import { trackEvent } from 'src/utils/analytics'
+import { renderOrderQr } from 'src/utils/qrcode'
+import { fetchBuyerOrder } from 'src/services/orderService'
 
 const route = useRoute()
 
-const orderId = ref(
-  String(route.query.id || '')
-)
-
+const orderId = ref(String(route.query.id || ''))
 const order = ref(null)
 const qrCanvas = ref(null)
-
-async function generateQrCode() {
-  if (!order.value?.id) {
-    return
-  }
-
-  await nextTick()
-
-  const canvas = qrCanvas.value
-
-  if (!canvas) {
-    console.error(
-      'QR Code canvas not found'
-    )
-    return
-  }
-
-  const url =
-    `https://tickets.cksc.tw/orders/${order.value.id}`
-
-  try {
-    await QRCode.toCanvas(
-      canvas,
-      url,
-      {
-        width: 220,
-        height: 220,
-        margin: 2,
-        errorCorrectionLevel: 'M',
-        color: {
-          dark: '#050608',
-          light: '#ffffff'
-        }
-      }
-    )
-
-    console.log(
-      `QR Code generated: ${url}`
-    )
-  } catch (error) {
-    console.error(
-      `QR Code 產生失敗：${order.value.id}`,
-      error
-    )
-  }
-}
 
 function trackGA4Purchase(orderData) {
   const transactionId = String(orderData.id || '')
   const storageKey = `ga4_purchased_${transactionId}`
 
-  if (sessionStorage.getItem(storageKey)) {
-    console.log(`GA4 偵測到重複載入，已攔截此訂單的重複追蹤: ${transactionId}`)
-    return
-  }
-
-  const totalValue = Number(orderData.finalTotal || 0)
-
-  // Standardize purchase items payload for GA4 Ecommerce reports
-  const rawItems = orderData.items || orderData.orderItems || []
-  const items = rawItems.map((item) => ({
-    item_id: String(item.id || item.productId || ''),
-    item_name: String(item.title || item.name || ''),
-    price: Number(item.price || 0),
-    quantity: Number(item.quantity || 1)
-  }))
+  // reloading the success page must not report the purchase twice
+  if (sessionStorage.getItem(storageKey)) return
 
   trackEvent('purchase', {
     transaction_id: transactionId,
-    value: totalValue,
+    value: Number(orderData.finalTotal || 0),
     currency: 'TWD',
-    items: items
+    items: (orderData.items || []).map((item) => ({
+      item_id: String(item.id || ''),
+      item_name: String(item.name || ''),
+      price: Number(item.price || 0),
+      quantity: Number(item.quantity || 1)
+    }))
   })
 
   sessionStorage.setItem(storageKey, 'true')
-  console.log(`GA4 金流追蹤成功！訂單號: ${transactionId}, 金額: ${totalValue}`)
 }
 
 async function loadOrder() {
-  if (!orderId.value) {
-    return
-  }
+  if (!orderId.value) return
 
   try {
-    const result =
-      await fetchOrderById(
-        orderId.value
-      )
+    order.value = await fetchBuyerOrder(orderId.value)
+    if (!order.value) return
 
-    if (!result) {
-      return
-    }
-
-    order.value = result
-
-    trackGA4Purchase(result)
+    trackGA4Purchase(order.value)
 
     await nextTick()
-
-    await generateQrCode()
+    if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value.id)
   } catch (error) {
-    console.error(
-      '訂單載入失敗：',
-      error
-    )
+    console.error('訂單載入失敗：', error)
   }
 }
 

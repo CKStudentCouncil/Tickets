@@ -127,8 +127,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from 'src/boot/firebase'
+import { fetchTicketTypes, getTicketStatus } from 'src/services/ticketTypeService'
 
 const ticketTypes = ref([])
 const loadingTicketTypes = ref(true)
@@ -136,10 +135,7 @@ const ticketTypesError = ref(false)
 const collectionSection = ref(null)
 
 const availableTicketTypes = computed(() =>
-  ticketTypes.value.filter((ticketType) => {
-    const status = getTicketStatus(ticketType)
-    return status.state !== 'ended'
-  })
+  ticketTypes.value.filter((ticketType) => getTicketStatus(ticketType).state !== 'ended')
 )
 
 function scrollToCollection() {
@@ -151,25 +147,7 @@ async function loadTicketTypes() {
   ticketTypesError.value = false
 
   try {
-    const snapshot = await getDoc(
-      doc(db, 'settings', 'ticketTypes')
-    )
-
-    if (!snapshot.exists()) {
-      ticketTypes.value = []
-      return
-    }
-
-    const data = snapshot.data()
-
-    ticketTypes.value = Array.isArray(data.types)
-      ? data.types.filter(
-          (ticketType) =>
-            ticketType &&
-            ticketType.id &&
-            ticketType.name
-        )
-      : []
+    ticketTypes.value = await fetchTicketTypes()
   } catch (error) {
     console.error('Load ticket types error:', error)
     ticketTypesError.value = true
@@ -179,51 +157,7 @@ async function loadTicketTypes() {
   }
 }
 
-function getTicketStatus(ticketType) {
-  const now = new Date()
-
-  if (!ticketType.salesStartTime || !ticketType.salesEndTime) {
-    return {
-      state: 'unavailable',
-      label: '尚未開放',
-      className: 'upcoming'
-    }
-  }
-
-  const start = new Date(ticketType.salesStartTime)
-  const end = new Date(ticketType.salesEndTime)
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return {
-      state: 'unavailable',
-      label: '尚未開放',
-      className: 'upcoming'
-    }
-  }
-
-  if (now < start) {
-    return {
-      state: 'upcoming',
-      label: '尚未開賣',
-      className: 'upcoming'
-    }
-  }
-
-  if (now > end) {
-    return {
-      state: 'ended',
-      label: '已結束',
-      className: 'ended'
-    }
-  }
-
-  return {
-    state: 'selling',
-    label: '販售中',
-    className: 'selling'
-  }
-}
-
+// Optional artwork in public/images/; hidden when the file does not exist
 function getTicketImage(ticketType) {
   return `/images/ticket-${ticketType.id}.png`
 }

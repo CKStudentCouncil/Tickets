@@ -81,13 +81,7 @@
             <strong class="price">
               <span class="currency">NT$</span>
               <span class="num">
-                {{
-                  Number(
-                    order.finalTotal ??
-                    order.total ??
-                    0
-                  ).toLocaleString()
-                }}
+                {{ Number(order.finalTotal || 0).toLocaleString() }}
               </span>
             </strong>
 
@@ -107,7 +101,7 @@
                 title="從我的購票紀錄移除"
                 @click="confirmDelete(order.id)"
               >
-                刪除訂單
+                從紀錄移除
               </button>
             </div>
           </div>
@@ -172,7 +166,7 @@
         />
 
         <p class="qr-modal-hint">
-          出示 QR Code 以領取商品
+          入場或領票時請出示此 QR Code
         </p>
       </div>
     </q-dialog>
@@ -180,21 +174,11 @@
 </template>
 
 <script setup>
-import {
-  nextTick,
-  onMounted,
-  ref
-} from 'vue'
-
-import QRCode from 'qrcode'
-
+import { nextTick, onMounted, ref } from 'vue'
 import { useToastStore } from 'src/stores/toast'
-
-import {
-  deleteOrderById,
-  fetchBuyerOrders,
-  formatOrderDate
-} from 'src/services/orderService'
+import { fetchBuyerOrders, forgetBuyerOrder } from 'src/services/orderService'
+import { formatDateTime as formatDate } from 'src/utils/datetime'
+import { renderOrderQr } from 'src/utils/qrcode'
 
 const toast = useToastStore()
 
@@ -208,9 +192,7 @@ const activeOrder = ref(null)
 const modalQrCanvas = ref(null)
 
 function setQrRef(id, el) {
-  if (el) {
-    qrRefs.set(id, el)
-  }
+  if (el) qrRefs.set(id, el)
 }
 
 async function renderQrs() {
@@ -218,34 +200,12 @@ async function renderQrs() {
 
   for (const order of orders.value) {
     const canvas = qrRefs.get(order.id)
-
-    if (!canvas) {
-      continue
-    }
-
-    const url =
-      `${window.location.origin}/orders/${order.id}`
+    if (!canvas) continue
 
     try {
-      await QRCode.toCanvas(
-        canvas,
-        url,
-        {
-          width: 88,
-          height: 88,
-          margin: 1,
-          errorCorrectionLevel: 'M',
-          color: {
-            dark: '#050608',
-            light: '#ffffff'
-          }
-        }
-      )
+      await renderOrderQr(canvas, order.id, 88)
     } catch (error) {
-      console.error(
-        `QR Code 產生失敗：${order.id}`,
-        error
-      )
+      console.error(`QR Code 產生失敗：${order.id}`, error)
     }
   }
 }
@@ -254,16 +214,11 @@ async function loadOrders() {
   loading.value = true
 
   try {
-    orders.value =
-      await fetchBuyerOrders()
+    orders.value = await fetchBuyerOrders()
   } catch (error) {
     console.error(error)
-
     orders.value = []
-
-    toast.show(
-      '目前無法載入訂單，請稍後再試。'
-    )
+    toast.show('目前無法載入訂單，請稍後再試。')
   } finally {
     loading.value = false
   }
@@ -278,46 +233,14 @@ async function openQr(order) {
   showQr.value = true
 
   await nextTick()
-
-  const canvas =
-    modalQrCanvas.value
-
-  if (!canvas) {
-    return
-  }
-
-  const url =
-    `${window.location.origin}/orders/${order.id}`
+  if (!modalQrCanvas.value) return
 
   try {
-    await QRCode.toCanvas(
-      canvas,
-      url,
-      {
-        width: 220,
-        height: 220,
-        margin: 2,
-        errorCorrectionLevel: 'M',
-        color: {
-          dark: '#050608',
-          light: '#ffffff'
-        }
-      }
-    )
+    await renderOrderQr(modalQrCanvas.value, order.id)
   } catch (error) {
-    console.error(
-      'QR Code 產生失敗',
-      error
-    )
-
-    toast.show(
-      'QR Code 產生失敗'
-    )
+    console.error('QR Code 產生失敗', error)
+    toast.show('QR Code 產生失敗')
   }
-}
-
-function formatDate(timestamp) {
-  return formatOrderDate(timestamp)
 }
 
 function shortId(id) {
@@ -325,66 +248,33 @@ function shortId(id) {
 }
 
 function itemSummary(items = []) {
-  if (
-    !Array.isArray(items) ||
-    items.length === 0
-  ) {
-    return '0 件商品'
+  if (!Array.isArray(items) || items.length === 0) {
+    return '0 張票'
   }
 
-  const count =
-    items.reduce(
-      (total, item) =>
-        total +
-        Number(
-          item.quantity || 0
-        ),
-      0
-    )
+  const count = items.reduce((total, item) => total + Number(item.quantity || 0), 0)
+  const names = items
+    .map((item) => item.name)
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('、')
 
-  const names =
-    items
-      .map((item) => item.name)
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('、')
-
-  return (
-    `${count} 件商品 · ${names}` +
-    `${items.length > 2 ? '…' : ''}`
-  )
+  return `${count} 張票 · ${names}${items.length > 2 ? '…' : ''}`
 }
 
-async function confirmDelete(orderId) {
+function confirmDelete(orderId) {
   if (
     !window.confirm(
-      '確定要從本機購票紀錄移除這筆訂單嗎？\nFirestore 中的正式訂單不會被刪除。'
+      '確定要從這台裝置的購票紀錄移除這筆訂單嗎？\n訂單本身不會被取消，但移除後將無法在此裝置查看。'
     )
   ) {
     return
   }
 
-  try {
-    await deleteOrderById(orderId)
-
-    orders.value =
-      orders.value.filter(
-        (order) =>
-          order.id !== orderId
-      )
-
-    qrRefs.delete(orderId)
-
-    toast.show(
-      '已從你的購票紀錄移除。'
-    )
-  } catch (error) {
-    console.error(error)
-
-    toast.show(
-      '目前無法移除訂單，請稍後再試。'
-    )
-  }
+  forgetBuyerOrder(orderId)
+  orders.value = orders.value.filter((order) => order.id !== orderId)
+  qrRefs.delete(orderId)
+  toast.show('已從你的購票紀錄移除。')
 }
 </script>
 

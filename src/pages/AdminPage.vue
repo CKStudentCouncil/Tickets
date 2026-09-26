@@ -1,9 +1,9 @@
 <template>
   <div
-    v-if="auth.loading || checkingAdmin"
+    v-if="auth.loading"
     class="state-screen"
   >
-    <p>{{ auth.loading ? '載入中...' : '驗證權限中...' }}</p>
+    <p>載入中...</p>
   </div>
 
   <div
@@ -63,7 +63,6 @@
         v-model="customerSearchInput"
         type="text"
         placeholder="輸入姓名、Email 或電話號碼"
-        @input="debouncedCustomerSearch"
       >
     </div>
 
@@ -121,7 +120,7 @@
               :class="{ active: notifyForm.type === 'pickup' }"
               @click="notifyForm.type = 'pickup'"
             >
-              領貨
+              領票
             </button>
             <button
               type="button"
@@ -129,7 +128,7 @@
               :class="{ active: notifyForm.type === 'both' }"
               @click="notifyForm.type = 'both'"
             >
-              繳費暨領貨
+              繳費暨領票
             </button>
             <button
               type="button"
@@ -161,7 +160,7 @@
           <input
             v-model="notifyForm.subject"
             type="text"
-            placeholder="例如：關於校慶紀念品的重要通知"
+            placeholder="例如：關於建中舞會的重要通知"
           >
         </label>
 
@@ -175,7 +174,7 @@
         </label>
 
         <label v-if="notifyForm.type !== 'payment' && notifyForm.type !== 'custom'" class="field">
-          <span>領貨時間</span>
+          <span>領票時間</span>
           <input
             v-model="notifyForm.pickupTime"
             type="text"
@@ -184,7 +183,7 @@
         </label>
 
         <label v-if="notifyForm.type !== 'custom'" class="field">
-          <span>{{ notifyForm.type === 'both' ? '地點（繳費與領貨共用）' : '地點' }}</span>
+          <span>{{ notifyForm.type === 'both' ? '地點（繳費與領票共用）' : '地點' }}</span>
           <input
             v-model="notifyForm.location"
             type="text"
@@ -197,7 +196,7 @@
           <textarea
             v-model="notifyForm.message"
             rows="4"
-            :placeholder="notifyForm.type === 'custom' ? '請輸入要寄送給訂購者的訊息內容' : '例如：請出示 QR Code 給工作人員，以完成繳費或領貨。'"
+            :placeholder="notifyForm.type === 'custom' ? '請輸入要寄送給訂購者的訊息內容' : '例如：請出示 QR Code 給工作人員，以完成繳費或領票。'"
           />
         </label>
 
@@ -209,7 +208,7 @@
           </template>
           <template v-else>
             <p v-if="notifyForm.type !== 'pickup'">繳費時間：<strong>{{ notifyForm.paymentTime || '（尚未填寫）' }}</strong></p>
-            <p v-if="notifyForm.type !== 'payment'">領貨時間：<strong>{{ notifyForm.pickupTime || '（尚未填寫）' }}</strong></p>
+            <p v-if="notifyForm.type !== 'payment'">領票時間：<strong>{{ notifyForm.pickupTime || '（尚未填寫）' }}</strong></p>
             <p>地點：<strong>{{ notifyForm.location || '（尚未填寫）' }}</strong></p>
             <p v-if="notifyForm.message">補充說明：{{ notifyForm.message }}</p>
           </template>
@@ -252,10 +251,6 @@
             <div>{{ activeTab === 'delivered' ? '已領票營收' : '總營收' }}</div>
             <div class="num">NT$ {{ currentStats.totalRevenue }}</div>
           </div>
-          <div class="stat">
-            <div>折扣總額</div>
-            <div class="num">NT$ {{ currentStats.totalDiscount }}</div>
-          </div>
         </div>
       </div>
       <button
@@ -266,21 +261,6 @@
         匯出 Excel
       </button>
     </div>
-
-    <!--<div v-if="canManageOrders" class="panel export-panel">
-      <div>
-        <h2>班代領取收據</h2>
-        <p class="panel-copy">依目前的學校篩選，產生所有班級的領取收據；每個班級會有獨立頁面。</p>
-      </div>
-      <button
-        type="button"
-        class="btn"
-        :disabled="generatingClassReceipts"
-        @click="downloadAllClassReceipts"
-      >
-        {{ generatingClassReceipts ? '開啟中...' : '產生所有班級收據' }}
-      </button>
-    </div>-->
 
     <div
       v-if="canManageOrders && activeTab === 'delivered' && Object.keys(deliveryStats).length > 0"
@@ -324,7 +304,7 @@
       v-if="canManageOrders"
       class="orders-section"
     >
-      <h2>{{ activeTab === 'delivered' ? '已領跳訂單' : '所有訂單' }}</h2>
+      <h2>{{ activeTab === 'delivered' ? '已領票訂單' : '所有訂單' }}</h2>
       <div
         v-for="order in currentOrders"
         :key="order.id"
@@ -389,8 +369,6 @@
         <p><strong>訂單ID：</strong><span class="mono">{{ order.id }}</span></p>
         <p><strong>折扣後金額：</strong><span class="num">NT$ {{ order.finalTotal }}</span></p>
         <p><strong>購買時間：</strong><span class="num">{{ formatDate(order.createdAt) }}</span></p>
-        <!--<p><strong>最後付款更新者：</strong>{{ order.paymentUpdatedByName || '—' }}</p>
-        <p><strong>最後付款更新時間：</strong>{{ order.paymentUpdatedAt ? formatDate(order.paymentUpdatedAt) : '—' }}</p>-->
         <p><strong>最後領票更新者：</strong>{{ order.deliveryUpdatedByName || '—' }}</p>
         <p><strong>最後領票更新時間：</strong>{{ order.deliveryUpdatedAt ? formatDate(order.deliveryUpdatedAt) : '—' }}</p>
         <div
@@ -405,6 +383,7 @@
             <li v-if="order.school">學校：{{ order.school }}</li>
             <li v-if="order.class">班級：{{ order.class }}</li>
             <li v-if="order.number">座號：{{ order.number }}</li>
+            <li v-if="order.office">辦公室：{{ order.office }}</li>
           </ul>
         </div>
         <div class="items-box">
@@ -443,37 +422,37 @@
 <script setup>
 import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { doc, getDoc } from 'firebase/firestore'
-import { getFunctions, httpsCallable } from 'firebase/functions'
-import { db } from 'src/boot/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { useAdminOrders } from 'src/composables/useAdminOrders'
-import { USE_MOCK_ORDERS, MOCK_ALLOW_ADMIN_WITHOUT_AUTH } from 'src/config/app'
 
 const router = useRouter()
 const auth = useAuthStore()
-const canAccessAdmin = computed(
-  () => auth.isManager || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
-)
-const canManageOrders = computed(
-  () => auth.isAdmin || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
-)
 const toast = useToastStore()
-const displayName = ref('管理員')
-const checkingAdmin = ref(true)
+
+// Managers only get the notification tools; admins also manage orders
+const canAccessAdmin = computed(() => auth.isManager)
+const canManageOrders = computed(() => auth.isAdmin)
+
+const DEFAULT_NOTIFY_MESSAGE = '請出示 QR Code 給工作人員，以完成繳費或領票。'
+
+function createNotifyForm(school = 'all') {
+  return {
+    type: 'payment',
+    school,
+    subject: '',
+    paymentTime: '',
+    pickupTime: '',
+    location: '',
+    message: DEFAULT_NOTIFY_MESSAGE
+  }
+}
+
 const showNotifyModal = ref(false)
 const sendingNotify = ref(false)
-const generatingClassReceipts = ref(false)
-const notifyForm = ref({
-  type: 'payment',
-  school: 'all',
-  subject: '',
-  paymentTime: '',
-  pickupTime: '',
-  location: '',
-  message: '請出示 QR Code 給工作人員，以完成繳費或領貨。'
-})
+const notifyForm = ref(createNotifyForm())
 
 const {
   schools,
@@ -482,7 +461,6 @@ const {
   activeTab,
   selectedSchool,
   customerSearchInput,
-  debouncedCustomerSearch,
   currentOrders,
   deliveredTabCount,
   currentStats,
@@ -494,23 +472,20 @@ const {
   exportToExcel,
   calculateDeliveryStats,
   formatDate
-} = useAdminOrders({
-  showToast: toast.show,
-  displayName
-})
+} = useAdminOrders({ showToast: toast.show })
 
 const deliveryStats = computed(() => calculateDeliveryStats(currentOrders.value))
 
-const notifyRecipientOrders = computed(() => {
-  if (notifyForm.value.school === 'all') return orders.value
-  return orders.value.filter((order) => order.school === notifyForm.value.school)
-})
-
+// Mirrors the recipient filtering in functions/lib/notifications.js
 const notifyRecipientCount = computed(() => {
   const emails = new Set()
-  notifyRecipientOrders.value.forEach((order) => {
-    if (order.customerEmail) emails.add(order.customerEmail)
+
+  orders.value.forEach((order) => {
+    if (notifyForm.value.school !== 'all' && order.school !== notifyForm.value.school) return
+    const email = String(order.customerEmail || '').trim().toLowerCase()
+    if (email) emails.add(email)
   })
+
   return emails.size
 })
 
@@ -518,22 +493,7 @@ const notifyTargetSchoolLabel = computed(() =>
   notifyForm.value.school === 'all' ? '全部學校' : notifyForm.value.school
 )
 
-async function loadAdminProfile() {
-  if (auth.user) {
-    try {
-      const userDoc = await getDoc(doc(db, 'users', auth.user.uid))
-      displayName.value = userDoc.exists()
-        ? userDoc.data().name || auth.user.displayName || auth.user.email
-        : auth.user.displayName || auth.user.email
-    } catch {
-      displayName.value = auth.user.displayName || auth.user.email || '管理員'
-    }
-  }
-}
-
-onMounted(async () => {
-  await loadAdminProfile()
-  checkingAdmin.value = false
+onMounted(() => {
   if (canAccessAdmin.value) fetchOrders()
 })
 
@@ -545,119 +505,6 @@ function viewOrderDetail(orderId) {
   router.push({ name: 'admin-order-detail', params: { id: orderId } })
 }
 
-function downloadAllClassReceipts() {
-  if (loading.value) {
-    toast.show('訂單資料載入中，請稍後再試')
-    return
-  }
-
-  const classOrders = orders.value.filter(
-    (order) =>
-      getClassName(order) &&
-      (selectedSchool.value === 'all' || order.school === selectedSchool.value)
-  )
-  if (!classOrders.length) {
-    toast.show('目前篩選條件下沒有可產生收據的班級訂單')
-    return
-  }
-
-  const printWindow = window.open('', '_blank')
-  if (!printWindow) {
-    toast.show('無法開啟列印視窗，請允許此網站開啟彈出式視窗後再試一次')
-    return
-  }
-
-  generatingClassReceipts.value = true
-  try {
-    printWindow.document.write(buildAllClassReceiptsHtml(classOrders))
-    printWindow.document.close()
-    printWindow.focus()
-    window.setTimeout(() => printWindow.print(), 300)
-  } catch (error) {
-    console.error('All class receipts generation failed:', error)
-    printWindow.close()
-    toast.show('班級收據產生失敗，請再試一次')
-  } finally {
-    generatingClassReceipts.value = false
-  }
-}
-
-function getClassName(order) {
-  return order.class || order.classNumber || ''
-}
-
-function escapeHtml(value) {
-  return String(value ?? '—')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-}
-
-function buildAllClassReceiptsHtml(classOrders) {
-  const groupedOrders = classOrders.reduce((groups, order) => {
-    const key = `${order.school}\u0000${getClassName(order)}`
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(order)
-    return groups
-  }, new Map())
-
-  const receipts = [...groupedOrders.entries()]
-    .sort(([firstKey], [secondKey]) => firstKey.localeCompare(secondKey, 'zh-Hant'))
-    .map(([, grouped]) => buildClassReceiptSection(grouped))
-    .join('')
-
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>所有班級代表領取收據</title>
-    <style>
-      @page { size: A4 portrait; margin: 12mm; } * { box-sizing: border-box; }
-      body { margin: 0; color: #111; font-family: 'Noto Sans TC', 'Microsoft JhengHei', Arial, sans-serif; }
-      .class-sheet { height: 273mm; break-after: page; page-break-after: always; } .class-sheet:last-child { break-after: auto; page-break-after: auto; }
-      .receipt { height: 134mm; padding: 3mm 4mm; border: 1px solid #222; overflow: hidden; } .receipt + .receipt { margin-top: 5mm; border-top: 1px dashed #555; }
-      header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 2mm; border-bottom: 1px solid #222; }
-      header p { margin: 0 0 1px; font-size: 8pt; font-weight: 600; } h1 { margin: 0; font-size: 14pt; letter-spacing: .06em; } header strong { font-size: 8pt; }
-      .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1mm 6mm; margin: 2mm 0; font-size: 8pt; }
-      .notice { margin: 2mm 0; padding: 1.5mm; border: 1px solid #555; background: #f5f5f5; font-size: 7pt; }
-      table { width: 100%; border-collapse: collapse; font-size: 7.5pt; } th, td { padding: 1mm 1.5mm; border: 1px solid #555; vertical-align: top; } th { background: #f0f0f0; } th:nth-child(1), td:nth-child(1), th:nth-child(4), td:nth-child(4) { text-align: right; white-space: nowrap; }
-      .summary { display: flex; justify-content: flex-end; gap: 6mm; margin: 2mm 0; font-size: 8pt; } .summary strong { font-size: 10pt; }
-      footer { display: flex; justify-content: space-between; gap: 6mm; margin-top: 5mm; font-size: 8pt; } footer p { margin: 0; } footer span { display: inline-block; width: 48mm; border-bottom: 1px solid #111; }
-    </style></head><body>${receipts}<script>window.onafterprint = () => window.close()<\/script></body></html>`
-}
-
-function buildClassReceiptSection(groupedOrders) {
-  const firstOrder = groupedOrders[0]
-  const sortedOrders = [...groupedOrders].sort((a, b) =>
-    String(a.number || '').localeCompare(String(b.number || ''), 'zh-Hant', { numeric: true })
-  )
-  const totalAmount = sortedOrders.reduce((sum, order) => sum + Number(order.finalTotal || 0), 0)
-  const totalItems = sortedOrders.reduce(
-    (sum, order) => sum + (order.items || []).reduce(
-      (itemSum, item) => itemSum + Number(item.quantity || 0),
-      0
-    ),
-    0
-  )
-  const studentRows = sortedOrders
-    .map((order) => {
-      const products = (order.items || [])
-        .map((item) => `${escapeHtml(item.name)} ×${escapeHtml(item.quantity)}`)
-        .join('<br>')
-      return `<tr><td>${escapeHtml(order.number)}</td><td>${escapeHtml(order.customerName)}</td><td>${products}</td><td>NT$ ${escapeHtml(order.finalTotal)}</td></tr>`
-    })
-    .join('')
-
-  const makeCopy = (copyLabel) => `<section class="receipt">
-    <header><div><p>建國中學班聯會</p><h1>班級代表領取收據</h1></div><strong>${copyLabel}</strong></header>
-    <div class="meta"><span>學校：${escapeHtml(firstOrder.school)}</span><span>班級：${escapeHtml(getClassName(firstOrder))}</span><span>訂單數量：${sortedOrders.length} 份</span><span>產生日期：${escapeHtml(formatDate(new Date()))}</span></div>
-    <p class="notice">班級代表確認已代為領取下列同班同學的紀念品，並應將商品轉交給各訂購人。</p>
-    <table><thead><tr><th>座號</th><th>學生姓名</th><th>訂購品項</th><th>訂單金額</th></tr></thead><tbody>${studentRows}</tbody></table>
-    <div class="summary"><span>商品總件數：<b>${totalItems}</b></span><span>訂單總額：<strong>NT$ ${totalAmount}</strong></span></div>
-    <footer><p>班級代表簽名：<span></span></p><p>班聯會工作人員簽名：<span></span></p></footer>
-  </section>`
-
-  return `<section class="class-sheet">${makeCopy('班聯會留存聯')}${makeCopy('班級代表收執聯')}</section>`
-}
-
 function confirmDelete(orderId) {
   if (!window.confirm(`確定要刪除此訂單嗎？\nID: ${orderId}`)) return
   deleteOrder(orderId).catch(() => toast.show('刪除失敗'))
@@ -665,9 +512,9 @@ function confirmDelete(orderId) {
 
 const notifyTypeLabel = computed(() => {
   if (notifyForm.value.type === 'payment') return '繳費通知'
-  if (notifyForm.value.type === 'pickup') return '領貨通知'
+  if (notifyForm.value.type === 'pickup') return '領票通知'
   if (notifyForm.value.type === 'custom') return '自訂通知'
-  return '繳費暨領貨通知'
+  return '繳費暨領票通知'
 })
 
 const canSendNotify = computed(() => {
@@ -704,8 +551,7 @@ async function confirmSendNotify() {
 
   sendingNotify.value = true
   try {
-    const functionsInstance = getFunctions(undefined, 'asia-east1')
-    const sendOrderNotification = httpsCallable(functionsInstance, 'sendOrderNotification')
+    const sendOrderNotification = httpsCallable(functions, 'sendOrderNotification')
     const result = await sendOrderNotification({
       type: notifyForm.value.type,
       school: notifyForm.value.school,
@@ -717,18 +563,10 @@ async function confirmSendNotify() {
     })
     toast.show(`已成功寄送給 ${result.data.sentCount} 位訂購者`)
     showNotifyModal.value = false
-    notifyForm.value = {
-      type: 'payment',
-      school: selectedSchool.value,
-      subject: '',
-      paymentTime: '',
-      pickupTime: '',
-      location: '',
-      message: ''
-    }
+    notifyForm.value = createNotifyForm(selectedSchool.value)
   } catch (error) {
     console.error('Send notification error:', error)
-    toast.show('發送失敗，請稍後再試')
+    toast.show(error?.message ? `發送失敗：${error.message}` : '發送失敗，請稍後再試')
   } finally {
     sendingNotify.value = false
   }
@@ -736,6 +574,5 @@ async function confirmSendNotify() {
 </script>
 
 <style scoped>
-@import 'src/css/app.scss';
 @import 'src/css/adminpage.scss';
 </style>

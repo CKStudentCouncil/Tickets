@@ -7,7 +7,9 @@ import {
 } from 'vue-router'
 import routes from './routes'
 import { useAuthStore } from 'src/stores/auth'
-import { USE_MOCK_ORDERS, MOCK_ALLOW_ADMIN_WITHOUT_AUTH } from 'src/config/app'
+import { SHOP_OPEN_AT } from 'src/config/app'
+
+const SHOP_ROUTES = ['home', 'product', 'order-success', 'orders', 'order-detail']
 
 export default defineRouter(function () {
   const createHistory = process.env.SERVER
@@ -24,55 +26,31 @@ export default defineRouter(function () {
 
   Router.beforeEach(async (to) => {
     const authStore = useAuthStore()
+    await authStore.init()
 
-    if (authStore.loading) {
-      await authStore.init()
-    }
-
-    const mockAdminOk = USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-    const role = authStore.user?.role
-    const hasManagerAccess = ['manager', 'admin', 'super_admin'].includes(role)
-    const hasAdminAccess = ['admin', 'super_admin'].includes(role)
-
-    if (to.meta.requiresManager && !mockAdminOk) {
-      if (!authStore.isLoggedIn || !hasManagerAccess) {
-        return { name: 'comingsoon' }
-      }
-    }
-
-    if (to.meta.isAdminSection && !mockAdminOk) {
+    if (to.meta.isAdminSection) {
       if (!authStore.isLoggedIn) {
         return { name: 'admin-login', query: { redirect: to.fullPath } }
       }
-      if (!hasManagerAccess) {
+      if (!authStore.isManager) {
         return { name: 'home' }
       }
     }
 
-    if (to.meta.requiresAdmin && !mockAdminOk) {
-      if (!hasAdminAccess) {
-        return { name: 'admin' }
-      }
-    }
-
-    if (to.meta.requiresSuperAdmin && !mockAdminOk) {
-      if (!authStore.isSuperAdmin) {
-        return { name: 'admin' }
-      }
-    }
-
-    if (to.name === 'admin-login' && hasManagerAccess) {
+    if (to.meta.requiresAdmin && !authStore.isAdmin) {
       return { name: 'admin' }
     }
 
-    const starttime = new Date('2026-11-05T12:00:00+08:00')
-    const isAfterStartTime = new Date() >= starttime
-    const shopRoutes = ['home', 'product', 'cart', 'order-success', 'orders', 'order-detail']
+    if (to.meta.requiresSuperAdmin && !authStore.isSuperAdmin) {
+      return { name: 'admin' }
+    }
 
-    if (!USE_MOCK_ORDERS && !isAfterStartTime && shopRoutes.includes(to.name)) {
-      if (!hasManagerAccess) {
-        return { name: 'comingsoon' }
-      }
+    if (to.name === 'admin-login' && authStore.isManager) {
+      return { name: 'admin' }
+    }
+
+    if (new Date() < SHOP_OPEN_AT && SHOP_ROUTES.includes(to.name) && !authStore.isManager) {
+      return { name: 'comingsoon' }
     }
 
     return true

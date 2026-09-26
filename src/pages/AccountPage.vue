@@ -235,7 +235,7 @@
       <div class="modal">
         <h2>刪除所有使用者</h2>
         <p class="hint warn">
-          此操作將刪除除了你自己以外的所有使用者資料，且無法復原。
+          此操作將刪除所有幹部帳號與待啟用邀請（系統管理員會保留），且無法復原。
           請注意：這只會刪除資料庫中的使用者資料，不會刪除 Firebase
           Authentication 中已綁定 Google 登入的帳號（需要後端 Admin SDK / Cloud Function
           才能一併刪除登入帳號，避免產生無法登入卻仍存在的孤兒帳號）。
@@ -284,12 +284,9 @@ import {
 import { db } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { USE_MOCK_ORDERS, MOCK_ALLOW_ADMIN_WITHOUT_AUTH } from 'src/config/app'
 
 const auth = useAuthStore()
-const canAccessAdmin = computed(
-  () => auth.isSuperAdmin || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
-)
+const canAccessAdmin = computed(() => auth.isSuperAdmin)
 const toast = useToastStore()
 
 const users = ref([])
@@ -357,12 +354,14 @@ onMounted(async () => {
 async function loadUsers() {
   loading.value = true
   try {
-    const userSnap = await getDocs(collection(db, 'users'))
-    const pendingSnap = await getDocs(collection(db, 'pendingUsers'))
+    const [userSnap, pendingSnap] = await Promise.all([
+      getDocs(collection(db, 'users')),
+      getDocs(collection(db, 'pendingUsers'))
+    ])
 
     users.value = [
-      ...userSnap.docs.map((d) => ({ id: d.id, ...d.data(), role: d.data().role || 'manager' })),
-      ...pendingSnap.docs.map((d) => ({ id: d.id, ...d.data(), role: d.data().role || 'manager' }))
+      ...userSnap.docs.map((d) => ({ ...d.data(), id: d.id, role: d.data().role || 'manager', pending: false })),
+      ...pendingSnap.docs.map((d) => ({ ...d.data(), id: d.id, role: d.data().role || 'manager', pending: true }))
     ]
   } catch {
     toast.show('獲取使用者資料失敗')
@@ -382,12 +381,17 @@ function closeModal() {
   selectedUser.value = null
 }
 
+// Invites live in pendingUsers/{email}; activated accounts in users/{uid}
+function accountRef(user) {
+  return doc(db, user.pending ? 'pendingUsers' : 'users', user.id)
+}
+
 async function applyRole(userId) {
   const user = users.value.find((u) => u.id === userId)
   if (!user) return
   const newRole = pendingRole.value
   try {
-    await updateDoc(doc(db, 'users', userId), {
+    await updateDoc(accountRef(user), {
       role: newRole,
       updatedAt: new Date().toISOString()
     })
@@ -402,9 +406,10 @@ async function applyRole(userId) {
 }
 
 async function deleteUser(userId) {
-  if (!window.confirm('確定要刪除此使用者嗎？')) return
+  const user = users.value.find((u) => u.id === userId)
+  if (!user || !window.confirm('確定要刪除此使用者嗎？')) return
   try {
-    await deleteDoc(doc(db, 'users', userId))
+    await deleteDoc(accountRef(user))
     users.value = users.value.filter((u) => u.id !== userId)
     closeModal()
     toast.show('使用者已刪除')
@@ -439,21 +444,16 @@ async function createUser() {
 
   creating.value = true
   try {
-    const pendingId = doc(collection(db, 'users')).id
+    // keyed by email so the login page and the Firestore rules can look it up
     const record = {
       email,
-      name: newUser.value.name || '',
+      name: newUser.value.name.trim(),
       role: newUser.value.role,
-      uid: null,
-      pending: true,
       createdAt: new Date().toISOString()
     }
-    await setDoc(
-    doc(db, 'pendingUsers', pendingId),
-    record
-  )
+    await setDoc(doc(db, 'pendingUsers', email), record)
 
-    users.value = [...users.value, { id: pendingId, ...record }]
+    users.value = [...users.value, { ...record, id: email, pending: true }]
 
     toast.show('已建立待啟用帳號，該使用者需以此 Email 使用 Google 登入以啟用')
     showCreateModal.value = false
@@ -474,21 +474,33 @@ function closeDeleteAllModal() {
   showDeleteAllModal.value = false
 }
 
+// Firestore batches accept at most 500 writes
+const BATCH_SIZE = 450
+
+// Removes every manager / admin account and invite. Super admins (including
+// yourself) are kept so the system can never be left without one.
 async function deleteAllUsers() {
   if (deleteAllConfirmText.value !== 'DELETE ALL') return
   deletingAll.value = true
-  try {
-    const targets = users.value.filter((u) => u.id !== auth.user?.uid)
-    const batch = writeBatch(db)
-    targets.forEach((u) => batch.delete(doc(db, 'users', u.id)))
-    await batch.commit()
 
-    users.value = users.value.filter((u) => u.id === auth.user?.uid)
+  const targets = users.value.filter((u) => u.role !== 'super_admin' && u.id !== auth.user?.uid)
+  const deletedIds = new Set()
+
+  try {
+    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+      const chunk = targets.slice(i, i + BATCH_SIZE)
+      const batch = writeBatch(db)
+      chunk.forEach((u) => batch.delete(accountRef(u)))
+      await batch.commit()
+      chunk.forEach((u) => deletedIds.add(u.id))
+    }
+
     showDeleteAllModal.value = false
-    toast.show(`已刪除 ${targets.length} 位使用者的資料`)
+    toast.show(`已刪除 ${deletedIds.size} 位使用者的資料（系統管理員已保留）`)
   } catch {
-    toast.show('刪除失敗')
+    toast.show(`刪除中斷：已刪除 ${deletedIds.size} / ${targets.length} 位`)
   } finally {
+    users.value = users.value.filter((u) => !deletedIds.has(u.id))
     deletingAll.value = false
   }
 }

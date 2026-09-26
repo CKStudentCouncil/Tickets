@@ -126,53 +126,23 @@
             <div>
               <dt>建立時間</dt>
               <dd>
-                {{ formatOrderDate(order.createdAt) }}
+                {{ formatDateTime(order.createdAt) }}
               </dd>
             </div>
 
-            <div
-              v-if="
-                order.customerName ||
-                order.buyerName
-              "
-            >
+            <div v-if="order.customerName">
               <dt>購票人</dt>
-              <dd>
-                {{
-                  order.customerName ||
-                  order.buyerName
-                }}
-              </dd>
+              <dd>{{ order.customerName }}</dd>
             </div>
 
-            <div
-              v-if="
-                order.customerEmail ||
-                order.email
-              "
-            >
+            <div v-if="order.customerEmail">
               <dt>Email</dt>
-              <dd>
-                {{
-                  order.customerEmail ||
-                  order.email
-                }}
-              </dd>
+              <dd>{{ order.customerEmail }}</dd>
             </div>
 
-            <div
-              v-if="
-                order.customerPhone ||
-                order.phone
-              "
-            >
+            <div v-if="order.customerPhone">
               <dt>聯絡電話</dt>
-              <dd>
-                {{
-                  order.customerPhone ||
-                  order.phone
-                }}
-              </dd>
+              <dd>{{ order.customerPhone }}</dd>
             </div>
 
             <div v-if="order.school">
@@ -180,24 +150,19 @@
               <dd>{{ order.school }}</dd>
             </div>
 
-            <div
-              v-if="
-                order.class ||
-                order.className
-              "
-            >
+            <div v-if="order.class">
               <dt>班級</dt>
-              <dd>
-                {{
-                  order.class ||
-                  order.className
-                }}
-              </dd>
+              <dd>{{ order.class }}</dd>
             </div>
 
             <div v-if="order.number">
               <dt>座號</dt>
               <dd>{{ order.number }}</dd>
+            </div>
+
+            <div v-if="order.office">
+              <dt>辦公室</dt>
+              <dd>{{ order.office }}</dd>
             </div>
           </dl>
         </section>
@@ -211,29 +176,13 @@
           <div class="receipt-items">
             <div
               v-for="(item, index) in order.items || []"
-              :key="
-                item.id ||
-                item.ticketTypeId ||
-                index
-              "
+              :key="item.id || index"
               class="receipt-item"
             >
               <div class="item-main">
                 <strong>
                   {{ item.name }}
                 </strong>
-
-                <span v-if="item.variant">
-                  {{ item.variant }}
-                </span>
-
-                <span
-                  v-if="
-                    item.eligibleBuyerIdentity
-                  "
-                >
-                  {{ item.eligibleBuyerIdentity }}
-                </span>
               </div>
 
               <div class="item-meta">
@@ -262,7 +211,6 @@
               {{
                 Number(
                   order.finalTotal ??
-                  order.total ??
                   0
                 ).toLocaleString()
               }}
@@ -347,34 +295,18 @@
 </template>
 
 <script setup>
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
-  computed,
-  nextTick,
-  onMounted,
-  ref
-} from 'vue'
-
-import {
-  useRoute,
-  useRouter
-} from 'vue-router'
-
-import QRCode from 'qrcode'
-
-import {
+  fetchBuyerOrder,
   fetchOrderById,
-  canViewOrder,
-  updateOrderDelivery,
-  formatOrderDate
-} from 'src/services/orderService.js'
-
+  updateOrderDelivery
+} from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-
-import {
-  USE_MOCK_ORDERS,
-  MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-} from 'src/config/app'
+import { formatDateTime } from 'src/utils/datetime'
+import { escapeHtml } from 'src/utils/text'
+import { renderOrderQr } from 'src/utils/qrcode'
 
 const route = useRoute()
 const router = useRouter()
@@ -386,180 +318,53 @@ const loading = ref(true)
 const order = ref(null)
 const qrCanvas = ref(null)
 
-const orderId = computed(() => {
-  return String(route.params.id || '')
-})
+const orderId = computed(() => String(route.params.id || ''))
 
-const canAccessAdmin = computed(() => {
-  return (
-    auth.isManager ||
-    (
-      USE_MOCK_ORDERS &&
-      MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-    )
-  )
-})
-
-const isAdminView = computed(() => {
-  return (
-    route.path.startsWith('/admin') &&
-    canAccessAdmin.value
-  )
-})
-
-async function renderQrCode() {
-  await nextTick()
-
-  if (!order.value?.id) {
-    return
-  }
-
-  const canvas = qrCanvas.value
-
-  if (!canvas) {
-    console.error('QR Code canvas not found')
-    return
-  }
-
-  const url =
-    `https://tickets.cksc.tw/orders/${order.value.id}`
-
-  try {
-    await QRCode.toCanvas(
-      canvas,
-      url,
-      {
-        width: 220,
-        height: 220,
-        margin: 2,
-        errorCorrectionLevel: 'M',
-        color: {
-          dark: '#050608',
-          light: '#ffffff'
-        }
-      }
-    )
-
-    console.log(
-      `QR Code generated: ${url}`
-    )
-  } catch (error) {
-    console.error(
-      `QR Code 產生失敗：${order.value.id}`,
-      error
-    )
-
-    toast.show(
-      'QR Code 產生失敗'
-    )
-  }
-}
+// /admin/orders/:id is only reachable by managers (router guard)
+const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.isManager)
 
 async function loadOrder() {
   loading.value = true
 
   try {
-    if (!orderId.value) {
-      order.value = null
-      return
-    }
+    const result = isAdminView.value
+      ? await fetchOrderById(orderId.value)
+      : await fetchBuyerOrder(orderId.value)
 
-    const result =
-      await fetchOrderById(
-        orderId.value
-      )
-
-    if (!result) {
-      order.value = null
-      return
-    }
-
-    if (!isAdminView.value) {
-      const allowed =
-        canViewOrder(
-          orderId.value
-        )
-
-      if (!allowed) {
-        order.value = null
-        return
-      }
-    }
-
-    order.value = {
-      ...result,
-      delivered: Boolean(
-        result.delivered
-      )
-    }
-
-    loading.value = false
-
-    await renderQrCode()
+    order.value = result ? { ...result, delivered: Boolean(result.delivered) } : null
   } catch (error) {
-    console.error(
-      'Failed to load order:',
-      error
-    )
-
-    toast.show(
-      '載入訂單失敗'
-    )
-
+    console.error('Failed to load order:', error)
+    toast.show('載入訂單失敗')
     order.value = null
   } finally {
     loading.value = false
   }
+
+  if (!order.value) return
+
+  await nextTick()
+
+  try {
+    if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value.id)
+  } catch (error) {
+    console.error(`QR Code 產生失敗：${order.value.id}`, error)
+    toast.show('QR Code 產生失敗')
+  }
 }
 
 async function setDelivered(delivered) {
-  if (
-    !isAdminView.value ||
-    !order.value ||
-    order.value.delivered === delivered
-  ) {
+  if (!isAdminView.value || !order.value || order.value.delivered === delivered) {
     return
   }
 
   try {
-    const patch =
-      await updateOrderDelivery(
-        order.value.id,
-        delivered,
-        {
-          deliveryUpdatedByName:
-            auth.user?.name ||
-            '管理員'
-        }
-      )
-
-    order.value = {
-      ...order.value,
-      ...patch,
-      delivered
-    }
-
-    toast.show(
-      delivered
-        ? '已標記為已領票'
-        : '已標記為未領票'
-    )
+    const patch = await updateOrderDelivery(order.value.id, delivered, auth.displayName)
+    order.value = { ...order.value, ...patch }
+    toast.show(delivered ? '已標記為已領票' : '已標記為未領票')
   } catch (error) {
     console.error(error)
-
-    toast.show(
-      '更新領票狀態失敗'
-    )
+    toast.show('更新領票狀態失敗')
   }
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }
 
 function buildReceiptHtml() {
@@ -586,17 +391,6 @@ function buildReceiptHtml() {
         <tr>
           <td>
             ${escapeHtml(item.name)}
-            ${
-              item.variant
-                ? `
-                  <div class="sub">
-                    ${escapeHtml(
-                      item.variant
-                    )}
-                  </div>
-                `
-                : ''
-            }
           </td>
 
           <td class="center">
@@ -611,26 +405,10 @@ function buildReceiptHtml() {
     })
     .join('')
 
-  const total = Number(
-    currentOrder.finalTotal ??
-    currentOrder.total ??
-    0
-  )
-
-  const buyerName =
-    currentOrder.customerName ||
-    currentOrder.buyerName ||
-    '—'
-
-  const email =
-    currentOrder.customerEmail ||
-    currentOrder.email ||
-    '—'
-
-  const phone =
-    currentOrder.customerPhone ||
-    currentOrder.phone ||
-    '—'
+  const total = Number(currentOrder.finalTotal || 0)
+  const buyerName = currentOrder.customerName || '—'
+  const email = currentOrder.customerEmail || '—'
+  const phone = currentOrder.customerPhone || '—'
 
   return `
 <!doctype html>
@@ -815,10 +593,33 @@ function buildReceiptHtml() {
           ${escapeHtml(phone)}
         </div>
 
+        <div class="label">學校</div>
+        <div>
+          ${escapeHtml(currentOrder.school || '—')}
+        </div>
+${
+  currentOrder.class
+    ? `
+        <div class="label">班級 / 座號</div>
+        <div>
+          ${escapeHtml(currentOrder.class)} / ${escapeHtml(currentOrder.number || '—')}
+        </div>
+`
+    : ''
+}${
+  currentOrder.office
+    ? `
+        <div class="label">辦公室</div>
+        <div>
+          ${escapeHtml(currentOrder.office)}
+        </div>
+`
+    : ''
+}
         <div class="label">建立時間</div>
         <div>
           ${escapeHtml(
-            formatOrderDate(
+            formatDateTime(
               currentOrder.createdAt
             )
           )}

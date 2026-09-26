@@ -106,79 +106,24 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import {
-  collection,
-  getDocs
-} from 'firebase/firestore'
-
+import { collection, getDocs } from 'firebase/firestore'
 import { db } from 'src/boot/firebase'
+import { formatLongDate as formatDate, isPublished } from 'src/utils/datetime'
+import { splitParagraphs as getParagraphs } from 'src/utils/text'
 
 const stories = ref([])
 const loading = ref(true)
-
-function getParagraphs(content) {
-  if (!content) return []
-
-  return content
-    .split(/\r?\n/)
-    .map(paragraph => paragraph.trim())
-    .filter(Boolean)
-}
-
-function formatDate(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  }).format(date)
-}
 
 async function loadStories() {
   loading.value = true
 
   try {
-    const snapshot = await getDocs(
-      collection(db, 'partyStories')
-    )
-
-    const now = new Date()
+    const snapshot = await getDocs(collection(db, 'partyStories'))
 
     stories.value = snapshot.docs
-      .map(document => ({
-        id: document.id,
-        ...document.data()
-      }))
-      .filter(story => {
-        if (story.enabled === false) {
-          return false
-        }
-
-        if (!story.publishAt) {
-          return false
-        }
-
-        const publishAt = new Date(story.publishAt)
-
-        return (
-          !Number.isNaN(publishAt.getTime()) &&
-          publishAt <= now
-        )
-      })
-      .sort((a, b) => {
-        return (
-          (Number(a.order) || 0) -
-          (Number(b.order) || 0)
-        )
-      })
-
+      .map((document) => ({ id: document.id, ...document.data() }))
+      .filter((story) => story.enabled !== false && isPublished(story.publishAt))
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
   } catch (error) {
     console.error('Load party stories error:', error)
   } finally {
@@ -186,9 +131,7 @@ async function loadStories() {
   }
 }
 
-onMounted(() => {
-  loadStories()
-})
+onMounted(loadStories)
 </script>
 
 <style scoped lang="scss">

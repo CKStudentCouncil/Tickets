@@ -209,19 +209,11 @@
 </template>
 
 <script setup>
-import {
-  collection,
-  getDocs
-} from 'firebase/firestore'
-
-import {
-  computed,
-  onMounted,
-  onUnmounted,
-  ref
-} from 'vue'
-
+import { collection, getDocs } from 'firebase/firestore'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { db } from 'src/boot/firebase'
+import { formatLongDate as formatDate, isPublished, parseDate } from 'src/utils/datetime'
+import { splitParagraphs as getParagraphs } from 'src/utils/text'
 
 const items = ref([])
 const loading = ref(true)
@@ -229,68 +221,38 @@ const now = ref(new Date())
 
 let refreshTimer = null
 
-const publishedItems = computed(() => {
-  const currentTime = now.value
-
-  return items.value.filter((item) => {
-    if (!item.publishAt) {
-      return false
-    }
-
-    const publishDate = new Date(item.publishAt)
-
-    if (Number.isNaN(publishDate.getTime())) {
-      return false
-    }
-
-    return publishDate <= currentTime
-  })
-})
+// re-evaluated every 30s so scheduled items appear without a reload
+const publishedItems = computed(() =>
+  items.value.filter((item) => isPublished(item.publishAt, now.value))
+)
 
 const clubs = computed(() =>
-  publishedItems.value
-    .filter((item) => item.type === 'club')
-    .sort(sortByPublishDate)
+  publishedItems.value.filter((item) => item.type === 'club').sort(sortByPublishDate)
 )
 
 const artists = computed(() =>
-  publishedItems.value
-    .filter((item) => item.type === 'artist')
-    .sort(sortByPublishDate)
+  publishedItems.value.filter((item) => item.type === 'artist').sort(sortByPublishDate)
 )
 
 onMounted(async () => {
   await loadItems()
-
   refreshTimer = setInterval(() => {
     now.value = new Date()
   }, 30000)
 })
 
 onUnmounted(() => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer)
-  }
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 
 async function loadItems() {
   loading.value = true
 
   try {
-    const snapshot = await getDocs(
-      collection(db, 'partyLineup')
-    )
-
-    items.value = snapshot.docs.map((document) => ({
-      id: document.id,
-      ...document.data()
-    }))
+    const snapshot = await getDocs(collection(db, 'partyLineup'))
+    items.value = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }))
   } catch (error) {
-    console.error(
-      'Failed to load party lineup:',
-      error
-    )
-
+    console.error('Failed to load party lineup:', error)
     items.value = []
   } finally {
     loading.value = false
@@ -298,42 +260,10 @@ async function loadItems() {
 }
 
 function sortByPublishDate(a, b) {
-  const dateA = new Date(
-    a.publishAt || 0
-  ).getTime()
-
-  const dateB = new Date(
-    b.publishAt || 0
-  ).getTime()
-
-  return dateA - dateB
-}
-
-function getParagraphs(content) {
-  return String(content || '')
-    .split(/\r?\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-}
-
-function formatDate(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat('zh-TW', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  }).format(date)
+  return (parseDate(a.publishAt)?.getTime() || 0) - (parseDate(b.publishAt)?.getTime() || 0)
 }
 </script>
 
 <style scoped>
-@import 'src/css/app.scss';
 @import 'src/css/performerpage.scss';
 </style>

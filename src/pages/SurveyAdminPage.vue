@@ -370,15 +370,13 @@ import { collection, getDocs } from 'firebase/firestore'
 import { db } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { USE_MOCK_ORDERS, MOCK_ALLOW_ADMIN_WITHOUT_AUTH } from 'src/config/app'
 import { SCALE_SECTIONS } from 'src/data/surveyQuestions.js'
+import { getTaiwanDateKey } from 'src/utils/datetime'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 
-const canAccessAdmin = computed(
-  () => auth.isManager || (USE_MOCK_ORDERS && MOCK_ALLOW_ADMIN_WITHOUT_AUTH)
-)
+const canAccessAdmin = computed(() => auth.isManager)
 
 const scaleSections = SCALE_SECTIONS
 const responses = ref([])
@@ -596,23 +594,11 @@ function segmentPercent(dist, score) {
   return total ? (dist[score] / total) * 100 : 0
 }
 
-function toDateKey(createdAt) {
-  if (!createdAt) return null
-
-  const d = createdAt.toDate
-    ? createdAt.toDate()
-    : new Date(createdAt)
-
-  if (Number.isNaN(d.getTime())) return null
-
-  return d.toISOString().slice(0, 10)
-}
-
 const responsesByDate = computed(() => {
   const map = {}
 
   for (const r of responses.value) {
-    const key = toDateKey(r.createdAt)
+    const key = getTaiwanDateKey(r.createdAt)
 
     if (!key) continue
 

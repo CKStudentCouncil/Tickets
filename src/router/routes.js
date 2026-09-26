@@ -24,11 +24,6 @@ const routes = [
         component: () => import('pages/ProductPage.vue')
       },
       {
-        path: 'cart',
-        name: 'cart',
-        component: () => import('pages/CartPage.vue')
-      },
-      {
         path: 'order-success',
         name: 'order-success',
         component: () => import('pages/OrderSuccessPage.vue')
@@ -56,7 +51,7 @@ const routes = [
       {
         path: 'performer',
         name: 'performer',
-        component: () => import('pages/PerformerPage.vue') 
+        component: () => import('pages/PerformerPage.vue')
       },
       {
         path: 'about',
@@ -72,59 +67,48 @@ const routes = [
   },
 
   {
-      path: '/admin',
-      component: () => import('layouts/MainLayout.vue'),
-      meta: {
-        requiresManager: true,
-        isAdminSection: true
-      },
-
+    path: '/admin',
+    component: () => import('layouts/MainLayout.vue'),
+    // children inherit this meta; the router guard requires manager or above
+    meta: {
+      isAdminSection: true
+    },
     children: [
-
       {
         path: '',
         name: 'admin',
         component: () => import('pages/AdminPage.vue')
       },
-      
       {
         path: 'management',
         name: 'management',
         component: () => import('pages/ManagementPage.vue'),
         meta: {
-          requiresSuperAdmin: true,
+          requiresSuperAdmin: true
         }
       },
-
       {
         path: 'intromanagement',
         name: 'intro-management',
         component: () => import('pages/IntroManagementPage.vue'),
         meta: {
-          requiresSuperAdmin: true,
+          requiresSuperAdmin: true
         }
       },
-
       {
         path: 'performer',
         name: 'performer-management',
         component: () => import('pages/PerformerManagementPage.vue'),
         meta: {
-          requiresSuperAdmin: true,
+          requiresSuperAdmin: true
         }
-      }, 
-
+      },
       {
         path: 'orders/:id',
         name: 'admin-order-detail',
-        component: () => import('pages/OrderDetailPage.vue'),
-        meta: {
-          requiresManager: true,
-          isAdminSection: true,
-          requiresAdmin: true
-        }
+        // door staff (managers) scan ticket QR codes into this page
+        component: () => import('pages/OrderDetailPage.vue')
       },
-
       {
         path: 'account',
         name: 'admin-account',
@@ -136,13 +120,8 @@ const routes = [
       {
         path: 'survey',
         name: 'admin-survey',
-        component: () => import('pages/SurveyAdminPage.vue'),
-        meta: {
-          requiresManager: true,
-          isAdminSection: true
-        }
+        component: () => import('pages/SurveyAdminPage.vue')
       }
-
     ]
   },
 

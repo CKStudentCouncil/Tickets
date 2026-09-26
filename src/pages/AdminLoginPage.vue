@@ -8,24 +8,6 @@
       </header>
 
       <div class="auth-card">
-        <!--
-          <div v-if="isInLineApp" class="notice">
-            <p class="notice-title">LINE 用戶請注意</p>
-            <p>請改用外部瀏覽器開啟（例如 Safari、Chrome），否則將無法完成登入</p>
-            <button type="button" class="notice-btn" @click="openExternal">
-              開啟外部瀏覽器
-            </button>
-          </div>
-
-          <div class="notice">
-            <p class="notice-title">CK APP 用戶請注意</p>
-            <p>請改用外部瀏覽器開啟（例如 Safari、Chrome），否則將無法完成登入</p>
-            <button type="button" class="notice-btn" @click="openExternal">
-              開啟外部瀏覽器
-            </button>
-          </div>
-        -->
-
         <button
           type="button"
           class="google-btn"
@@ -80,16 +62,7 @@ import {
   signInWithRedirect,
   getRedirectResult
 } from 'firebase/auth'
-import {
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  collection,
-  query,
-  where,
-  getDocs
-} from 'firebase/firestore'
+import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
@@ -109,13 +82,15 @@ function isLineApp() {
   return ua.includes('line/') || ua.includes('liff/')
 }
 
-function openExternal() {
-  window.open('https://souvenir.cksc.tw', '_blank')
-}
+const STAFF_ROLES = ['manager', 'admin', 'super_admin']
 
+// First sign-in of an invited staff member: turn pendingUsers/{email} into
+// users/{uid}. Firestore rules only allow this when the invite exists and the
+// role matches it, so nobody can grant themselves a role.
 async function linkUserAccount(user) {
   const userRef = doc(db, 'users', user.uid)
   const existingSnap = await getDoc(userRef)
+  const now = new Date().toISOString()
 
   if (existingSnap.exists()) {
     const data = existingSnap.data()
@@ -126,73 +101,57 @@ async function linkUserAccount(user) {
         email: user.email,
         displayName: user.displayName || data.displayName || '',
         photoURL: user.photoURL || '',
-        updatedAt: new Date().toISOString()
+        updatedAt: now
       },
-      {
-        merge: true
-      }
+      { merge: true }
     )
 
     return data.role || null
   }
 
   const email = (user.email || '').toLowerCase()
+  if (!email) return null
 
-  if (!email) {
-    return null
-  }
+  const pendingRef = doc(db, 'pendingUsers', email)
+  const pendingSnap = await getDoc(pendingRef)
+  if (!pendingSnap.exists()) return null
 
-  const pendingQuery = query(
-    collection(db, 'pendingUsers'),
-    where('email', '==', email)
-  )
+  const pendingData = pendingSnap.data()
+  if (!STAFF_ROLES.includes(pendingData.role)) return null
 
-  const pendingSnap = await getDocs(pendingQuery)
-
-  if (pendingSnap.empty) {
-    return null
-  }
-
-  const pendingDoc = pendingSnap.docs[0]
-  const pendingData = pendingDoc.data()
-
-  const role = pendingData.role
-
-  if (!['manager', 'admin', 'super_admin'].includes(role)) {
-    return null
-  }
-
-  await setDoc(userRef, {
+  // Must be one batch: the rules only allow creating the account when the
+  // invite is consumed in the same write, so it can never be reused.
+  const batch = writeBatch(db)
+  batch.set(userRef, {
     email,
     displayName: user.displayName || pendingData.name || '',
     photoURL: user.photoURL || '',
     name: pendingData.name || '',
-    role,
+    role: pendingData.role,
     uid: user.uid,
-    pending: false,
-    pendingUserId: pendingDoc.id,
-    createdAt: pendingData.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: pendingData.createdAt || now,
+    updatedAt: now
   })
+  batch.delete(pendingRef)
+  await batch.commit()
 
-  await deleteDoc(
-    doc(
-      db,
-      'pendingUsers',
-      pendingDoc.id
-    )
-  )
+  return pendingData.role
+}
 
-  return role
+// only same-site paths, never "//evil.com"
+function safeRedirect(value) {
+  const path = String(value || '')
+  return path.startsWith('/') && !path.startsWith('//') ? path : '/admin'
 }
 
 async function afterLogin(user) {
   try {
     const role = await linkUserAccount(user)
 
-    await authStore.init()
+    // the auth listener may have loaded the profile before it was linked
+    await authStore.refresh()
 
-    if (!role || !['super_admin', 'admin', 'manager'].includes(role)) {
+    if (!STAFF_ROLES.includes(role)) {
       toast.show('此帳號尚未被授權，請聯繫系統管理員新增帳號')
 
       await authStore.signOut()
@@ -202,13 +161,7 @@ async function afterLogin(user) {
 
     toast.show('登入成功！')
 
-    const fallback = role === 'manager'
-      ? '/scan'
-      : '/admin'
-
-    const redirect = route.query.redirect || fallback
-
-    await router.replace(String(redirect))
+    await router.replace(safeRedirect(route.query.redirect))
   } catch (error) {
     console.error('Account linking error:', error)
 

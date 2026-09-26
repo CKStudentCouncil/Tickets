@@ -1,15 +1,13 @@
 <template>
   <div
-    v-if="auth.loading || checkingAdmin"
+    v-if="auth.loading"
     class="state-screen"
   >
-    <p>
-      {{ auth.loading ? '載入中...' : '驗證權限中...' }}
-    </p>
+    <p>載入中...</p>
   </div>
 
   <div
-    v-else-if="!canManageOrders"
+    v-else-if="!auth.isSuperAdmin"
     class="state-screen"
   >
     <h2>權限不足</h2>
@@ -519,7 +517,7 @@
 
 
           <small class="field-hint">
-            建議使用橫式圖片，最大 10 MB。
+            建議使用橫式圖片，最大 7 MB。
           </small>
 
         </div>
@@ -767,41 +765,24 @@ import {
   serverTimestamp,
   updateDoc
 } from 'firebase/firestore'
-
+import { httpsCallable } from 'firebase/functions'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { db, functions } from 'src/boot/firebase'
+import { useAuthStore } from 'src/stores/auth'
+import { useToastStore } from 'src/stores/toast'
 import {
-  httpsCallable
-} from 'firebase/functions'
-
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref
-} from 'vue'
-
-import {
-  db,
-  functions
-} from 'src/boot/firebase'
-
-import {
-  useAuthStore
-} from 'src/stores/auth'
-
-import {
-  useToastStore
-} from 'src/stores/toast'
-
-import {
-  USE_MOCK_ORDERS,
-  MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-} from 'src/config/app'
+  formatLongDate,
+  getDateTimePart as getPart,
+  parseDate,
+  setDateTimePart,
+  startOfDayInputValue,
+  toDateTimeInputValue
+} from 'src/utils/datetime'
+import { excerpt as getExcerpt, splitParagraphs } from 'src/utils/text'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 
-const checkingAdmin = ref(true)
 const loading = ref(true)
 
 const saving = ref(false)
@@ -817,7 +798,6 @@ const editing = ref(false)
 const isCreating = ref(false)
 const editingId = ref(null)
 
-const displayName = ref('')
 
 const fileInput = ref(null)
 const editorSection = ref(null)
@@ -835,14 +815,6 @@ const form = ref(
   createEmptyForm('club')
 )
 
-const canManageOrders = computed(
-  () =>
-    auth.isSuperAdmin ||
-    (
-      USE_MOCK_ORDERS &&
-      MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-    )
-)
 
 const clubItems = computed(() =>
   items.value
@@ -868,14 +840,7 @@ const currentItems = computed(() =>
     : artistItems.value
 )
 
-const previewParagraphs = computed(() =>
-  String(
-    form.value.content || ''
-  )
-    .split(/\r?\n/)
-    .map(text => text.trim())
-    .filter(Boolean)
-)
+const previewParagraphs = computed(() => splitParagraphs(form.value.content))
 
 const publishSummary = computed(() => {
   if (!form.value.publishAt) {
@@ -885,16 +850,9 @@ const publishSummary = computed(() => {
     }
   }
 
-  const date =
-    new Date(
-      form.value.publishAt
-    )
+  const date = parseDate(form.value.publishAt)
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (!date) {
     return {
       text: '公開時間格式錯誤。',
       level: 'error'
@@ -922,17 +880,8 @@ const publishSummary = computed(() => {
   }
 })
 
-onMounted(async () => {
-  if (!canManageOrders.value) {
-    checkingAdmin.value = false
-    loading.value = false
-    return
-  }
-
-  await loadAdminProfile()
-  await loadItems()
-
-  checkingAdmin.value = false
+onMounted(() => {
+  if (auth.isSuperAdmin) loadItems()
 })
 
 onBeforeUnmount(() => {
@@ -1109,21 +1058,22 @@ function selectFile(file) {
       file.type
     )
   ) {
-    toast.error?.(
+    toast.show(
       '只允許 JPG、PNG 或 WEBP 圖片。'
     )
 
     return
   }
 
+  // callable payload limit is 10 MB and base64 adds ~33%
   const maxSize =
-    10 * 1024 * 1024
+    7 * 1024 * 1024
 
   if (
     file.size > maxSize
   ) {
-    toast.error?.(
-      '圖片大小不能超過 10 MB。'
+    toast.show(
+      '圖片大小不能超過 7 MB。'
     )
 
     return
@@ -1268,7 +1218,7 @@ async function saveItem() {
   if (
     !form.value.name.trim()
   ) {
-    toast.error?.(
+    toast.show(
       '請輸入名稱。'
     )
 
@@ -1278,7 +1228,7 @@ async function saveItem() {
   if (
     !form.value.title.trim()
   ) {
-    toast.error?.(
+    toast.show(
       '請輸入標題。'
     )
 
@@ -1288,7 +1238,7 @@ async function saveItem() {
   if (
     !form.value.content.trim()
   ) {
-    toast.error?.(
+    toast.show(
       '請輸入介紹內容。'
     )
 
@@ -1298,24 +1248,15 @@ async function saveItem() {
   if (
     !form.value.publishAt
   ) {
-    toast.error?.(
+    toast.show(
       '請設定公開時間。'
     )
 
     return
   }
 
-  const publishDate =
-    new Date(
-      form.value.publishAt
-    )
-
-  if (
-    Number.isNaN(
-      publishDate.getTime()
-    )
-  ) {
-    toast.error?.(
+  if (!parseDate(form.value.publishAt)) {
+    toast.show(
       '公開時間格式錯誤。'
     )
 
@@ -1345,7 +1286,7 @@ async function saveItem() {
         serverTimestamp(),
 
       updatedBy:
-        displayName.value
+        auth.displayName
     }
 
     let itemId
@@ -1372,7 +1313,7 @@ async function saveItem() {
               serverTimestamp(),
 
             createdBy:
-              displayName.value
+              auth.displayName
           }
         )
 
@@ -1437,7 +1378,7 @@ async function saveItem() {
       )
     }
 
-    toast.success?.(
+    toast.show(
       isCreating.value
         ? '介紹已建立。'
         : '介紹已更新。'
@@ -1452,7 +1393,7 @@ async function saveItem() {
       error
     )
 
-    toast.error?.(
+    toast.show(
       error?.message ||
       '儲存失敗，請稍後再試。'
     )
@@ -1502,7 +1443,7 @@ async function removeItem(item) {
       cancelEdit()
     }
 
-    toast.success?.(
+    toast.show(
       '介紹已刪除。'
     )
   } catch (error) {
@@ -1511,25 +1452,12 @@ async function removeItem(item) {
       error
     )
 
-    toast.error?.(
+    toast.show(
       '刪除失敗，請稍後再試。'
     )
   }
 }
 
-async function loadAdminProfile() {
-  try {
-    displayName.value =
-      auth.user?.displayName ||
-      auth.user?.email ||
-      'Administrator'
-  } catch (error) {
-    console.error(
-      'Failed to load admin profile:',
-      error
-    )
-  }
-}
 
 async function loadItems() {
   loading.value = true
@@ -1558,7 +1486,7 @@ async function loadItems() {
       error
     )
 
-    toast.error?.(
+    toast.show(
       '無法載入社團與藝人資料。'
     )
   } finally {
@@ -1592,320 +1520,56 @@ async function deleteImageByStoragePath(
 }
 
 function sortItems(a, b) {
-  const dateA =
-    new Date(
-      a.publishAt || 0
-    ).getTime()
-
-  const dateB =
-    new Date(
-      b.publishAt || 0
-    ).getTime()
-
-  return dateB - dateA
+  return (parseDate(b.publishAt)?.getTime() || 0) - (parseDate(a.publishAt)?.getTime() || 0)
 }
 
 function getStatus(item) {
-  if (!item.publishAt) {
-    return {
-      text: '未設定',
-      class: 'draft'
-    }
-  }
+  const date = parseDate(item.publishAt)
 
-  const date =
-    new Date(
-      item.publishAt
-    )
+  if (!item.publishAt) return { text: '未設定', class: 'draft' }
+  if (!date) return { text: '時間錯誤', class: 'draft' }
+  if (date > new Date()) return { text: '待公開', class: 'upcoming' }
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return {
-      text: '時間錯誤',
-      class: 'draft'
-    }
-  }
-
-  if (
-    date > new Date()
-  ) {
-    return {
-      text: '待公開',
-      class: 'upcoming'
-    }
-  }
-
-  return {
-    text: '已公開',
-    class: 'published'
-  }
-}
-
-function getExcerpt(content) {
-  const text =
-    String(
-      content || ''
-    )
-      .replace(
-        /\s+/g,
-        ' '
-      )
-      .trim()
-
-  if (
-    text.length <= 100
-  ) {
-    return text
-  }
-
-  return `${
-    text.slice(
-      0,
-      100
-    )
-  }…`
+  return { text: '已公開', class: 'published' }
 }
 
 function normalizePublishAt(value) {
-  if (!value) {
-    return ''
-  }
-
-  if (
-    typeof value === 'string'
-  ) {
-    return value.slice(
-      0,
-      16
-    )
-  }
-
-  if (
-    value?.toDate
-  ) {
-    return toInputDateTime(
-      value.toDate()
-    )
-  }
-
-  return ''
-}
-
-function getPart(value, part) {
-  if (!value) {
-    return ''
-  }
-
-  const date =
-    new Date(value)
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return ''
-  }
-
-  if (
-    part === 'date'
-  ) {
-    return toDateString(date)
-  }
-
-  return toTimeString(date)
+  if (!value) return ''
+  if (typeof value === 'string') return value.slice(0, 16)
+  return value?.toDate ? toDateTimeInputValue(value.toDate()) : ''
 }
 
 function setPart(part, value) {
-  if (!value) {
-    return
-  }
-
-  const current =
-    form.value.publishAt
-      ? new Date(
-          form.value.publishAt
-        )
-      : new Date()
-
-  if (
-    Number.isNaN(
-      current.getTime()
-    )
-  ) {
-    return
-  }
-
-  if (
-    part === 'date'
-  ) {
-    const [
-      year,
-      month,
-      day
-    ] =
-      value
-        .split('-')
-        .map(Number)
-
-    current.setFullYear(
-      year,
-      month - 1,
-      day
-    )
-  } else {
-    const [
-      hour,
-      minute
-    ] =
-      value
-        .split(':')
-        .map(Number)
-
-    current.setHours(
-      hour,
-      minute,
-      0,
-      0
-    )
-  }
-
-  form.value.publishAt =
-    toInputDateTime(
-      current
-    )
+  if (!value) return
+  form.value.publishAt = setDateTimePart(form.value.publishAt, part, value)
 }
 
 function setPublishNow() {
-  form.value.publishAt =
-    toInputDateTime(
-      new Date()
-    )
+  form.value.publishAt = toDateTimeInputValue(new Date())
 }
 
+// publish at Taiwan midnight `days` from today
 function setPublishAfter(days) {
-  const date =
-    new Date()
-
-  date.setDate(
-    date.getDate() +
-    days
-  )
-
-  date.setHours(
-    0,
-    0,
-    0,
-    0
-  )
-
-  form.value.publishAt =
-    toInputDateTime(
-      date
-    )
-}
-
-function toInputDateTime(date) {
-  return `${
-    toDateString(date)
-  }T${
-    toTimeString(date)
-  }`
-}
-
-function toDateString(date) {
-  return [
-    date.getFullYear(),
-
-    String(
-      date.getMonth() + 1
-    ).padStart(
-      2,
-      '0'
-    ),
-
-    String(
-      date.getDate()
-    ).padStart(
-      2,
-      '0'
-    )
-  ].join('-')
-}
-
-function toTimeString(date) {
-  return [
-    String(
-      date.getHours()
-    ).padStart(
-      2,
-      '0'
-    ),
-
-    String(
-      date.getMinutes()
-    ).padStart(
-      2,
-      '0'
-    )
-  ].join(':')
+  form.value.publishAt = startOfDayInputValue(days)
 }
 
 function formatDate(value) {
-  if (!value) {
-    return '未設定'
-  }
-
-  const date =
-    new Date(value)
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return '時間錯誤'
-  }
-
-  return new Intl.DateTimeFormat(
-    'zh-TW',
-    {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }
-  ).format(date)
+  if (!value) return '未設定'
+  return formatLongDate(value) || '時間錯誤'
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return ''
-  }
+  const date = parseDate(value)
+  if (!date) return ''
 
-  const date =
-    new Date(value)
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat(
-    'zh-TW',
-    {
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }
-  ).format(date)
+  return new Intl.DateTimeFormat('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
 }
 
 function formatFileSize(size) {

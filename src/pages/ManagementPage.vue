@@ -1,13 +1,13 @@
 <template>
   <div
-    v-if="auth.loading || checkingAdmin"
+    v-if="auth.loading"
     class="state-screen"
   >
-    <p>{{ auth.loading ? '載入中...' : '驗證權限中...' }}</p>
+    <p>載入中...</p>
   </div>
 
   <div
-    v-else-if="!canManageOrders"
+    v-else-if="!auth.isSuperAdmin"
     class="state-screen"
   >
     <h2>權限不足</h2>
@@ -286,41 +286,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import {
-  doc,
-  getDoc,
-  setDoc
-} from 'firebase/firestore'
-
-import { db } from 'src/boot/firebase'
-
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-
+import { fetchTicketTypes, saveTicketTypes } from 'src/services/ticketTypeService'
 import {
-  USE_MOCK_ORDERS,
-  MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-} from 'src/config/app'
+  addDaysInputValue,
+  getDateTimePart as getPart,
+  parseDate,
+  setDateTimePart,
+  toDateTimeInput,
+  toDateTimeInputValue,
+  toStoredDateTime
+} from 'src/utils/datetime'
 
 const auth = useAuthStore()
-
-const canManageOrders = computed(
-  () =>
-    auth.isSuperAdmin ||
-    (
-      USE_MOCK_ORDERS &&
-      MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-    )
-)
-
 const toast = useToastStore()
-
-const displayName = ref('管理員')
-const checkingAdmin = ref(true)
-
-const TICKET_TYPES_COLLECTION = 'settings'
-const TICKET_TYPES_DOC_ID = 'ticketTypes'
 
 const ticketTypeForm = ref([])
 const loadingTicketTypes = ref(false)
@@ -328,107 +309,28 @@ const savingTicketTypes = ref(false)
 
 function createEmptyTicketType() {
   return {
-    id:
-      (
-        typeof crypto !== 'undefined' &&
-        crypto.randomUUID &&
-        crypto.randomUUID()
-      ) ||
-      `ticket-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-
+    id: crypto.randomUUID(),
     name: '',
-
-    eligibleBuyerIdentity:
-      'campus_students',
-
+    eligibleBuyerIdentity: 'campus_students',
     salesStartTime: '',
-
     salesEndTime: '',
-
     price: 0,
-
     totalTicketQuantity: 0,
-
     unlimited: false,
-
     purchaseLimitPerPerson: 1
   }
 }
 
-function getPart(value, part) {
-  const [
-    date = '',
-    time = ''
-  ] = (value || '').split('T')
-
-  return part === 'date'
-    ? date
-    : time.slice(0, 5)
-}
-
-function setPart(
-  ticketType,
-  key,
-  part,
-  val,
-  defaultTime
-) {
-  const [
-    currentDate = '',
-    currentTime = ''
-  ] = (ticketType[key] || '').split('T')
-
-  const date =
-    part === 'date'
-      ? val
-      : currentDate
-
-  const time =
-    (
-      part === 'time'
-        ? val
-        : currentTime.slice(0, 5)
-    ) || defaultTime
-
-  ticketType[key] =
-    date
-      ? `${date}T${time}`
-      : ''
-}
-
-function toInputValue(date) {
-  const pad = (number) =>
-    String(number).padStart(2, '0')
-
-  return (
-    `${date.getFullYear()}-` +
-    `${pad(date.getMonth() + 1)}-` +
-    `${pad(date.getDate())}T` +
-    `${pad(date.getHours())}:` +
-    `${pad(date.getMinutes())}`
-  )
+function setPart(ticketType, key, part, value, defaultTime) {
+  ticketType[key] = setDateTimePart(ticketType[key], part, value, defaultTime)
 }
 
 function setStartNow(ticketType) {
-  ticketType.salesStartTime =
-    toInputValue(new Date())
+  ticketType.salesStartTime = toDateTimeInputValue(new Date())
 }
 
-function setEndAfter(
-  ticketType,
-  days
-) {
-  const base =
-    ticketType.salesStartTime
-      ? new Date(ticketType.salesStartTime)
-      : new Date()
-
-  base.setDate(
-    base.getDate() + days
-  )
-
-  ticketType.salesEndTime =
-    toInputValue(base)
+function setEndAfter(ticketType, days) {
+  ticketType.salesEndTime = addDaysInputValue(ticketType.salesStartTime, days)
 }
 
 function salePeriodSummary(ticketType) {
@@ -439,15 +341,12 @@ function salePeriodSummary(ticketType) {
     return null
   }
 
-  const start =
-    new Date(
-      ticketType.salesStartTime
-    )
+  const start = parseDate(ticketType.salesStartTime)
+  const end = parseDate(ticketType.salesEndTime)
 
-  const end =
-    new Date(
-      ticketType.salesEndTime
-    )
+  if (!start || !end) {
+    return { text: '時間格式錯誤', level: 'error' }
+  }
 
   if (end <= start) {
     return {
@@ -515,49 +414,21 @@ async function loadTicketTypeSettings() {
   loadingTicketTypes.value = true
 
   try {
-    const settingsDoc =
-      await getDoc(
-        doc(
-          db,
-          TICKET_TYPES_COLLECTION,
-          TICKET_TYPES_DOC_ID
-        )
-      )
+    const savedTypes = await fetchTicketTypes()
 
-    const savedTypes =
-      settingsDoc.exists()
-        ? settingsDoc.data().types
-        : null
-
-    ticketTypeForm.value =
-      Array.isArray(savedTypes) &&
-      savedTypes.length
-        ? savedTypes.map(
-            (ticketType) => ({
-              ...createEmptyTicketType(),
-              ...ticketType,
-              price:
-                Number(
-                  ticketType.price
-                ) || 0
-            })
-          )
-        : [
-            createEmptyTicketType()
-          ]
+    ticketTypeForm.value = savedTypes.length
+      ? savedTypes.map((ticketType) => ({
+          ...createEmptyTicketType(),
+          ...ticketType,
+          salesStartTime: toDateTimeInput(ticketType.salesStartTime),
+          salesEndTime: toDateTimeInput(ticketType.salesEndTime),
+          price: Number(ticketType.price) || 0
+        }))
+      : [createEmptyTicketType()]
   } catch (error) {
-    console.error(
-      'Load ticket type settings error:',
-      error
-    )
-
-    toast.show(
-      '票種設定載入失敗，請重新整理後再試'
-    )
-
-    ticketTypeForm.value = [
-      createEmptyTicketType()
-    ]
+    console.error('Load ticket type settings error:', error)
+    toast.show('票種設定載入失敗，請重新整理後再試')
+    ticketTypeForm.value = [createEmptyTicketType()]
   } finally {
     loadingTicketTypes.value = false
   }
@@ -604,12 +475,8 @@ function validateTicketTypeForm() {
     }
 
     if (
-      new Date(
-        ticketType.salesEndTime
-      ) <=
-      new Date(
-        ticketType.salesStartTime
-      )
+      parseDate(ticketType.salesEndTime) <=
+      parseDate(ticketType.salesStartTime)
     ) {
       toast.show(
         `「${label}」的販售結束時間必須晚於開始時間`
@@ -667,58 +534,22 @@ async function saveTicketTypeSettings() {
   savingTicketTypes.value = true
 
   try {
-    await setDoc(
-      doc(
-        db,
-        TICKET_TYPES_COLLECTION,
-        TICKET_TYPES_DOC_ID
-      ),
-      {
-        types:
-          ticketTypeForm.value.map(
-            (ticketType) => ({
-              id: ticketType.id,
-
-              name:
-                ticketType.name.trim(),
-
-              eligibleBuyerIdentity:
-                ticketType.eligibleBuyerIdentity,
-
-              salesStartTime:
-                ticketType.salesStartTime,
-
-              salesEndTime:
-                ticketType.salesEndTime,
-
-              price:
-                Number(
-                  ticketType.price
-                ) || 0,
-
-              totalTicketQuantity:
-                Number(
-                  ticketType.totalTicketQuantity
-                ) || 0,
-
-              unlimited:
-                !!ticketType.unlimited,
-
-              purchaseLimitPerPerson:
-                ticketType.unlimited
-                  ? null
-                  : Number(
-                      ticketType.purchaseLimitPerPerson
-                    ) || 1
-            })
-          ),
-
-        updatedAt:
-          new Date(),
-
-        updatedBy:
-          displayName.value
-      }
+    await saveTicketTypes(
+      ticketTypeForm.value.map((ticketType) => ({
+        id: ticketType.id,
+        name: ticketType.name.trim(),
+        eligibleBuyerIdentity: ticketType.eligibleBuyerIdentity,
+        // stored with an explicit +08:00 so the server reads the same instant
+        salesStartTime: toStoredDateTime(ticketType.salesStartTime),
+        salesEndTime: toStoredDateTime(ticketType.salesEndTime),
+        price: Number(ticketType.price) || 0,
+        totalTicketQuantity: Number(ticketType.totalTicketQuantity) || 0,
+        unlimited: !!ticketType.unlimited,
+        purchaseLimitPerPerson: ticketType.unlimited
+          ? null
+          : Number(ticketType.purchaseLimitPerPerson) || 1
+      })),
+      auth.displayName
     )
 
     toast.show(
@@ -738,57 +569,12 @@ async function saveTicketTypeSettings() {
   }
 }
 
-async function loadAdminProfile() {
-  if (!auth.user) {
-    return
-  }
-
-  try {
-    const userDoc =
-      await getDoc(
-        doc(
-          db,
-          'users',
-          auth.user.uid
-        )
-      )
-
-    displayName.value =
-      userDoc.exists()
-        ? (
-            userDoc.data().name ||
-            auth.user.displayName ||
-            auth.user.email
-          )
-        : (
-            auth.user.displayName ||
-            auth.user.email
-          )
-  } catch {
-    displayName.value =
-      auth.user.displayName ||
-      auth.user.email ||
-      '管理員'
-  }
-}
-
-onMounted(
-  async () => {
-    await loadAdminProfile()
-
-    checkingAdmin.value = false
-
-    if (
-      canManageOrders.value
-    ) {
-      loadTicketTypeSettings()
-    }
-  }
-)
+onMounted(() => {
+  if (auth.isSuperAdmin) loadTicketTypeSettings()
+})
 </script>
 
 <style scoped>
-@import 'src/css/app.scss';
 @import 'src/css/managementpage.scss';
 
 .price-input {

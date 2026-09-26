@@ -1,12 +1,5 @@
-function escapeHtml(value) {
-  if (value === null || value === undefined) return '';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+import { escapeHtml, C, FONT, MONO, sectionLabel } from './shared.js';
+import { SITE_URL } from '../lib/constants.js';
 
 function formatCurrency(amount) {
   const num = Number(amount) || 0;
@@ -26,32 +19,6 @@ function formatOrderDate(createdAt) {
 
   // Cloud Functions run in UTC, so always format in Taiwan time.
   return date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-}
-
-// Solid colours (no rgba) so every mail client renders the same.
-const C = {
-  bg: '#050608',
-  text: '#f2f0e9',
-  muted: '#8e8e8a',
-  lunar: '#9aa3ac',
-  ember: '#e4a468',
-  line: '#26292c',
-  lineSoft: '#181a1d',
-  dashed: '#474a4c',
-  boxBg: '#0b0c0e',
-  footer: '#70757c'
-};
-
-const FONT =
-  "'Manrope','Noto Sans TC','PingFang TC','Microsoft JhengHei',Arial,sans-serif";
-
-const MONO = "'SF Mono',Consolas,Menlo,monospace";
-
-// Was previously built via sectionLabel.replace('margin:0 0 22px', '...'),
-// which silently stops working if the base margin value ever changes.
-// A parameterized function is the same idea without the fragility.
-function sectionLabel(marginBottom = 22) {
-  return `margin:0 0 ${marginBottom}px;font-family:${FONT};font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.28em;text-transform:uppercase;color:${C.ember};`;
 }
 
 export function generateEmailHTML(orderId, order) {
@@ -95,6 +62,7 @@ export function generateEmailHTML(orderId, order) {
     ['學校', escapeHtml(order.school)],
     order.class ? ['班級', escapeHtml(order.class)] : null,
     order.number ? ['座號', escapeHtml(order.number)] : null,
+    order.office ? ['辦公室', escapeHtml(order.office)] : null,
     order.customerName ? ['姓名', escapeHtml(order.customerName)] : null,
     ['購票時間', escapeHtml(formattedDate)]
   ].filter(Boolean);
@@ -430,7 +398,7 @@ export function generateEmailHTML(orderId, order) {
                       <tr>
                         <td style="border:1px solid #6e6f6d;">
                           <a
-                            href="https://tickets.cksc.tw/survey"
+                            href="${SITE_URL}/survey"
                             target="_blank"
                             rel="noopener"
                             style="display:block;padding:11px 22px;font-family:${FONT};font-size:12px;font-weight:700;line-height:1.4;letter-spacing:.08em;color:${C.text};text-decoration:none;"

@@ -1,16 +1,5 @@
-function escapeHtml(value) {
-  if (value === null || value === undefined) return '';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function escapeHtmlPreserveBreaks(value) {
-  return escapeHtml(value).replace(/\n/g, '<br>');
-}
+import { escapeHtml, escapeHtmlPreserveBreaks, C, FONT, sectionLabel } from './shared.js';
+import { SITE_URL } from '../lib/constants.js';
 
 const TYPE_LABELS = {
   payment: '繳費通知',
@@ -18,30 +7,6 @@ const TYPE_LABELS = {
   both: '繳費暨取票通知',
   custom: '通知'
 };
-
-// Solid colours (no rgba) for rock-solid cross-client rendering
-const C = {
-  bg: '#050608',
-  text: '#f2f0e9',
-  muted: '#8e8e8a',
-  lunar: '#9aa3ac',
-  ember: '#e4a468',
-  line: '#26292c',
-  lineSoft: '#181a1d',
-  dashed: '#474a4c',
-  boxBg: '#0b0c0e',
-  footer: '#70757c'
-};
-
-const FONT =
-  "'Manrope','Noto Sans TC','PingFang TC','Microsoft JhengHei',Arial,sans-serif";
-
-// Was previously built via sectionLabelStyle.replace('margin:0 0 22px', '...'),
-// which silently stops matching if the base margin value ever changes.
-// Same fix as the confirmation email template.
-function sectionLabel(marginBottom = 22) {
-  return `margin:0 0 ${marginBottom}px;font-family:${FONT};font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.28em;text-transform:uppercase;color:${C.ember};`;
-}
 
 export function generateOrderNotificationHTML({
   type,
@@ -404,7 +369,7 @@ export function generateOrderNotificationHTML({
                       <tr>
                         <td style="border:1px solid #6e6f6d;">
                           <a
-                            href="https://tickets.cksc.tw/survey"
+                            href="${SITE_URL}/survey"
                             target="_blank"
                             rel="noopener"
                             style="display:block;padding:11px 22px;font-family:${FONT};font-size:12px;font-weight:700;line-height:1.4;letter-spacing:.08em;color:${C.text};text-decoration:none;"

@@ -23,28 +23,15 @@
     </div>
 
     <div v-else class="product-detail">
-      <!--<div class="image-frame">
-        <img
-          :src="`/images/ticket-${ticketType.id}.png`"
-          :alt="ticketType.name"
-          :class="{ 'is-muted-img': status.state !== 'selling' }"
-          @error="handleImageError"
-        >
-        <span class="status-chip" :class="`status-${status.className}`">
-          <span class="status-dot" />
-          <span>{{ status.label }}</span>
-        </span>
-      </div>-->
-
       <section class="purchase-card">
         <p class="eyebrow">CK PARTY NIGHT</p>
         <h1>{{ ticketType.name }} {{ ticketType.price ? ` - NT$ ${ticketType.price.toLocaleString()}` : '' }}</h1>
 
         <p
-          v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson"
+          v-if="purchaseLimit"
           class="ticket-limit"
         >
-          每人限購 {{ ticketType.purchaseLimitPerPerson }} 張
+          每人限購 {{ purchaseLimit }} 張
         </p>
 
         <div class="divider" />
@@ -71,18 +58,25 @@
               學校 / 身分
               <select v-model="buyer.school">
                 <option disabled value="">請選擇</option>
-                <option v-for="s in SCHOOLS" :key="s" :value="s">{{ s }}</option>
+                <option v-for="s in schoolOptions" :key="s" :value="s">{{ s }}</option>
               </select>
             </label>
 
-            <label>
-              班級
-              <input v-model="buyer.class">
-            </label>
+            <template v-if="needsClass">
+              <label>
+                班級
+                <input v-model="buyer.class" placeholder="例：329/三數">
+              </label>
 
-            <label>
-              座號
-              <input v-model="buyer.number">
+              <label>
+                座號
+                <input v-model="buyer.number" placeholder="例：01">
+              </label>
+            </template>
+
+            <label v-if="buyer.school === '建中老師'">
+              辦公室
+              <input v-model="buyer.office" placeholder="例：莊三">
             </label>
 
             <label>
@@ -92,12 +86,12 @@
 
             <label>
               電話
-              <input v-model="buyer.customerPhone">
+              <input v-model="buyer.customerPhone" type="tel" autocomplete="tel">
             </label>
 
             <label>
               Email
-              <input type="email" v-model="buyer.customerEmail">
+              <input v-model="buyer.customerEmail" type="email" autocomplete="email">
             </label>
           </div>
 
@@ -136,15 +130,21 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from 'src/boot/firebase'
-import { useCartStore } from 'src/stores/cart'
 import { useToastStore } from 'src/stores/toast'
-import { submitOrder, setLastSubmittedOrderId } from 'src/services/orderService'
+import { submitOrder } from 'src/services/orderService'
+import {
+  ELIGIBLE_IDENTITIES,
+  fetchTicketTypes,
+  getPurchaseLimit,
+  getTicketStatus
+} from 'src/services/ticketTypeService'
+import { CAMPUS_SCHOOLS, SCHOOLS } from 'src/data/schools'
+
+const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orders.js
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const route = useRoute()
 const router = useRouter()
-const cart = useCartStore()
 const toast = useToastStore()
 
 const ticketTypes = ref([])
@@ -159,30 +159,16 @@ const status = computed(() =>
   ticketType.value ? getTicketStatus(ticketType.value) : null
 )
 
+const purchaseLimit = computed(() =>
+  ticketType.value ? getPurchaseLimit(ticketType.value) : null
+)
+
 async function loadTicketTypes() {
   loading.value = true
   loadError.value = false
 
   try {
-    const snapshot = await getDoc(
-      doc(db, 'settings', 'ticketTypes')
-    )
-
-    if (!snapshot.exists()) {
-      ticketTypes.value = []
-      return
-    }
-
-    const data = snapshot.data()
-
-    ticketTypes.value = Array.isArray(data.types)
-      ? data.types.filter(
-          (type) =>
-            type &&
-            type.id &&
-            type.name
-        )
-      : []
+    ticketTypes.value = await fetchTicketTypes()
   } catch (error) {
     console.error('Load ticket types error:', error)
     loadError.value = true
@@ -192,71 +178,9 @@ async function loadTicketTypes() {
   }
 }
 
-function getTicketStatus(type) {
-  const now = new Date()
-
-  if (!type.salesStartTime || !type.salesEndTime) {
-    return {
-      state: 'unavailable',
-      label: '尚未開放',
-      className: 'upcoming'
-    }
-  }
-
-  const start = new Date(type.salesStartTime)
-  const end = new Date(type.salesEndTime)
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return {
-      state: 'unavailable',
-      label: '尚未開放',
-      className: 'upcoming'
-    }
-  }
-
-  if (now < start) {
-    return {
-      state: 'upcoming',
-      label: '尚未開賣',
-      className: 'upcoming'
-    }
-  }
-
-  if (now > end) {
-    return {
-      state: 'ended',
-      label: '已結束',
-      className: 'ended'
-    }
-  }
-
-  return {
-    state: 'selling',
-    label: '販售中',
-    className: 'selling'
-  }
-}
-
-function handleImageError(event) {
-  event.target.style.display = 'none'
-}
-
-function add() {
-  if (!ticketType.value || status.value.state !== 'selling') return
-
-  cart.addToCart(ticketType.value)
-  toast.show(`已將「${ticketType.value.name}」加入購票清單。`)
-}
-
 onMounted(loadTicketTypes)
 
-/* ---------------- direct order submission (inline, no dialog) ---------------- */
-
-// mirrors SCHOOL_IDENTITIES keys in src/services/orderService.js
-const SCHOOLS = [
-  '建國中學', '北一女中', '中山女高', '景美女中',
-  '成功高中', '師大附中', '建中家長會', '建中老師', '其他學校或社會人士'
-]
+/* ---------- inline order form ---------- */
 
 const showOrderForm = ref(false)
 const submitting = ref(false)
@@ -266,22 +190,30 @@ const buyer = ref({
   school: '',
   class: '',
   number: '',
+  office: '',
   customerName: '',
   customerPhone: '',
   customerEmail: ''
 })
 
-const maxQuantity = computed(() =>
-  ticketType.value && !ticketType.value.unlimited
-    ? ticketType.value.purchaseLimitPerPerson || 1
-    : 99
+// Campus-only tickets can only be bought by students of the partner schools
+const schoolOptions = computed(() =>
+  ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
+    ? CAMPUS_SCHOOLS
+    : SCHOOLS
 )
+
+const needsClass = computed(() => CAMPUS_SCHOOLS.includes(buyer.value.school))
+
+const maxQuantity = computed(() => purchaseLimit.value || MAX_TICKETS_PER_ORDER)
 
 const canSubmitOrder = computed(() =>
   !!buyer.value.school &&
-  !!buyer.value.customerName &&
-  !!buyer.value.customerPhone &&
-  !!buyer.value.customerEmail &&
+  !!buyer.value.customerName.trim() &&
+  !!buyer.value.customerPhone.trim() &&
+  EMAIL_PATTERN.test(buyer.value.customerEmail.trim()) &&
+  (!needsClass.value || (!!buyer.value.class.trim() && !!buyer.value.number.trim())) &&
+  Number.isInteger(quantity.value) &&
   quantity.value > 0 &&
   quantity.value <= maxQuantity.value
 )
@@ -290,6 +222,7 @@ function openOrderForm() {
   if (!ticketType.value || status.value.state !== 'selling') return
   quantity.value = 1
   orderError.value = ''
+  if (!schoolOptions.value.includes(buyer.value.school)) buyer.value.school = ''
   showOrderForm.value = true
 }
 
@@ -304,28 +237,30 @@ async function submitDirectOrder() {
   submitting.value = true
   orderError.value = ''
 
-  const unitPrice = ticketType.value.price || 0
-  const items = [{
-    id: ticketType.value.id,
-    name: ticketType.value.name,
-    price: unitPrice,
-    quantity: quantity.value
-  }]
+  const { school, customerName, customerPhone, customerEmail } = buyer.value
 
   try {
+    // The price is decided by the server from the ticket settings
     const result = await submitOrder({
-      ...buyer.value,
-      items,
-      finalTotal: unitPrice * quantity.value
+      school,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      customerEmail: customerEmail.trim(),
+      class: needsClass.value ? buyer.value.class.trim() : '',
+      number: needsClass.value ? buyer.value.number.trim() : '',
+      office: school === '建中老師' ? buyer.value.office.trim() : '',
+      items: [{ id: ticketType.value.id, quantity: quantity.value }]
     })
 
-    setLastSubmittedOrderId(result.id)
     showOrderForm.value = false
     toast.show(`訂單 #${result.id} 已送出。`)
-    router.push(`/order-success?id=${result.id}`)
+    router.push({ name: 'order-success', query: { id: result.id } })
   } catch (error) {
     console.error('Submit order error:', error)
-    orderError.value = '訂單送出失敗，請稍後再試。'
+    // HttpsError messages from createOrder are already user-facing Chinese
+    orderError.value = error?.message && error.code !== 'functions/internal'
+      ? error.message
+      : '訂單送出失敗，請稍後再試。'
   } finally {
     submitting.value = false
   }
@@ -333,5 +268,5 @@ async function submitDirectOrder() {
 </script>
 
 <style scoped>
-@import 'src/css/productpage.scss'
+@import 'src/css/productpage.scss';
 </style>

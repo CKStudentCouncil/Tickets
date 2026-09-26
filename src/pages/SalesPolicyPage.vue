@@ -211,6 +211,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { downloadElementAsPdf } from 'src/utils/pdf'
 
 const termsContent = ref(null)
 const downloading = ref(false)
@@ -220,26 +221,9 @@ async function downloadPdf() {
   downloading.value = true
 
   try {
-    const html2pdf = (await import('html2pdf.js')).default
-
-    const opt = {
-      margin: [15, 12, 15, 12],
-      filename: '校慶紀念品訂購系統銷售與退貨條款.pdf',
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    }
-
-    // Hide the button row while capturing so it doesn't appear in the PDF
-    const actionRow = termsContent.value.querySelector('.action-row')
-    if (actionRow) actionRow.style.visibility = 'hidden'
-
-    await html2pdf().set(opt).from(termsContent.value).save()
-
-    if (actionRow) actionRow.style.visibility = ''
-  } catch (err) {
-    console.error('PDF generation failed:', err)
+    await downloadElementAsPdf(termsContent.value, '建中舞會購票系統銷售與退貨條款.pdf', '.action-row')
+  } catch (error) {
+    console.error('PDF generation failed:', error)
   } finally {
     downloading.value = false
   }

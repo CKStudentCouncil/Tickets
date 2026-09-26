@@ -2,7 +2,7 @@
   <div class="app-shell">
     <header class="site-header">
       <router-link to="/" class="brand" aria-label="建中舞會購票系統首頁">
-        <img src="../../public/cksclogo.png" alt="建中舞會購票系統 Logo" class="brand-mark" />
+        <img src="/cksclogo.png" alt="建中舞會購票系統 Logo" class="brand-mark" />
         <span>CK Tickets</span>
       </router-link>
 
@@ -56,13 +56,13 @@
               後台管理
             </router-link>
 
-						<router-link
-							v-if="auth.isSuperAdmin"
-							to="/admin/management"
-							@click="menuOpen = false"
-						>
-							票務管理
-						</router-link>
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/management"
+              @click="menuOpen = false"
+            >
+              票務管理
+            </router-link>
 
             <router-link
               v-if="auth.isSuperAdmin"
@@ -118,7 +118,7 @@
 
     <main class="page-container">
       <router-view v-if="!auth.loading" :key="$route.fullPath" />
-      <div v-else class="loading-screen" role="status">正在為你準備商品…</div>
+      <div v-else class="loading-screen" role="status">載入中…</div>
     </main>
 
     <footer class="site-footer">
@@ -172,20 +172,14 @@
 import { computed, onMounted, ref, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
-import { useCartStore } from 'src/stores/cart'
 import { useToastStore } from 'src/stores/toast'
 
 const router = useRouter()
 const auth = useAuthStore()
-const cart = useCartStore()
 const toast = useToastStore()
 
 const menuOpen = ref(false)
 const currentYear = computed(() => new Date().getFullYear())
-
-const itemCount = computed(() =>
-  cart.cartItems.reduce((total, item) => total + item.quantity, 0)
-)
 
 function closeMenu() {
   menuOpen.value = false
@@ -200,8 +194,6 @@ function handleClickOutside(event) {
 }
 
 onMounted(() => {
-  if (auth.loading) auth.init()
-
   document.addEventListener(
     'click',
     handleClickOutside
@@ -219,7 +211,7 @@ async function handleSignOut() {
   await auth.signOut()
   menuOpen.value = false
 
-  toast.show('Logged out')
+  toast.show('已登出')
   router.push('/')
 }
 </script>

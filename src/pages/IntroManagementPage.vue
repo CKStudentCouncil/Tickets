@@ -1,13 +1,13 @@
 <template>
   <div
-    v-if="auth.loading || checkingAdmin"
+    v-if="auth.loading"
     class="state-screen"
   >
-    <p>{{ auth.loading ? '載入中...' : '驗證權限中...' }}</p>
+    <p>載入中...</p>
   </div>
 
   <div
-    v-else-if="!canManageOrders"
+    v-else-if="!auth.isSuperAdmin"
     class="state-screen"
   >
     <h2>權限不足</h2>
@@ -451,43 +451,23 @@
 </template>
 
 <script setup>
-import {
-  ref,
-  computed,
-  onMounted
-} from 'vue'
-
-import {
-  collection,
-  getDocs,
-  doc,
-  setDoc,
-  deleteDoc
-} from 'firebase/firestore'
-
+import { ref, computed, onMounted } from 'vue'
+import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from 'src/boot/firebase'
-
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-
 import {
-  USE_MOCK_ORDERS,
-  MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-} from 'src/config/app'
+  addDaysInputValue,
+  getDateTimePart as getPart,
+  parseDate,
+  setDateTimePart,
+  toDateTimeInputValue
+} from 'src/utils/datetime'
+import { excerpt, splitParagraphs } from 'src/utils/text'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 
-const canManageOrders = computed(
-  () =>
-    auth.isSuperAdmin ||
-    (
-      USE_MOCK_ORDERS &&
-      MOCK_ALLOW_ADMIN_WITHOUT_AUTH
-    )
-)
-
-const checkingAdmin = ref(true)
 const loading = ref(false)
 const saving = ref(false)
 
@@ -495,8 +475,6 @@ const stories = ref([])
 
 const editing = ref(false)
 const editingExisting = ref(false)
-
-const displayName = ref('管理員')
 
 function createEmptyStory() {
   return {
@@ -510,74 +488,36 @@ function createEmptyStory() {
   }
 }
 
-const storyForm = ref(
-  createEmptyStory()
-)
+const storyForm = ref(createEmptyStory())
 
 /* ---------- date / time ---------- */
 
-function getPart(value, part) {
-  const [date = '', time = ''] =
-    (value || '').split('T')
-
-  return part === 'date'
-    ? date
-    : time.slice(0, 5)
-}
-
-function setPart(
-  target,
-  key,
-  part,
-  value,
-  defaultTime
-) {
-  const [date = '', time = ''] =
-    (target[key] || '').split('T')
-
-  const newDate =
-    part === 'date'
-      ? value
-      : date
-
-  const newTime =
-    (
-      part === 'time'
-        ? value
-        : time.slice(0, 5)
-    ) || defaultTime
-
-  target[key] = newDate
-    ? `${newDate}T${newTime}`
-    : ''
-}
-
-function toInputValue(date) {
-  const pad = value =>
-    String(value).padStart(2, '0')
-
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate())
-  ].join('-') +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+function setPart(target, key, part, value, defaultTime) {
+  target[key] = setDateTimePart(target[key], part, value, defaultTime)
 }
 
 function setPublishNow() {
-  storyForm.value.publishAt =
-    toInputValue(new Date())
+  storyForm.value.publishAt = toDateTimeInputValue(new Date())
 }
 
 function setPublishAfter(days) {
-  const date = new Date()
+  storyForm.value.publishAt = addDaysInputValue('', days)
+}
 
-  date.setDate(
-    date.getDate() + days
-  )
+function formatDateTime(value) {
+  const date = parseDate(value)
+  if (!value) return '未設定'
+  if (!date) return '格式錯誤'
 
-  storyForm.value.publishAt =
-    toInputValue(date)
+  return new Intl.DateTimeFormat('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date)
 }
 
 const publishSummary = computed(() => {
@@ -588,16 +528,9 @@ const publishSummary = computed(() => {
     }
   }
 
-  const publishAt =
-    new Date(
-      storyForm.value.publishAt
-    )
+  const publishAt = parseDate(storyForm.value.publishAt)
 
-  if (
-    Number.isNaN(
-      publishAt.getTime()
-    )
-  ) {
+  if (!publishAt) {
     return {
       text: '公開時間格式錯誤',
       level: 'error'
@@ -620,14 +553,7 @@ const publishSummary = computed(() => {
 
 /* ---------- preview ---------- */
 
-const previewParagraphs = computed(() =>
-  (storyForm.value.content || '')
-    .split(/\r?\n/)
-    .map(paragraph =>
-      paragraph.trim()
-    )
-    .filter(Boolean)
-)
+const previewParagraphs = computed(() => splitParagraphs(storyForm.value.content))
 
 /* ---------- story status ---------- */
 
@@ -646,14 +572,9 @@ function getStoryStatus(story) {
     }
   }
 
-  const publishAt =
-    new Date(story.publishAt)
+  const publishAt = parseDate(story.publishAt)
 
-  if (
-    Number.isNaN(
-      publishAt.getTime()
-    )
-  ) {
+  if (!publishAt) {
     return {
       text: '時間錯誤',
       class: 'disabled'
@@ -675,46 +596,8 @@ function getStoryStatus(story) {
 
 /* ---------- formatting ---------- */
 
-function formatDateTime(value) {
-  if (!value) return '未設定'
-
-  const date = new Date(value)
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return '格式錯誤'
-  }
-
-  return new Intl.DateTimeFormat(
-    'zh-TW',
-    {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }
-  ).format(date)
-}
-
 function getPreviewText(content) {
-  if (!content) {
-    return '尚未輸入故事內容。'
-  }
-
-  const text = content
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  if (text.length <= 100) {
-    return text
-  }
-
-  return `${text.slice(0, 100)}…`
+  return content ? excerpt(content) : '尚未輸入故事內容。'
 }
 
 /* ---------- load ---------- */
@@ -849,7 +732,7 @@ async function saveStory() {
           new Date(),
 
         updatedBy:
-          displayName.value
+          auth.displayName
       }
     )
 
@@ -923,49 +806,12 @@ async function deleteStory(story) {
   }
 }
 
-/* ---------- admin ---------- */
-
-async function loadAdminProfile() {
-  if (!auth.user) return
-
-  try {
-    const userDoc = await getDocs(
-      collection(db, 'users')
-    )
-
-    const profile =
-      userDoc.docs.find(
-        document =>
-          document.id === auth.user.uid
-      )
-
-    displayName.value =
-      profile?.data()?.name ||
-      auth.user.displayName ||
-      auth.user.email ||
-      '管理員'
-
-  } catch {
-    displayName.value =
-      auth.user.displayName ||
-      auth.user.email ||
-      '管理員'
-  }
-}
-
-onMounted(async () => {
-  await loadAdminProfile()
-
-  checkingAdmin.value = false
-
-  if (canManageOrders.value) {
-    await loadStories()
-  }
+onMounted(() => {
+  if (auth.isSuperAdmin) loadStories()
 })
 </script>
 
 <style scoped lang="scss">
-@import 'src/css/app.scss';
 @import 'src/css/adminpage.scss';
 @import 'src/css/intromanagementpage.scss';
 </style>

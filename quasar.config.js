@@ -1,12 +1,7 @@
 import { configure } from 'quasar/wrappers'
 
 export default configure(() => ({
-  eslint: {
-    warnings: true,
-    errors: true
-  },
-
-  boot: ['firebase', 'toast'],
+  boot: ['firebase'],
 
   css: ['app.scss'],
 

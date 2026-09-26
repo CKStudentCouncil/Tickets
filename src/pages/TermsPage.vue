@@ -116,56 +116,20 @@
 
 <script setup>
 import { ref } from 'vue'
+import { downloadElementAsPdf } from 'src/utils/pdf'
 
 const termsContent = ref(null)
 const downloading = ref(false)
 
 async function downloadPdf() {
   if (!termsContent.value || downloading.value) return
-
   downloading.value = true
 
-  const actionRow = termsContent.value.querySelector('.actions')
-
   try {
-    const html2pdf = (await import('html2pdf.js')).default
-
-    if (actionRow) {
-      actionRow.style.visibility = 'hidden'
-    }
-
-    const options = {
-      margin: [15, 12, 15, 12],
-      filename: '建中舞會購票系統使用者條款.pdf',
-      image: {
-        type: 'jpeg',
-        quality: 0.98
-      },
-      html2canvas: {
-        scale: 2,
-        useCORS: true
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait'
-      },
-      pagebreak: {
-        mode: ['avoid-all', 'css', 'legacy']
-      }
-    }
-
-    await html2pdf()
-      .set(options)
-      .from(termsContent.value)
-      .save()
+    await downloadElementAsPdf(termsContent.value, '建中舞會購票系統使用者條款.pdf', '.actions')
   } catch (error) {
     console.error('PDF generation failed:', error)
   } finally {
-    if (actionRow) {
-      actionRow.style.visibility = ''
-    }
-
     downloading.value = false
   }
 }
