@@ -35,6 +35,23 @@
             <li>建中班聯會 80-2 資訊股執行</li>
           </ul>
         </div>
+        <div class="team-member">
+          <p class="member-name">陳柏東</p>
+          <ul>
+            <li>建中班聯會 80-2 資訊股執行</li>
+            <li>建中班聯會 81-1 資訊股股長</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="acknowledgements team-section">
+        <h2>特別感謝</h2>
+        <div class="team-member">
+          <p class="member-name">鄧又嘉</p>
+          <ul>
+            <li>建中班聯會 評議委員會副主任委員</li>
+          </ul>
+        </div>
       </section>
 
       <div class="actions">
