@@ -1,0 +1,195 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================
+    // Helpers
+    // =========================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function pendingPath(email) {
+      return /databases/$(database)/documents/pendingUsers/$(email);
+    }
+
+    // manager = 1, admin = 2, super_admin = 3, anyone else = 0
+    function roleRank() {
+      return signedIn() && exists(userPath(request.auth.uid))
+        ? { 'manager': 1, 'admin': 2, 'super_admin': 3 }
+            .get(get(userPath(request.auth.uid)).data.get('role', ''), 0)
+        : 0;
+    }
+
+    function isManager() {
+      return roleRank() >= 1;
+    }
+
+    function isAdmin() {
+      return roleRank() >= 2;
+    }
+
+    function isSuperAdmin() {
+      return roleRank() >= 3;
+    }
+
+    function isStaffRole(role) {
+      return role in ['manager', 'admin', 'super_admin'];
+    }
+
+    function signedInEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    function isShortString(value, maxSize) {
+      return value is string && value.size() <= maxSize;
+    }
+
+    // =========================
+    // Staff accounts
+    // =========================
+
+    match /users/{userId} {
+      allow get: if (signedIn() && request.auth.uid == userId) || isSuperAdmin();
+      allow list: if isSuperAdmin();
+
+      // An invited staff member activates their own account on first login.
+      // The role must be exactly the one in their invite, and the invite must
+      // be deleted in the same batch so it can never be used twice.
+      allow create: if isSuperAdmin() || (
+        signedIn()
+        && request.auth.uid == userId
+        && request.auth.token.email_verified == true
+        && exists(pendingPath(signedInEmail()))
+        && !existsAfter(pendingPath(signedInEmail()))
+        && request.resource.data.role == get(pendingPath(signedInEmail())).data.role
+        && request.resource.data.email == signedInEmail()
+        && request.resource.data.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'email', 'displayName', 'photoURL', 'name', 'role', 'uid', 'createdAt', 'updatedAt'
+        ])
+      );
+
+      // Staff may refresh their own profile, never their role.
+      allow update: if isSuperAdmin() || (
+        signedIn()
+        && request.auth.uid == userId
+        && onlyChanges(['email', 'displayName', 'photoURL', 'updatedAt'])
+      );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    // Invites, keyed by lower-case email. Only super admins can list them;
+    // an invitee can read nothing but their own invite.
+    match /pendingUsers/{email} {
+      allow get: if isSuperAdmin() || (signedIn() && signedInEmail() == email);
+      allow list: if isSuperAdmin();
+
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.email == email
+        && isStaffRole(request.resource.data.role);
+
+      // the invitee may only consume their own invite while activating
+      allow delete: if isSuperAdmin() || (
+        signedIn()
+        && signedInEmail() == email
+        && !exists(userPath(request.auth.uid))
+        && existsAfter(userPath(request.auth.uid))
+      );
+    }
+
+    // =========================
+    // Orders
+    // =========================
+
+    // Created only by the createOrder Cloud Function (Admin SDK bypasses
+    // rules). Buyers read their own orders through the getOrders function.
+    match /orders/{orderId} {
+      allow read: if isManager();
+      allow create: if false;
+
+      allow update: if (
+        isManager()
+        && onlyChanges(['delivered', 'deliveryUpdatedAt', 'deliveryUpdatedByName'])
+        && request.resource.data.delivered is bool
+      ) || (
+        isAdmin()
+        && onlyChanges([
+          'delivered', 'deliveryUpdatedAt', 'deliveryUpdatedByName',
+          'paid', 'paymentUpdatedAt', 'paymentUpdatedByName'
+        ])
+        && request.resource.data.get('delivered', false) is bool
+        && request.resource.data.get('paid', false) is bool
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // orderCounters, ticketSales, buyerPurchases and stockReleases are only
+    // touched by Cloud Functions and fall through to the deny-all rule below.
+
+    // =========================
+    // Ticket types & public content
+    // =========================
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /partyStories/{storyId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /partyLineup/{itemId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // =========================
+    // Survey
+    // =========================
+
+    match /surveyResponses/{responseId} {
+      allow create: if request.resource.data.keys().hasOnly([
+          'identity', 'channels', 'device', 'scores', 'issueCount',
+          'issueTypes', 'improvement', 'suggestion', 'createdAt'
+        ])
+        && request.resource.data.createdAt == request.time
+        && isShortString(request.resource.data.identity, 50)
+        && isShortString(request.resource.data.device, 50)
+        && isShortString(request.resource.data.issueCount, 50)
+        && request.resource.data.channels is list
+        && request.resource.data.channels.size() <= 20
+        && request.resource.data.issueTypes is list
+        && request.resource.data.issueTypes.size() <= 20
+        && request.resource.data.scores is map
+        && request.resource.data.scores.size() <= 50
+        && isShortString(request.resource.data.improvement, 2000)
+        && isShortString(request.resource.data.suggestion, 2000);
+
+      allow read, delete: if isManager();
+      allow update: if false;
+    }
+
+    // =========================
+    // Everything else is denied
+    // =========================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
