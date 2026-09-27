@@ -1,6 +1,14 @@
 <template>
   <div class="app-shell">
     <header class="site-header">
+      <div class="blur-container" aria-hidden="true">
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+      </div>
+
       <router-link to="/" class="brand" aria-label="建中舞會購票系統首頁">
         <img src="/cksclogo.png" alt="建中舞會購票系統 Logo" class="brand-mark" />
         <span>CK Tickets</span>
