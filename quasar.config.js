@@ -1,6 +1,6 @@
 import { configure } from 'quasar/wrappers'
 
-export default configure(() => ({
+export default configure((ctx) => ({
   boot: ['firebase'],
 
   css: ['app.scss'],
@@ -17,7 +17,13 @@ export default configure(() => ({
 
     publicPath: '/',
 
-    distDir: 'dist/spa'
+    distDir: 'dist/spa',
+
+    env: {
+      // `quasar dev` only: a fixed App Check debug token, registered once in
+      // the Firebase console (src/boot/firebase.js). Never in a production build.
+      APP_CHECK_DEBUG_TOKEN: ctx.dev ? process.env.APP_CHECK_DEBUG_TOKEN || '' : ''
+    }
   },
 
   devServer: {

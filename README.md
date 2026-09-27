@@ -167,7 +167,12 @@ Buyers read their orders straight from Firestore: `orders/{id}.userId` is the bu
 3. Watch App Check metrics for a day, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy the functions.
 4. Optionally enforce App Check for Cloud Firestore as well (Firebase console → App Check → APIs). Anyone can submit the survey without signing in, so this is what stops scripts from flooding `surveyResponses`.
 
-reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). The first time you run it, the browser console prints `App Check debug token: …`; add that token in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile gets its own token.
+reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). Until its debug token is registered, every Firebase call fails, Google sign-in included, with `AppCheck: Fetch server returned an HTTP error status. HTTP status: 403 (appCheck/fetch-status-error)`.
+
+- Either register the token the browser console prints (`App Check debug token: …`) in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile, and each origin (`localhost` vs `127.0.0.1`, Docker), makes up its own.
+- Or add one token there once (e.g. a UUID from `uuidgen`) and start the dev server with it: `APP_CHECK_DEBUG_TOKEN=<token> npm run dev`, or `docker run -e APP_CHECK_DEBUG_TOKEN=<token> -p 9000:9000 cksc-tickets`. Production builds never include it.
+
+A debug token lets any request pass App Check, so keep it out of the repository.
 
 ## Staff Accounts
 

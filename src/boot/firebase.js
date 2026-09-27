@@ -22,11 +22,15 @@ export const app = initializeApp(firebaseConfig)
 // Lets the functions tell requests from this site apart from scripts
 if (APP_CHECK_SITE_KEY) {
   // reCAPTCHA only issues tokens on the domains of the key, so `quasar dev`
-  // uses a debug token instead: it is printed in the browser console once and
-  // must be added in Firebase console > App Check > Apps > Manage debug tokens.
-  // process.env.DEV is false in `quasar build`, so production never does this.
+  // uses a debug token instead, which must be added in Firebase console >
+  // App Check > Apps > Manage debug tokens. Until it is, every Firebase call
+  // (Google sign-in included) fails with appCheck/fetch-status-error 403.
+  // With APP_CHECK_DEBUG_TOKEN set in the shell that runs `quasar dev`, that
+  // one token is used everywhere; otherwise each browser profile makes up its
+  // own and prints it in the console. process.env.DEV is false in
+  // `quasar build`, so production never does this.
   if (process.env.DEV) {
-    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = process.env.APP_CHECK_DEBUG_TOKEN || true
   }
 
   initializeAppCheck(app, {

@@ -259,6 +259,14 @@ async function signIn(mode) {
       toast.show('彈出視窗被阻擋，請允許彈出視窗後重試')
     } else if (error.code === 'auth/account-exists-with-different-credential') {
       toast.show('此帳號已使用其他方式註冊')
+    } else if (error.code?.startsWith('appCheck/')) {
+      // in `quasar dev`: the App Check debug token isn't registered (src/boot/firebase.js)
+      toast.show(
+        process.env.DEV
+          ? 'App Check 驗證失敗：請將 console 中的 App Check debug token 加到 Firebase console → App Check → Manage debug tokens'
+          : '安全驗證失敗，請重新整理頁面後再試',
+        8000
+      )
     } else if (error.code !== 'auth/cancelled-popup-request') {
       toast.show('Google 登入失敗，請重試')
     }
