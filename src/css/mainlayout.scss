@@ -193,6 +193,14 @@
   flex: none;
 }
 
+.nav-account {
+  flex: none;
+  margin: 4px 18px 0;
+  font-size: 11px;
+  color: var(--lunar);
+  overflow-wrap: anywhere;
+}
+
 /* ---------- page container ---------- */
 .page-container {
   min-height: 100vh;

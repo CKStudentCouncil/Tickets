@@ -59,6 +59,8 @@ service cloud.firestore {
     // Staff accounts
     // =========================
 
+    // Everyone signs in with Google; only staff have a users/{uid} document.
+
     match /users/{userId} {
       allow get: if (signedIn() && request.auth.uid == userId) || isSuperAdmin();
       allow list: if isSuperAdmin();
@@ -120,9 +122,15 @@ service cloud.firestore {
     // =========================
 
     // Created only by the createOrder Cloud Function (Admin SDK bypasses
-    // rules). Buyers read their own orders through the getOrders function.
+    // rules), which sets userId to the signed-in buyer. A buyer can read only
+    // their own orders: lists must filter on where('userId', '==', uid), and
+    // an order id that does not exist or is someone else's is denied.
+    function isOrderOwner() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
     match /orders/{orderId} {
-      allow read: if isManager();
+      allow read: if isManager() || isOrderOwner();
       allow create: if false;
 
       allow update: if (
@@ -142,7 +150,8 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // orderCounters, ticketSales, buyerPurchases and stockReleases are only
+    // Buyers never update or delete orders. orderCounters, ticketSales,
+    // buyerPurchases, orderRequests, rateLimits and stockReleases are only
     // touched by Cloud Functions and fall through to the deny-all rule below.
 
     // =========================

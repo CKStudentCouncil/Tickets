@@ -27,14 +27,15 @@ import * as SURVEY from '../src/data/surveyQuestions.js'
 let env
 
 const ORDER_ID = 'CKS202611050001'
+const buyer = { uid: 'buyer-uid', email: 's1234@gl.ck.tp.edu.tw' }
 const ORDER = {
+  userId: buyer.uid,
   customerName: '王小明',
   customerEmail: 'buyer@example.com',
   customerPhone: '0912345678',
   school: '建國中學',
   items: [{ id: 'campus_ticket', name: '校內票', price: 700, quantity: 1 }],
   finalTotal: 700,
-  accessToken: 'secret',
   delivered: false,
   paid: false
 }
@@ -85,10 +86,28 @@ describe('orders (PARTY-2)', () => {
     await assertFails(setDoc(doc(anon(), 'orders', 'CKS202611050002'), ORDER))
   })
 
-  test('a signed-in non-staff user cannot read or create orders', async () => {
+  test("a signed-in buyer cannot read someone else's orders or create orders", async () => {
     const user = { uid: 'random', email: 'random@example.com' }
     await assertFails(getDoc(doc(as(user), 'orders', ORDER_ID)))
-    await assertFails(setDoc(doc(as(user), 'orders', 'CKS202611050002'), ORDER))
+    await assertFails(getDocs(query(collection(as(user), 'orders'), where('userId', '==', buyer.uid))))
+    await assertFails(setDoc(doc(as(user), 'orders', 'CKS202611050002'), { ...ORDER, userId: user.uid }))
+  })
+
+  test('a buyer reads their own orders, and only with a userId filter', async () => {
+    const db = as(buyer)
+    await assertSucceeds(getDoc(doc(db, 'orders', ORDER_ID)))
+    await assertSucceeds(getDocs(query(collection(db, 'orders'), where('userId', '==', buyer.uid))))
+    await assertFails(getDocs(collection(db, 'orders')))
+    // a missing id looks the same as someone else's order
+    await assertFails(getDoc(doc(db, 'orders', 'CKS202611059999')))
+  })
+
+  test('a buyer cannot change or delete their own order', async () => {
+    const db = as(buyer)
+    await assertFails(updateDoc(doc(db, 'orders', ORDER_ID), { delivered: true }))
+    await assertFails(updateDoc(doc(db, 'orders', ORDER_ID), { paid: true }))
+    await assertFails(updateDoc(doc(db, 'orders', ORDER_ID), { userId: 'someone-else' }))
+    await assertFails(deleteDoc(doc(db, 'orders', ORDER_ID)))
   })
 
   test('staff can read orders', async () => {

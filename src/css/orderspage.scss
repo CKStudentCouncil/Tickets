@@ -52,6 +52,14 @@
     font-size: 24px;
     font-weight: 700;
   }
+
+  p {
+    max-width: 36ch;
+    margin: 10px 0 0;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--lunar);
+  }
 }
 
 .primary-button {
@@ -234,9 +242,6 @@
     color: var(--muted);
   }
 
-  .delete-button {
-    color: var(--lunar);
-  }
 }
 
 .num {

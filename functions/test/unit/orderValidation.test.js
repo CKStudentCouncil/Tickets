@@ -9,13 +9,16 @@ import {
   sanitizeOrderInput,
   checkTicketType,
   getBuyerKey,
+  isSchoolAccount,
   MAX_TICKETS_PER_ORDER
 } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime, getTaiwanDateKey } from '../../lib/time.js'
 
+// the signed-in account's email, passed by createOrder
+const ACCOUNT_EMAIL = ' Buyer@Example.com '
+
 const BUYER = {
   customerName: '王小明',
-  customerEmail: ' Buyer@Example.com ',
   customerPhone: '0912345678',
   school: '建國中學',
   class: '329',
@@ -23,6 +26,7 @@ const BUYER = {
 }
 
 const withItems = (items, extra = {}) => ({ ...BUYER, ...extra, items })
+const sanitize = (payload, email = ACCOUNT_EMAIL) => sanitizeOrderInput(payload, email)
 
 function expectHttpsError(fn, code) {
   assert.throws(fn, (error) => {
@@ -33,18 +37,23 @@ function expectHttpsError(fn, code) {
 
 describe('sanitizeOrderInput', () => {
   test('accepts a valid order and normalises the email', () => {
-    const { order, quantities } = sanitizeOrderInput(withItems([{ id: 'campus_ticket', quantity: 2 }]))
+    const { order, quantities } = sanitize(withItems([{ id: 'campus_ticket', quantity: 2 }]))
     assert.equal(order.customerEmail, 'buyer@example.com')
     assert.deepEqual([...quantities], [['campus_ticket', 2]])
   })
 
+  test('the email is always the account email, never the payload', () => {
+    const { order } = sanitize(withItems([{ id: 'a', quantity: 1 }], { customerEmail: 'victim@example.com' }))
+    assert.equal(order.customerEmail, 'buyer@example.com')
+  })
+
   test('stores numeric-string quantities as numbers', () => {
-    const { quantities } = sanitizeOrderInput(withItems([{ id: 'a', quantity: '2' }]))
+    const { quantities } = sanitize(withItems([{ id: 'a', quantity: '2' }]))
     assert.equal(quantities.get('a'), 2)
   })
 
   test('merges repeated ticket types', () => {
-    const { quantities } = sanitizeOrderInput(
+    const { quantities } = sanitize(
       withItems([{ id: 'a', quantity: 1 }, { ticketTypeId: 'a', quantity: 2 }])
     )
     assert.equal(quantities.get('a'), 3)
@@ -59,39 +68,39 @@ describe('sanitizeOrderInput', () => {
     ['invalid ticket type id', [{ id: '../settings', quantity: 1 }]]
   ]) {
     test(`rejects ${label}`, () => {
-      expectHttpsError(() => sanitizeOrderInput(withItems(items)), 'invalid-argument')
+      expectHttpsError(() => sanitize(withItems(items)), 'invalid-argument')
     })
   }
 
   test(`rejects more than ${MAX_TICKETS_PER_ORDER} tickets per order`, () => {
     expectHttpsError(
-      () => sanitizeOrderInput(withItems([{ id: 'a', quantity: 15 }, { id: 'b', quantity: 6 }])),
+      () => sanitize(withItems([{ id: 'a', quantity: 15 }, { id: 'b', quantity: 6 }])),
       'invalid-argument'
     )
   })
 
   test('rejects Object.prototype names as schools', () => {
     for (const school of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
-      expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { school })), 'invalid-argument')
+      expectHttpsError(() => sanitize(withItems([{ id: 'a', quantity: 1 }], { school })), 'invalid-argument')
     }
   })
 
   test('an over-sized single item gets the per-order limit message', () => {
     assert.throws(
-      () => sanitizeOrderInput(withItems([{ id: 'a', quantity: 21 }])),
+      () => sanitize(withItems([{ id: 'a', quantity: 21 }])),
       (error) => error.code === 'invalid-argument' && error.message.includes(String(MAX_TICKETS_PER_ORDER))
     )
   })
 
   test('rejects a bad email, unknown school and missing name', () => {
-    expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { customerEmail: 'nope' })), 'invalid-argument')
-    expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { school: 'Hogwarts' })), 'invalid-argument')
-    expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { customerName: ' ' })), 'invalid-argument')
-    expectHttpsError(() => sanitizeOrderInput(null), 'invalid-argument')
+    expectHttpsError(() => sanitize(withItems([{ id: 'a', quantity: 1 }]), 'nope'), 'invalid-argument')
+    expectHttpsError(() => sanitize(withItems([{ id: 'a', quantity: 1 }], { school: 'Hogwarts' })), 'invalid-argument')
+    expectHttpsError(() => sanitize(withItems([{ id: 'a', quantity: 1 }], { customerName: ' ' })), 'invalid-argument')
+    expectHttpsError(() => sanitize(null), 'invalid-argument')
   })
 
   test('drops every field that is not whitelisted (prices, totals, flags, userId)', () => {
-    const { order } = sanitizeOrderInput(
+    const { order } = sanitize(
       withItems([{ id: 'a', quantity: 1, price: 0 }], {
         finalTotal: 0,
         originalTotal: 0,
@@ -109,7 +118,7 @@ describe('sanitizeOrderInput', () => {
   })
 
   test('teachers keep their office but not class / seat number', () => {
-    const { order } = sanitizeOrderInput(
+    const { order } = sanitize(
       withItems([{ id: 'a', quantity: 1 }], { school: '建中老師', office: '莊三', class: '329', number: '01' })
     )
     assert.equal(order.office, '莊三')
@@ -118,13 +127,13 @@ describe('sanitizeOrderInput', () => {
   })
 
   test('students do not send an office', () => {
-    const { order } = sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { office: '莊三' }))
+    const { order } = sanitize(withItems([{ id: 'a', quantity: 1 }], { office: '莊三' }))
     assert.equal(order.office, '')
     assert.equal(order.class, '329')
   })
 
   test('truncates over-long strings', () => {
-    const { order } = sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { customerName: 'x'.repeat(500) }))
+    const { order } = sanitize(withItems([{ id: 'a', quantity: 1 }], { customerName: 'x'.repeat(500) }))
     assert.equal(order.customerName.length, 50)
   })
 })
@@ -160,12 +169,22 @@ describe('checkTicketType', () => {
     expectHttpsError(() => checkTicketType({ ...ticketType, salesStartTime: null }, 1, ok), 'failed-precondition')
   })
 
-  test('本校學生 tickets are for 建國中學 students only', () => {
+  test('本校學生 tickets need a @gl.ck.tp.edu.tw account and 建國中學', () => {
     const campus = { ...ticketType, eligibleBuyerIdentity: 'campus_students' }
-    assert.doesNotThrow(() => checkTicketType(campus, 1, { ...ok, school: '建國中學' }))
+    const student = { ...ok, school: '建國中學', email: 's1234@gl.ck.tp.edu.tw' }
+    assert.doesNotThrow(() => checkTicketType(campus, 1, student))
     for (const school of ['北一女中', '師大附中', '建中老師', '建中家長會', '其他學校或社會人士']) {
-      expectHttpsError(() => checkTicketType(campus, 1, { ...ok, school }), 'permission-denied')
+      expectHttpsError(() => checkTicketType(campus, 1, { ...student, school }), 'permission-denied')
     }
+    for (const email of ['s1234@gmail.com', 's1234@ck.tp.edu.tw', 'gl.ck.tp.edu.tw@gmail.com', 'x@evilgl.ck.tp.edu.tw', undefined]) {
+      expectHttpsError(() => checkTicketType(campus, 1, { ...student, email }), 'permission-denied')
+    }
+  })
+
+  test('isSchoolAccount matches the whole domain only', () => {
+    assert.equal(isSchoolAccount('S1234@GL.CK.TP.EDU.TW'), true)
+    assert.equal(isSchoolAccount('s1234@gl.ck.tp.edu.tw.evil.com'), false)
+    assert.equal(isSchoolAccount('s1234@sub.gl.ck.tp.edu.tw'), false)
   })
 
   test('stock: exactly sold out passes, one more fails', () => {

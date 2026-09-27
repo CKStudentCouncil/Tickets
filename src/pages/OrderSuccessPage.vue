@@ -120,7 +120,7 @@ import { nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { trackEvent } from 'src/utils/analytics'
 import { renderOrderQr } from 'src/utils/qrcode'
-import { fetchBuyerOrder } from 'src/services/orderService'
+import { fetchOrder } from 'src/services/orderService'
 
 const route = useRoute()
 
@@ -154,7 +154,7 @@ async function loadOrder() {
   if (!orderId.value) return
 
   try {
-    order.value = await fetchBuyerOrder(orderId.value)
+    order.value = await fetchOrder(orderId.value)
     if (!order.value) return
 
     trackGA4Purchase(order.value)

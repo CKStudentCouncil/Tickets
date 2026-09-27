@@ -21,7 +21,7 @@ function formatOrderDate(createdAt) {
   return date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
 }
 
-// orderUrl: private link that lets the buyer open the order on any device
+// orderUrl: the buyer's order page (opened by signing in with the same account)
 export function generateEmailHTML(orderId, order, orderUrl = '') {
   const formattedDate = formatOrderDate(order.createdAt);
 

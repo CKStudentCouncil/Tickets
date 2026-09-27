@@ -26,9 +26,3 @@ export function getTaiwanDateKey(date = new Date()) {
     .format(date)
     .replace(/-/g, '')
 }
-
-export function toIsoString(value) {
-  if (!value) return null
-  if (typeof value.toDate === 'function') return value.toDate().toISOString()
-  return value instanceof Date ? value.toISOString() : value
-}

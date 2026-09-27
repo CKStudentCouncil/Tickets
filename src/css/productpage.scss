@@ -235,6 +235,33 @@ h1 {
   }
 }
 
+.account-warning {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+
+  border: 1px solid rgba(228, 164, 104, 0.45);
+  background: rgba(228, 164, 104, 0.08);
+
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: rgba(242, 240, 233, 0.8);
+}
+
+.account-row {
+  margin: 0;
+
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(242, 240, 233, 0.6);
+  letter-spacing: 0.02em;
+}
+
+.account-email {
+  color: var(--off-white);
+  font-family: 'Manrope', sans-serif;
+  overflow-wrap: anywhere;
+}
+
 .terms-consent {
   display: flex;
   align-items: flex-start;

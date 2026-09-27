@@ -34,11 +34,8 @@
           每人限購 {{ purchaseLimit }} 張
         </p>
 
-        <p
-          v-if="ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS"
-          class="ticket-limit"
-        >
-          限建中在學學生購買，入場時須出示學生證，資格不符者不得入場
+        <p v-if="isCampusTicket" class="ticket-limit">
+          限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，入場時須出示學生證，資格不符者不得入場
         </p>
 
         <div class="divider" />
@@ -49,14 +46,35 @@
         <p v-else-if="status.state === 'unavailable'" class="ticket-limit">開賣時間尚未公布</p>
         <p v-else-if="status.state === 'ended'" class="ticket-limit">此票種已結束販售</p>
 
-        <button
-          v-if="status.state === 'selling' && !showOrderForm"
-          type="button"
-          class="primary-button"
-          @click="openOrderForm"
-        >
-          購買 {{ ticketType.name }}
-        </button>
+        <template v-if="status.state === 'selling' && !showOrderForm">
+          <button
+            v-if="!auth.isLoggedIn"
+            type="button"
+            class="primary-button"
+            @click="goToLogin"
+          >
+            登入後購買
+          </button>
+
+          <template v-else-if="needsOtherAccount">
+            <p class="account-warning">
+              此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
+              <span class="account-email">{{ auth.email }}</span>。
+            </p>
+            <button type="button" class="primary-button" @click="switchAccount">
+              改用建中帳號登入
+            </button>
+          </template>
+
+          <button
+            v-else
+            type="button"
+            class="primary-button"
+            @click="openOrderForm"
+          >
+            購買 {{ ticketType.name }}
+          </button>
+        </template>
 
         <div v-if="showOrderForm" class="order-panel">
           <p class="eyebrow">填寫訂購資訊</p>
@@ -102,10 +120,10 @@
               <input v-model="buyer.customerPhone" type="tel" autocomplete="tel">
             </label>
 
-            <label>
-              Email
-              <input v-model="buyer.customerEmail" type="email" autocomplete="email">
-            </label>
+            <p class="account-row">
+              確認信寄送至
+              <span class="account-email">{{ auth.email }}</span>
+            </p>
           </div>
 
           <p class="order-summary">
@@ -161,15 +179,16 @@ import {
   getPurchaseLimit,
   getTicketStatus
 } from 'src/services/ticketTypeService'
-import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS } from 'src/data/schools'
+import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
+import { useAuthStore } from 'src/stores/auth'
 import { useNow } from 'src/composables/useNow'
 import { formatCountdown, formatDateTime } from 'src/utils/datetime'
 
 const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orderValidation.js
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const toast = useToastStore()
 
 const ticketTypes = ref([])
@@ -221,17 +240,30 @@ const buyer = ref({
   number: '',
   office: '',
   customerName: '',
-  customerPhone: '',
-  customerEmail: ''
+  customerPhone: ''
 })
 
-// 本校學生 tickets can only be bought by 建國中學 students (checked again by
-// createOrder)
-const schoolOptions = computed(() =>
+// 本校學生 tickets can only be bought by 建國中學 students signed in with a
+// school account (checked again by createOrder)
+const isCampusTicket = computed(() =>
   ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
-    ? [HOME_SCHOOL]
-    : SCHOOLS
 )
+
+const needsOtherAccount = computed(() => isCampusTicket.value && !auth.isSchoolAccount)
+
+const schoolOptions = computed(() => (isCampusTicket.value ? [HOME_SCHOOL] : SCHOOLS))
+
+function goToLogin() {
+  router.push({
+    name: 'login',
+    query: { redirect: route.fullPath, ...(isCampusTicket.value ? { account: 'school' } : {}) }
+  })
+}
+
+async function switchAccount() {
+  await auth.signOut()
+  goToLogin()
+}
 
 const needsClass = computed(() => CAMPUS_SCHOOLS.includes(buyer.value.school))
 
@@ -240,11 +272,12 @@ const maxQuantity = computed(() =>
 )
 
 const canSubmitOrder = computed(() =>
+  auth.isLoggedIn &&
+  !needsOtherAccount.value &&
   acceptedTerms.value &&
   !!buyer.value.school &&
   !!buyer.value.customerName.trim() &&
   !!buyer.value.customerPhone.trim() &&
-  EMAIL_PATTERN.test(buyer.value.customerEmail.trim()) &&
   (!needsClass.value || (!!buyer.value.class.trim() && !!buyer.value.number.trim())) &&
   Number.isInteger(quantity.value) &&
   quantity.value > 0 &&
@@ -253,6 +286,9 @@ const canSubmitOrder = computed(() =>
 
 function openOrderForm() {
   if (!ticketType.value || status.value.state !== 'selling') return
+  if (!auth.isLoggedIn) return goToLogin()
+  if (needsOtherAccount.value) return
+
   quantity.value = 1
   orderError.value = ''
   if (!schoolOptions.value.includes(buyer.value.school)) {
@@ -272,15 +308,15 @@ async function submitDirectOrder() {
   submitting.value = true
   orderError.value = ''
 
-  const { school, customerName, customerPhone, customerEmail } = buyer.value
+  const { school, customerName, customerPhone } = buyer.value
 
   try {
-    // The price is decided by the server from the ticket settings
+    // The price is decided by the server from the ticket settings, the email
+    // from the signed-in account
     const result = await submitOrder({
       school,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      customerEmail: customerEmail.trim(),
       class: needsClass.value ? buyer.value.class.trim() : '',
       number: needsClass.value ? buyer.value.number.trim() : '',
       office: school === '建中老師' ? buyer.value.office.trim() : '',

@@ -8,7 +8,8 @@
     <div v-else-if="!order" class="state-screen">
       <span class="eyebrow">CK PARTY NIGHT</span>
       <h1>找不到訂單</h1>
-      <p>此訂單不存在，或您目前沒有查看此訂單的權限。</p>
+      <p v-if="isAdminView">此訂單不存在。</p>
+      <p v-else>此訂單不存在，或不是以目前登入的帳號（{{ auth.email }}）訂購。</p>
 
       <button
         type="button"
@@ -304,17 +305,12 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  fetchBuyerOrder,
-  fetchOrderById,
-  updateOrderDelivery
-} from 'src/services/orderService'
+import { fetchOrder, updateOrderDelivery } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
 import { escapeHtml } from 'src/utils/text'
 import { renderOrderQr } from 'src/utils/qrcode'
-import { addGuestOrder } from 'src/utils/guestOrders'
 
 const route = useRoute()
 const router = useRouter()
@@ -344,16 +340,9 @@ const qrCheck = computed(() => {
 async function loadOrder() {
   loading.value = true
 
-  // private link from the confirmation email: remember the order on this device
-  if (!isAdminView.value && typeof route.query.t === 'string' && route.query.t) {
-    addGuestOrder(orderId.value, route.query.t)
-    router.replace({ query: {} })
-  }
-
   try {
-    const result = isAdminView.value
-      ? await fetchOrderById(orderId.value)
-      : await fetchBuyerOrder(orderId.value)
+    // staff can read any order, a buyer only their own (firestore.rules)
+    const result = await fetchOrder(orderId.value)
 
     order.value = result ? { ...result, delivered: Boolean(result.delivered) } : null
   } catch (error) {

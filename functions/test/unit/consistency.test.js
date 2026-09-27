@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { SITE_URL, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
+import { SITE_URL, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -20,6 +20,7 @@ test('school lists match src/data/schools.js', async () => {
   assert.deepEqual(schools.SCHOOL_CODES, SCHOOL_CODES)
   assert.deepEqual(schools.CAMPUS_SCHOOLS, [...CAMPUS_SCHOOLS])
   assert.equal(schools.HOME_SCHOOL, HOME_SCHOOL)
+  assert.equal(schools.SCHOOL_ACCOUNT_DOMAIN, SCHOOL_ACCOUNT_DOMAIN)
 })
 
 test('ELIGIBLE_IDENTITIES match src/data/ticketTypes.js (PARTY-27)', async () => {

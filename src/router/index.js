@@ -31,7 +31,7 @@ export default defineRouter(function () {
 
     if (to.meta.isAdminSection) {
       if (!authStore.isLoggedIn) {
-        return { name: 'admin-login', query: { redirect: to.fullPath } }
+        return { name: 'login', query: { redirect: to.fullPath } }
       }
       if (!authStore.isManager) {
         return { name: 'home' }
@@ -46,13 +46,17 @@ export default defineRouter(function () {
       return { name: 'admin' }
     }
 
-    // already signed in (e.g. back from signInWithRedirect): keep the target
-    if (to.name === 'admin-login' && authStore.isManager) {
-      return safeRedirect(to.query.redirect)
+    // already signed in: go where the login was meant to lead
+    if (to.name === 'login' && authStore.isLoggedIn) {
+      return safeRedirect(to.query.redirect, authStore.isManager ? '/admin' : '/')
     }
 
     if (new Date() < SHOP_OPEN_AT && SHOP_ROUTES.includes(to.name) && !authStore.isManager) {
       return { name: 'comingsoon' }
+    }
+
+    if (to.meta.requiresAuth && !authStore.isLoggedIn) {
+      return { name: 'login', query: { redirect: to.fullPath } }
     }
 
     return true

@@ -1,0 +1,5 @@
+update the project with the following flows:
+1. every one have to login in order to buy tickets
+2. if purchasing "本校學生" only tickets, his or her account must be @gl.ck.tp.edu.tw
+3. update ui of login page
+4. edit the firebase rule

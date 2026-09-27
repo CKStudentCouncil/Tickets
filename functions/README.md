@@ -14,7 +14,7 @@ functions/
 │   ├── time.js                  # Taiwan-time parsing
 │   ├── orderValidation.js       # pure order checks (unit-tested)
 │   ├── mailer.js                # AWS SES transporter and sender address
-│   ├── orders.js                # createOrder, getOrders, releaseOrderStock, sendOrderQRCode
+│   ├── orders.js                # createOrder, releaseOrderStock, sendOrderQRCode, resendOrderEmail
 │   ├── notifications.js         # sendOrderNotification
 │   └── lineup.js                # uploadLineupImage, deleteLineupImage
 └── templates/
@@ -27,8 +27,7 @@ functions/
 
 | Function | Trigger | Who | Purpose |
 |---|---|---|---|
-| `createOrder` | callable | anyone | Validates the order against `settings/ticketTypes` (price, sale window, eligibility, stock, per-person limit) in one transaction, assigns a random order ID (`CKS20261105K7Q2MX`) and returns `{ id, token }`. A retried call with the same `requestId` returns the same order |
-| `getOrders` | callable | anyone with a token | Returns the orders whose `{ id, token }` pairs match (buyers have no account) |
+| `createOrder` | callable | signed-in users with a verified email | Validates the order against `settings/ticketTypes` (price, sale window, eligibility incl. the `@gl.ck.tp.edu.tw` account for 本校學生 tickets, stock, per-person limit) in one transaction, saves it with `userId` and the account email, assigns a random order ID (`CKS20261105K7Q2MX`) and returns `{ id }`. A retried call with the same `requestId` returns the same order |
 | `releaseOrderStock` | `orders/{id}` deleted | — | Returns the order's tickets to stock and to the buyer's allowance (once, via `stockReleases/{id}`) |
 | `sendOrderQRCode` | `orders/{id}` created | — | Emails the confirmation with a QR code linking to `/admin/orders/{id}?c={ticketCode}`; records `emailStatus` on the order and retries failures for an hour |
 | `resendOrderEmail` | callable | admin+ | Resends the confirmation email (button in the admin order list) |
@@ -42,7 +41,7 @@ Stock and purchase limits are tracked in `ticketSales/{ticketTypeId}` and `buyer
 
 | Name | Default | Meaning |
 |---|---|---|
-| `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` / `getOrders` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
+| `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances; set 2-3 around the sale opening, back to 0 afterwards |
 | `ORDER_LIMIT_PER_IP` | `0` | Max orders per client IP per 10 minutes (0 = off). Schools and mobile carriers share IPs, keep it generous |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, used to pace notifications |

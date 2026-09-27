@@ -7,17 +7,14 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from 'src/boot/firebase'
-import { addGuestOrder, getGuestOrders, removeGuestOrder } from 'src/utils/guestOrders'
 import { parseDate } from 'src/utils/datetime'
 
-const LAST_ORDER_KEY = 'cksc_last_order_id'
-
 const createOrderCallable = httpsCallable(functions, 'createOrder')
-const getOrdersCallable = httpsCallable(functions, 'getOrders')
 const resendOrderEmailCallable = httpsCallable(functions, 'resendOrderEmail')
 
 // Errors where the order may or may not have been saved, or the server was
@@ -36,57 +33,41 @@ function byCreatedAtDesc(a, b) {
   return (parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)
 }
 
-/* ---------- buyers (no account; access via id + token) ---------- */
+/* ---------- buyers (signed in; the rules allow only their own orders) ---------- */
 
+// The server takes the buyer's email and userId from the signed-in account
 export async function submitOrder(orderPayload) {
   const requestId = createRequestId()
-  let data
 
   for (let attempt = 1; ; attempt++) {
     try {
-      ;({ data } = await createOrderCallable({ orderPayload, requestId }))
-      break
+      const { data } = await createOrderCallable({ orderPayload, requestId })
+      return data
     } catch (error) {
       if (attempt >= 3 || !RETRYABLE.includes(error?.code)) throw error
       await wait(500 * attempt + Math.random() * 1000) // spread retries out
     }
   }
+}
 
-  addGuestOrder(data.id, data.token)
+// Must filter on userId: the rules reject queries that could return other
+// buyers' orders
+export async function fetchMyOrders(uid) {
+  const snapshot = await getDocs(query(collection(db, 'orders'), where('userId', '==', uid)))
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() })).sort(byCreatedAtDesc)
+}
+
+// One order: buyers get only their own, staff any. A missing order and
+// someone else's order both come back as null (the rules deny both).
+export async function fetchOrder(orderId) {
+  if (!orderId) return null
+
   try {
-    sessionStorage.setItem(LAST_ORDER_KEY, data.id)
-  } catch {
-    // ignore storage errors
-  }
-
-  return data
-}
-
-export async function fetchBuyerOrders() {
-  const refs = getGuestOrders()
-  if (!refs.length) return []
-
-  const { data } = await getOrdersCallable({ orders: refs })
-  return (data.orders || []).sort(byCreatedAtDesc)
-}
-
-export async function fetchBuyerOrder(orderId) {
-  const ref = getGuestOrders().find((entry) => entry.id === orderId)
-  if (!ref) return null
-
-  const { data } = await getOrdersCallable({ orders: [ref] })
-  return data.orders?.[0] || null
-}
-
-export function forgetBuyerOrder(orderId) {
-  removeGuestOrder(orderId)
-}
-
-export function getLastSubmittedOrderId() {
-  try {
-    return sessionStorage.getItem(LAST_ORDER_KEY)
-  } catch {
-    return null
+    const snap = await getDoc(doc(db, 'orders', orderId))
+    return snap.exists() ? { id: snap.id, ...snap.data() } : null
+  } catch (error) {
+    if (error?.code === 'permission-denied') return null
+    throw error
   }
 }
 
@@ -95,13 +76,6 @@ export function getLastSubmittedOrderId() {
 export async function fetchAllOrders() {
   const snapshot = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')))
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
-}
-
-export async function fetchOrderById(orderId) {
-  if (!orderId) return null
-
-  const snap = await getDoc(doc(db, 'orders', orderId))
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null
 }
 
 export async function updateOrderDelivery(orderId, delivered, updatedByName) {

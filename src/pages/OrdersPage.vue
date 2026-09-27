@@ -1,7 +1,7 @@
 <template>
   <div class="orders-page">
     <header class="page-header">
-      <p class="eyebrow">你的購票紀錄</p>
+      <p class="eyebrow">{{ auth.email }}</p>
       <h1>購票紀錄</h1>
     </header>
 
@@ -14,6 +14,7 @@
       class="empty-state"
     >
       <h2>No Tickets Found</h2>
+      <p>這個帳號還沒有訂單。如果是用其他 Google 帳號購票，請登出後改用該帳號登入。</p>
       <br />
 
       <router-link
@@ -91,18 +92,6 @@
               >
                 查看明細
               </router-link>
-
-              <p>&ensp;</p>
-
-              <button
-                type="button"
-                class="delete-button"
-                aria-label="從我的購票紀錄移除"
-                title="從我的購票紀錄移除"
-                @click="confirmDelete(order.id)"
-              >
-                從紀錄移除
-              </button>
             </div>
           </div>
         </div>
@@ -176,10 +165,12 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
 import { useToastStore } from 'src/stores/toast'
-import { fetchBuyerOrders, forgetBuyerOrder } from 'src/services/orderService'
+import { fetchMyOrders } from 'src/services/orderService'
+import { useAuthStore } from 'src/stores/auth'
 import { formatDateTime as formatDate } from 'src/utils/datetime'
 import { renderOrderQr } from 'src/utils/qrcode'
 
+const auth = useAuthStore()
 const toast = useToastStore()
 
 const orders = ref([])
@@ -214,7 +205,7 @@ async function loadOrders() {
   loading.value = true
 
   try {
-    orders.value = await fetchBuyerOrders()
+    orders.value = await fetchMyOrders(auth.user.uid)
   } catch (error) {
     console.error(error)
     orders.value = []
@@ -260,21 +251,6 @@ function itemSummary(items = []) {
     .join('、')
 
   return `${count} 張票 · ${names}${items.length > 2 ? '…' : ''}`
-}
-
-function confirmDelete(orderId) {
-  if (
-    !window.confirm(
-      '確定要從這台裝置的購票紀錄移除這筆訂單嗎？\n訂單本身不會被取消，但移除後將無法在此裝置查看。'
-    )
-  ) {
-    return
-  }
-
-  forgetBuyerOrder(orderId)
-  orders.value = orders.value.filter((order) => order.id !== orderId)
-  qrRefs.delete(orderId)
-  toast.show('已從你的購票紀錄移除。')
 }
 </script>
 

@@ -23,20 +23,30 @@ const routes = [
         name: 'product',
         component: () => import('pages/ProductPage.vue')
       },
+      // buyers see their orders only while signed in (firestore.rules)
       {
         path: 'order-success',
         name: 'order-success',
-        component: () => import('pages/OrderSuccessPage.vue')
+        component: () => import('pages/OrderSuccessPage.vue'),
+        meta: { requiresAuth: true }
       },
       {
         path: 'orders',
         name: 'orders',
-        component: () => import('pages/OrdersPage.vue')
+        component: () => import('pages/OrdersPage.vue'),
+        meta: { requiresAuth: true }
       },
       {
         path: 'orders/:id',
         name: 'order-detail',
-        component: () => import('pages/OrderDetailPage.vue')
+        component: () => import('pages/OrderDetailPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        // one Google sign-in for buyers and staff
+        path: 'login',
+        name: 'login',
+        component: () => import('pages/LoginPage.vue')
       },
       {
         path: 'terms',
@@ -126,9 +136,9 @@ const routes = [
   },
 
   {
+    // old staff login address
     path: '/admin/login',
-    name: 'admin-login',
-    component: () => import('pages/AdminLoginPage.vue')
+    redirect: (to) => ({ name: 'login', query: to.query })
   },
 
   {

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
+import { isSchoolAccount as isSchoolEmail } from 'src/data/schools'
 
 const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 
@@ -18,6 +19,10 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => hasRole('admin'))
   const isSuperAdmin = computed(() => hasRole('super_admin'))
   const isLoggedIn = computed(() => !!user.value)
+
+  // Everyone signs in with Google to buy; 本校學生 tickets need a school account
+  const email = computed(() => user.value?.email || '')
+  const isSchoolAccount = computed(() => isSchoolEmail(email.value))
 
   // Name recorded on orders / content edited by this staff member
   const displayName = computed(
@@ -86,6 +91,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     isSuperAdmin,
     isLoggedIn,
+    email,
+    isSchoolAccount,
     displayName,
     init,
     refresh,

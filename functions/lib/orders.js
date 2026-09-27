@@ -1,11 +1,11 @@
 import * as functions from 'firebase-functions'
 import { FieldValue } from 'firebase-admin/firestore'
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import QRCode from 'qrcode'
 
 import { db, HttpsError, assertRole } from './common.js'
 import { REGION, SCHOOL_CODES, getAdminOrderUrl, getBuyerOrderUrl } from './constants.js'
-import { getTaiwanDateKey, toIsoString } from './time.js'
+import { getTaiwanDateKey } from './time.js'
 import {
   ORDER_ID_PATTERN,
   checkTicketType,
@@ -18,7 +18,6 @@ import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
 import { CREATE_ORDER_MIN_INSTANCES, ENFORCE_APP_CHECK, ORDER_LIMIT_PER_IP } from './params.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
 
-const MAX_ORDERS_PER_LOOKUP = 50
 const ORDER_ID_ATTEMPTS = 3
 const RATE_WINDOW_MS = 10 * 60 * 1000
 // Stop retrying a failed confirmation email after this long; staff can resend
@@ -26,7 +25,7 @@ const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 
 // Documents written only by these functions (denied to clients by the rules):
 //   ticketSales/{ticketTypeId}      { sold }
-//   buyerPurchases/{sha256(email)}  { quantities: { [ticketTypeId]: n } }
+//   buyerPurchases/{sha256(email)}  { quantities: { [ticketTypeId]: n } }, per account email
 //   orderRequests/{requestId}       { orderId } — makes retried checkouts idempotent
 //   rateLimits/{sha256(ip)}_{slot}  { count }  — only when ORDER_LIMIT_PER_IP > 0
 //   stockReleases/{orderId}         marks a deleted order as already released
@@ -37,6 +36,20 @@ function assertAppCheck(context) {
   if (ENFORCE_APP_CHECK.value() && !context.app) {
     throw new HttpsError('failed-precondition', '請使用正式網站購票')
   }
+}
+
+// Buyers must be signed in; the order email is the account's verified email
+function getBuyerAccount(context) {
+  const token = context.auth?.token
+
+  if (!context.auth?.uid) {
+    throw new HttpsError('unauthenticated', '請先登入再購票')
+  }
+  if (!token?.email || token.email_verified !== true) {
+    throw new HttpsError('failed-precondition', '此帳號的 Email 尚未驗證，請改用 Google 帳號登入')
+  }
+
+  return { uid: context.auth.uid, email: String(token.email).toLowerCase() }
 }
 
 function getClientIp(context) {
@@ -75,14 +88,16 @@ function toHttpsError(error) {
 // Prices, names, sale windows, stock and per-person limits all come from
 // settings/ticketTypes; nothing price-related is trusted from the client.
 // Everything runs in one transaction so simultaneous checkouts cannot
-// oversell or exceed the per-person limit.
+// oversell or exceed the per-person limit. Buyers read their orders back
+// straight from Firestore (the rules allow the account in `userId`).
 export const createOrder = functions
   .region(REGION)
   .runWith({ minInstances: CREATE_ORDER_MIN_INSTANCES })
   .https.onCall(async (data, context) => {
     assertAppCheck(context)
+    const account = getBuyerAccount(context)
 
-    const { order, quantities } = sanitizeOrderInput(data?.orderPayload)
+    const { order, quantities } = sanitizeOrderInput(data?.orderPayload, account.email)
     const requestId = isValidRequestId(data?.requestId) ? data.requestId : null
 
     await enforceIpLimit(context)
@@ -110,8 +125,11 @@ export const createOrder = functions
           // the same checkout was already committed (e.g. the response was lost)
           if (requestSnap?.exists) {
             const previous = await tx.get(db.doc(`orders/${requestSnap.data().orderId}`))
+            if (previous.exists && previous.data().userId === account.uid) {
+              return { status: 200, id: previous.id }
+            }
             if (previous.exists) {
-              return { status: 200, id: previous.id, token: previous.data().accessToken }
+              throw new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
             }
           }
 
@@ -137,6 +155,7 @@ export const createOrder = functions
             checkTicketType(ticketType, quantity, {
               now,
               school: order.school,
+              email: account.email,
               sold: Number(salesSnaps[index].data()?.sold || 0),
               alreadyBought: Number(bought[id] || 0)
             })
@@ -166,15 +185,13 @@ export const createOrder = functions
           )
 
           const finalTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-          const accessToken = randomBytes(24).toString('hex')
 
           tx.create(orderRef, {
             ...order,
             items,
             originalTotal: finalTotal,
             finalTotal,
-            userId: context.auth?.uid || null,
-            accessToken,
+            userId: account.uid, // the buyer's key to read the order (firestore.rules)
             ticketCode: randomBytes(9).toString('base64url'),
             stockCounted: true, // releaseOrderStock only refunds orders that were counted
             delivered: false,
@@ -187,62 +204,12 @@ export const createOrder = functions
             tx.set(requestRef, { orderId: orderRef.id, createdAt: FieldValue.serverTimestamp() })
           }
 
-          return { status: 201, id: orderRef.id, token: accessToken }
+          return { status: 201, id: orderRef.id }
         }, { maxAttempts: 10 })
       } catch (error) {
         if (error instanceof OrderIdTaken && attempt < ORDER_ID_ATTEMPTS) continue
         throw toHttpsError(error)
       }
-    }
-  })
-
-function tokensMatch(expected, actual) {
-  const a = Buffer.from(String(expected || ''))
-  const b = Buffer.from(String(actual || ''))
-  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b)
-}
-
-// What a buyer may see of their own order: no token, staff names or userId
-const BUYER_FIELDS = [
-  'customerName', 'customerEmail', 'customerPhone', 'school', 'class', 'number',
-  'office', 'items', 'originalTotal', 'finalTotal', 'paid', 'delivered', 'ticketCode'
-]
-
-export function serializeOrder(id, data) {
-  return {
-    ...Object.fromEntries(BUYER_FIELDS.filter((key) => key in data).map((key) => [key, data[key]])),
-    id,
-    createdAt: toIsoString(data.createdAt),
-    deliveryUpdatedAt: toIsoString(data.deliveryUpdatedAt),
-    paymentUpdatedAt: toIsoString(data.paymentUpdatedAt)
-  }
-}
-
-// Buyers are not signed in, so they prove ownership of an order with the
-// access token returned by createOrder (kept in their browser).
-export const getOrders = functions
-  .region(REGION)
-  .https.onCall(async (data, context) => {
-    assertAppCheck(context)
-
-    const refs = (Array.isArray(data?.orders) ? data.orders : [])
-      .slice(0, MAX_ORDERS_PER_LOOKUP)
-      .filter((ref) => typeof ref?.id === 'string' && ORDER_ID_PATTERN.test(ref.id))
-
-    if (refs.length === 0) {
-      return { orders: [] }
-    }
-
-    const snaps = await db.getAll(...refs.map((ref) => db.doc(`orders/${ref.id}`)))
-
-    return {
-      orders: snaps
-        .map((snap, index) =>
-          snap.exists && tokensMatch(snap.data().accessToken, refs[index].token)
-            ? serializeOrder(snap.id, snap.data())
-            : null
-        )
-        .filter(Boolean)
     }
   })
 
@@ -311,7 +278,7 @@ export async function sendConfirmationEmail(orderId, order, transporter = create
     from: SENDER,
     to: order.customerEmail,
     subject: `建中舞會購票系統購票成功 - 票券編號：${orderId}`,
-    html: generateEmailHTML(orderId, order, getBuyerOrderUrl(orderId, order.accessToken)),
+    html: generateEmailHTML(orderId, order, getBuyerOrderUrl(orderId)),
     attachments: [
       {
         filename: 'ticket-qrcode.png',

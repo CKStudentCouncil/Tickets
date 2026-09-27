@@ -19,8 +19,10 @@ export const SCHOOL_CODES = {
   其他學校或社會人士: 'O'
 }
 
-// 本校: tickets marked 本校學生 (campus_students) are for its students only
+// 本校: tickets marked 本校學生 (campus_students) are for its students only,
+// bought while signed in with a school Google account (verified email)
 export const HOME_SCHOOL = '建國中學'
+export const SCHOOL_ACCOUNT_DOMAIN = 'gl.ck.tp.edu.tw'
 
 // Students of these schools give their class and seat number
 export const CAMPUS_SCHOOLS = new Set([
@@ -39,9 +41,9 @@ export const ELIGIBLE_IDENTITIES = {
 
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 
-// Private link for the buyer: opening it restores the order on any device
-export function getBuyerOrderUrl(orderId, accessToken) {
-  return `${SITE_URL}/orders/${encodeURIComponent(orderId)}?t=${encodeURIComponent(accessToken || '')}`
+// The buyer's order page; they sign in with the account they ordered with
+export function getBuyerOrderUrl(orderId) {
+  return `${SITE_URL}/orders/${encodeURIComponent(orderId)}`
 }
 
 // Ticket QR target for door staff. `ticketCode` is a random per-order code, so

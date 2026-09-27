@@ -2,7 +2,7 @@
 
 CK Tickets is the official Quasar/Vue 3 ticketing site for CK Party Night, run by the Taipei Municipal Chien Kuo High School Student Council.
 
-Visitors buy tickets without an account and can look their orders up again on the same device. Invited staff (managers, admins and super admins) sign in with Google to check tickets in, manage orders, send notifications and edit site content.
+Everyone signs in with Google on `/login` to buy tickets, and sees their orders again by signing in with the same account on any device. Invited staff (managers, admins and super admins) use the same login to check tickets in, manage orders, send notifications and edit site content.
 
 ## Highlights
 
@@ -32,7 +32,7 @@ src/
 ├── services/       # orderService, ticketTypeService (all Firestore / callable access)
 ├── stores/         # auth (user + role), toast
 ├── data/           # schools, survey questions
-├── utils/          # datetime, text, qrcode, pdf, analytics, guestOrders, debounce
+├── utils/          # datetime, text, qrcode, pdf, analytics, redirect, debounce
 ├── config/         # launch date
 └── router/         # routes and navigation guard
 
@@ -149,26 +149,30 @@ See [functions/README.md](functions/README.md) for the function list and the AWS
 
 ## Ticket Eligibility and Purchase Limits
 
-All checks run on the server (`functions/lib/orderValidation.js`), but buyers do not sign in, so two of them rely on what the buyer declares:
+All checks run on the server (`functions/lib/orderValidation.js`). `createOrder` only accepts signed-in callers with a verified email, and the order email is always the account's email (the form has no email field).
 
-- **本校學生 (campus-only) tickets** are sold only to buyers who pick 建國中學 (`HOME_SCHOOL`); students of the partner schools, teachers and parents are refused. The server cannot verify that the buyer really is a 建中 student.
-- **Per-person limits** are counted per email address (`buyerPurchases/{sha256(email)}`). A buyer who uses a second email can buy again.
+- **本校學生 (campus-only) tickets** need a Google account on `@gl.ck.tp.edu.tw` (`SCHOOL_ACCOUNT_DOMAIN`) **and** the school 建國中學 (`HOME_SCHOOL`). Any other account, and students of the partner schools, teachers and parents, are refused.
+- **Per-person limits** are counted per account email (`buyerPurchases/{sha256(email)}`). For 本校學生 tickets that is one school account per student; for other tickets a buyer with a second Google account can still buy again.
 
-Until buyers are required to sign in (for example with a school Google account), these limits must be enforced at pickup and at the door by checking student IDs. The sales policy (`SalesPolicyPage.vue`, 第二條第六、七款 and 第四條第五、六款) says so, and buyers must tick 同意條款 before ordering.
+Staff still check student IDs at pickup and at the door. The sales policy (`SalesPolicyPage.vue`, 第二條第二、六、七款 and 第四條第五、六款) says so, and buyers must tick 同意條款 before ordering.
+
+Buyers read their orders straight from Firestore: `orders/{id}.userId` is the buyer's uid, and the rules allow a signed-in user to read only orders with their own `userId` (lists must filter on it).
 
 ## Bot Protection (App Check)
 
 `createOrder` can be called by scripts. To make the functions accept only requests from this site:
 
-1. Firebase console → App Check → register the web app with **reCAPTCHA Enterprise** and copy the site key.
+1. Firebase console → App Check → register the web app with **reCAPTCHA Enterprise** and copy the site key. The key's allowed domains must include `tickets.cksc.tw`.
 2. Put the key in `APP_CHECK_SITE_KEY` in `src/config/app.js` and deploy the site.
 3. Watch App Check metrics for a day, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy the functions.
+
+reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). The first time you run it, the browser console prints `App Check debug token: …`; add that token in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile gets its own token.
 
 ## Staff Accounts
 
 The first super admin must be created by hand: in the Firebase console add `users/{uid}` with `role: "super_admin"`, using the uid shown under Authentication.
 
-A super admin invites staff on `/admin/account` (stored as `pendingUsers/{email}`). The invited person then signs in with Google on `/admin/login` using that email, which activates the account with the invited role.
+A super admin invites staff on `/admin/account` (stored as `pendingUsers/{email}`). The invited person then signs in with Google on `/login` using that email, which activates the account with the invited role. (`/admin/login` still redirects to `/login`.) Anyone else who signs in is a buyer and has no `users` document.
 
 ## Deployment
 
@@ -201,15 +205,15 @@ firebase deploy -P cksc-ticket --only firestore:rules,functions
 | `/` | Storefront home |
 | `/product/:id` | Ticket type detail and order form |
 | `/order-success` | Order confirmation |
-| `/orders` | Buyer order history (this device) |
-| `/orders/:id` | Order detail |
+| `/login` | Google sign-in for buyers and staff |
+| `/orders` | The signed-in buyer's orders |
+| `/orders/:id` | Order detail (the buyer's own, or any for staff) |
 | `/intro`, `/performer`, `/about` | Party introduction, lineup, about |
 | `/survey` | User survey |
 | `/admin` | Admin dashboard / notifications |
 | `/admin/orders/:id` | Staff order view (ticket QR codes link here) |
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |
-| `/admin/login` | Staff login |
 | `/comingsoon` | Pre-launch landing page |
 
 ## Application Notes

@@ -2,7 +2,7 @@
 import { createHash, randomInt } from 'node:crypto'
 import { https } from 'firebase-functions'
 
-import { SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, ELIGIBLE_IDENTITIES } from './constants.js'
+import { SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from './constants.js'
 import { parseTaipeiDateTime } from './time.js'
 
 const { HttpsError } = https
@@ -35,7 +35,7 @@ function cleanString(value, maxLength) {
   return String(value ?? '').trim().slice(0, maxLength)
 }
 
-// Per-person limits are counted per normalised email
+// Per-person limits are counted per normalised account email
 export function getBuyerKey(email) {
   return createHash('sha256').update(String(email || '').trim().toLowerCase()).digest('hex')
 }
@@ -44,16 +44,21 @@ export function isCampusSchool(school) {
   return CAMPUS_SCHOOLS.has(school)
 }
 
+export function isSchoolAccount(email) {
+  return String(email || '').trim().toLowerCase().endsWith(`@${SCHOOL_ACCOUNT_DOMAIN}`)
+}
+
 // Whitelists the buyer fields and ticket quantities; everything else the
-// client sends (prices, totals, paid/delivered flags, userId...) is dropped.
-export function sanitizeOrderInput(payload) {
+// client sends (prices, totals, paid/delivered flags, userId, email...) is
+// dropped. The email is always the signed-in account's (`accountEmail`).
+export function sanitizeOrderInput(payload, accountEmail) {
   if (!payload || typeof payload !== 'object') {
     throw new HttpsError('invalid-argument', '訂單資料格式錯誤')
   }
 
   const order = {
     customerName: cleanString(payload.customerName, 50),
-    customerEmail: cleanString(payload.customerEmail, 254).toLowerCase(),
+    customerEmail: cleanString(accountEmail, 254).toLowerCase(),
     customerPhone: cleanString(payload.customerPhone, 30),
     school: cleanString(payload.school, 30),
     class: cleanString(payload.class, 20),
@@ -130,8 +135,9 @@ export function getPurchaseLimit(ticketType) {
 }
 
 // Throws when `quantity` more tickets of this type may not be sold now.
-// `sold` and `alreadyBought` come from the counters read in the transaction.
-export function checkTicketType(ticketType, quantity, { now, school, sold, alreadyBought }) {
+// `email` is the verified account email; `sold` and `alreadyBought` come from
+// the counters read in the transaction.
+export function checkTicketType(ticketType, quantity, { now, school, email, sold, alreadyBought }) {
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -143,12 +149,18 @@ export function checkTicketType(ticketType, quantity, { now, school, sold, alrea
     throw new HttpsError('failed-precondition', `${ticketType.name}已結束販售`)
   }
 
-  // 本校學生 tickets: 建國中學 students only, not the partner schools
-  if (
-    ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS &&
-    school !== HOME_SCHOOL
-  ) {
-    throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
+  // 本校學生 tickets: 建國中學 students only (not the partner schools),
+  // signed in with their school account
+  if (ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS) {
+    if (!isSchoolAccount(email)) {
+      throw new HttpsError(
+        'permission-denied',
+        `${ticketType.name}僅限使用 @${SCHOOL_ACCOUNT_DOMAIN} 帳號登入購買`
+      )
+    }
+    if (school !== HOME_SCHOOL) {
+      throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
+    }
   }
 
   const stock = getStockLimit(ticketType)

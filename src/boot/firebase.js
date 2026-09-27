@@ -21,6 +21,14 @@ export const app = initializeApp(firebaseConfig)
 
 // Lets the functions tell requests from this site apart from scripts
 if (APP_CHECK_SITE_KEY) {
+  // reCAPTCHA only issues tokens on the domains of the key, so `quasar dev`
+  // uses a debug token instead: it is printed in the browser console once and
+  // must be added in Firebase console > App Check > Apps > Manage debug tokens.
+  // process.env.DEV is false in `quasar build`, so production never does this.
+  if (process.env.DEV) {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true
+  }
+
   initializeAppCheck(app, {
     provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
     isTokenAutoRefreshEnabled: true

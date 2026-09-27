@@ -107,19 +107,19 @@
 
             <router-link
               v-if="!auth.isLoggedIn"
-              to="/admin/login"
+              :to="{ name: 'login', query: { redirect: $route.fullPath } }"
               @click="menuOpen = false"
             >
-              幹部登入
+              登入
             </router-link>
 
-            <button
-              v-if="auth.isLoggedIn"
-              type="button"
-              @click="handleSignOut"
-            >
-              登出
-            </button>
+            <template v-else>
+              <p class="nav-account">{{ auth.email }}</p>
+
+              <button type="button" @click="handleSignOut">
+                登出
+              </button>
+            </template>
           </nav>
         </div>
       </div>
@@ -137,8 +137,8 @@
           <nav class="footer-links">
             <router-link to="/">首頁</router-link>
             <router-link to="/orders">已購門票</router-link>
-            <router-link to="/terms">使用者條款</router-link>
             <router-link to="/policy">銷售條款</router-link>
+            <router-link to="/terms">使用者條款</router-link>
             <router-link to="/survey">使用者問卷</router-link>
           </nav>
         </div>
