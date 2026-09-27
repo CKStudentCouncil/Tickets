@@ -43,9 +43,9 @@
             <router-link to="/about" active-class="is-active" @click="menuOpen = false">關於我們</router-link>
             <router-link to="/intro" active-class="is-active" @click="menuOpen = false">舞會介紹</router-link>
             <router-link to="/performer" active-class="is-active" @click="menuOpen = false">社團與藝人</router-link>
-            <router-link to="/terms" @click="menuOpen = false">使用者條款</router-link>
-            <router-link to="/policy" @click="menuOpen = false">銷售條款</router-link>
-            <router-link to="/survey" @click="menuOpen = false">使用者問卷</router-link>
+            <router-link to="/terms" active-class="is-active" @click="menuOpen = false">使用者條款</router-link>
+            <router-link to="/policy" active-class="is-active" @click="menuOpen = false">銷售條款</router-link>
+            <router-link to="/survey" active-class="is-active" @click="menuOpen = false">使用者問卷</router-link>
 
             <div class="nav-divider" role="separator" />
 

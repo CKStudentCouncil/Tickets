@@ -2,7 +2,7 @@
 import { createHash, randomInt } from 'node:crypto'
 import { https } from 'firebase-functions'
 
-import { SCHOOL_CODES, CAMPUS_SCHOOLS, ELIGIBLE_IDENTITIES } from './constants.js'
+import { SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, ELIGIBLE_IDENTITIES } from './constants.js'
 import { parseTaipeiDateTime } from './time.js'
 
 const { HttpsError } = https
@@ -143,11 +143,12 @@ export function checkTicketType(ticketType, quantity, { now, school, sold, alrea
     throw new HttpsError('failed-precondition', `${ticketType.name}已結束販售`)
   }
 
+  // 本校學生 tickets: 建國中學 students only, not the partner schools
   if (
     ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS &&
-    !isCampusSchool(school)
+    school !== HOME_SCHOOL
   ) {
-    throw new HttpsError('permission-denied', `${ticketType.name}僅限校內學生購買`)
+    throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
   }
 
   const stock = getStockLimit(ticketType)

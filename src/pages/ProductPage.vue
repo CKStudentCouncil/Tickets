@@ -31,14 +31,14 @@
           v-if="purchaseLimit"
           class="ticket-limit"
         >
-          每人限購 {{ purchaseLimit }} 張（以購票人本人計算，入場時核對身分）
+          每人限購 {{ purchaseLimit }} 張
         </p>
 
         <p
           v-if="ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS"
           class="ticket-limit"
         >
-          限六校在學學生購買，入場時須出示學生證，資格不符者不得入場
+          限建中在學學生購買，入場時須出示學生證，資格不符者不得入場
         </p>
 
         <div class="divider" />
@@ -113,6 +113,16 @@
             <strong>NT$ {{ (ticketType.price || 0) * quantity }}</strong>
           </p>
 
+          <label class="terms-consent">
+            <input v-model="acceptedTerms" type="checkbox">
+            <span>
+              我已閱讀並同意
+              <router-link to="/policy" target="_blank">銷售條款</router-link>
+              與
+              <router-link to="/terms" target="_blank">使用者條款</router-link>
+            </span>
+          </label>
+
           <p v-if="orderError" class="order-error">{{ orderError }}</p>
 
           <div class="order-panel-actions">
@@ -151,7 +161,7 @@ import {
   getPurchaseLimit,
   getTicketStatus
 } from 'src/services/ticketTypeService'
-import { CAMPUS_SCHOOLS, SCHOOLS } from 'src/data/schools'
+import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS } from 'src/data/schools'
 import { useNow } from 'src/composables/useNow'
 import { formatCountdown, formatDateTime } from 'src/utils/datetime'
 
@@ -204,6 +214,7 @@ const showOrderForm = ref(false)
 const submitting = ref(false)
 const orderError = ref('')
 const quantity = ref(1)
+const acceptedTerms = ref(false)
 const buyer = ref({
   school: '',
   class: '',
@@ -214,10 +225,11 @@ const buyer = ref({
   customerEmail: ''
 })
 
-// Campus-only tickets can only be bought by students of the partner schools
+// 本校學生 tickets can only be bought by 建國中學 students (checked again by
+// createOrder)
 const schoolOptions = computed(() =>
   ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
-    ? CAMPUS_SCHOOLS
+    ? [HOME_SCHOOL]
     : SCHOOLS
 )
 
@@ -228,6 +240,7 @@ const maxQuantity = computed(() =>
 )
 
 const canSubmitOrder = computed(() =>
+  acceptedTerms.value &&
   !!buyer.value.school &&
   !!buyer.value.customerName.trim() &&
   !!buyer.value.customerPhone.trim() &&
@@ -242,7 +255,9 @@ function openOrderForm() {
   if (!ticketType.value || status.value.state !== 'selling') return
   quantity.value = 1
   orderError.value = ''
-  if (!schoolOptions.value.includes(buyer.value.school)) buyer.value.school = ''
+  if (!schoolOptions.value.includes(buyer.value.school)) {
+    buyer.value.school = schoolOptions.value.length === 1 ? schoolOptions.value[0] : ''
+  }
   showOrderForm.value = true
 }
 

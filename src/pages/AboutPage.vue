@@ -36,7 +36,7 @@
           </ul>
         </div>
         <div class="team-member">
-          <p class="member-name">陳柏東</p>
+          <p class="member-name">陳柏東 Dong Chen</p>
           <ul>
             <li>建中班聯會 80-2 資訊股執行</li>
             <li>建中班聯會 81-1 資訊股股長</li>

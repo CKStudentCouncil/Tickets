@@ -13,6 +13,10 @@ export const SCHOOL_CODES = {
 
 export const SCHOOLS = Object.keys(SCHOOL_CODES)
 
+// 本校: tickets marked 本校學生 (campus_students) are for its students only
+export const HOME_SCHOOL = '建國中學'
+
+// Students of these schools give their class and seat number
 export const CAMPUS_SCHOOLS = [
   '建國中學',
   '北一女中',

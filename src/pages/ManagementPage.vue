@@ -103,7 +103,7 @@
                 class="select-field"
               >
                 <option value="campus_students">
-                  本校學生
+                  本校學生（限建國中學）
                 </option>
 
                 <option value="all_users">

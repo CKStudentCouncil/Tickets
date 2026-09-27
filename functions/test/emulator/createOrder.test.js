@@ -140,14 +140,18 @@ describe('createOrder', () => {
     )
   })
 
-  test('rejects unknown, not-yet-on-sale and campus-only tickets for outsiders', async () => {
+  test('rejects unknown, not-yet-on-sale and 本校學生 tickets for non-建中 buyers', async () => {
     await assert.rejects(callCreate(order('a@example.com', [{ id: 'nope', quantity: 1 }]), {}), { code: 'invalid-argument' })
     await assert.rejects(callCreate(order('a@example.com', [{ id: 'future', quantity: 1 }]), {}), { code: 'failed-precondition' })
-    await assert.rejects(
-      callCreate(order('a@example.com', [{ id: 'campus', quantity: 1 }], { school: '其他學校或社會人士' }), {}),
-      { code: 'permission-denied' }
+    for (const school of ['其他學校或社會人士', '北一女中']) {
+      await assert.rejects(
+        callCreate(order('a@example.com', [{ id: 'campus', quantity: 1 }], { school }), {}),
+        { code: 'permission-denied' }
+      )
+    }
+    await assert.doesNotReject(
+      callCreate(order('a@example.com', [{ id: 'campus', quantity: 1 }], { school: '建國中學' }), {})
     )
-    await assert.doesNotReject(callCreate(order('a@example.com', [{ id: 'campus', quantity: 1 }]), {}))
   })
 
   test('concurrent checkouts never oversell (PARTY-5)', async (t) => {

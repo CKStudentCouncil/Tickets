@@ -235,6 +235,33 @@ h1 {
   }
 }
 
+.terms-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 20px;
+
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: rgba(242, 240, 233, 0.7);
+  cursor: pointer;
+
+  input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 3px 0 0;
+    accent-color: var(--ember);
+    cursor: pointer;
+  }
+
+  a {
+    color: var(--ember);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
 .order-error {
   margin: -8px 0 16px;
   font-size: 12.5px;

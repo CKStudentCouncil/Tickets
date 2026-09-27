@@ -160,11 +160,12 @@ describe('checkTicketType', () => {
     expectHttpsError(() => checkTicketType({ ...ticketType, salesStartTime: null }, 1, ok), 'failed-precondition')
   })
 
-  test('campus-only tickets require a campus school', () => {
+  test('本校學生 tickets are for 建國中學 students only', () => {
     const campus = { ...ticketType, eligibleBuyerIdentity: 'campus_students' }
     assert.doesNotThrow(() => checkTicketType(campus, 1, { ...ok, school: '建國中學' }))
-    expectHttpsError(() => checkTicketType(campus, 1, { ...ok, school: '其他學校或社會人士' }), 'permission-denied')
-    expectHttpsError(() => checkTicketType(campus, 1, { ...ok, school: '建中老師' }), 'permission-denied')
+    for (const school of ['北一女中', '師大附中', '建中老師', '建中家長會', '其他學校或社會人士']) {
+      expectHttpsError(() => checkTicketType(campus, 1, { ...ok, school }), 'permission-denied')
+    }
   })
 
   test('stock: exactly sold out passes, one more fails', () => {

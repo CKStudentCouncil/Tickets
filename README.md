@@ -151,10 +151,10 @@ See [functions/README.md](functions/README.md) for the function list and the AWS
 
 All checks run on the server (`functions/lib/orderValidation.js`), but buyers do not sign in, so two of them rely on what the buyer declares:
 
-- **Campus-only tickets** are sold to anyone who picks one of the six campus schools. The server cannot verify that the buyer is a student.
+- **本校學生 (campus-only) tickets** are sold only to buyers who pick 建國中學 (`HOME_SCHOOL`); students of the partner schools, teachers and parents are refused. The server cannot verify that the buyer really is a 建中 student.
 - **Per-person limits** are counted per email address (`buyerPurchases/{sha256(email)}`). A buyer who uses a second email can buy again.
 
-Until buyers are required to sign in (for example with a school Google account), these limits must be enforced at the door by checking student IDs, and the sales policy should say so.
+Until buyers are required to sign in (for example with a school Google account), these limits must be enforced at pickup and at the door by checking student IDs. The sales policy (`SalesPolicyPage.vue`, 第二條第六、七款 and 第四條第五、六款) says so, and buyers must tick 同意條款 before ordering.
 
 ## Bot Protection (App Check)
 
