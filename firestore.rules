@@ -154,13 +154,24 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Scheduled content: the public can only read what is already published
+    // (and, for stories, enabled). Queries must filter the same way
+    // (src/services/contentService.js). 5 minutes of slack lets clients whose
+    // clock runs slightly ahead still query.
+    // (No `is timestamp` check: the rules engine cannot prove it from a query,
+    // and a legacy string publishAt fails the comparison anyway, so it stays
+    // hidden until the admin page migrates it.)
+    function isPublishedNow() {
+      return resource.data.publishAt <= request.time + duration.value(5, 'm');
+    }
+
     match /partyStories/{storyId} {
-      allow read: if true;
+      allow read: if isSuperAdmin() || (resource.data.enabled == true && isPublishedNow());
       allow write: if isSuperAdmin();
     }
 
     match /partyLineup/{itemId} {
-      allow read: if true;
+      allow read: if isSuperAdmin() || isPublishedNow();
       allow write: if isSuperAdmin();
     }
 
@@ -168,21 +179,122 @@ service cloud.firestore {
     // Survey
     // =========================
 
+    // Keep these lists in sync with src/data/surveyQuestions.js
+    // (tests/firestore.rules.test.js submits every option to check).
+    function identityOptions() {
+      return [
+        '建國中學學生',
+        '建國中學家長',
+        '建國中學教師',
+        '北一女中學生',
+        '中山女高學生',
+        '景美女中學生',
+        '成功高中學生',
+        '師大附中學生',
+        '其他學校學生',
+        '社會人士',
+        '其他'
+      ];
+    }
+
+    function channelOptions() {
+      return [
+        '班聯會官方 Instagram',
+        'CK APP',
+        '班代或班級轉知',
+        '同學或朋友分享',
+        '建中相關社群',
+        '搜尋引擎',
+        '其他'
+      ];
+    }
+
+    function deviceOptions() {
+      return [
+        '手機',
+        '平板',
+        '筆記型電腦',
+        '桌上型電腦',
+        '其他'
+      ];
+    }
+
+    function issueCountOptions() {
+      return [
+        '沒有遇到問題',
+        '遇到過一次',
+        '遇到過 2～3 次',
+        '遇到過 4 次以上'
+      ];
+    }
+
+    function issueTypeOptions() {
+      return [
+        '找不到購票入口',
+        '票種資訊不清楚',
+        '活動資訊不清楚',
+        '購票資格確認',
+        '選擇票種',
+        '填寫購票資料',
+        '付款或付款資訊',
+        '訂單送出',
+        '訂單確認',
+        '電子票券或入場資訊',
+        '網頁載入速度',
+        '手機版介面',
+        '登入或帳號',
+        '其他'
+      ];
+    }
+
+    function isScore(scores, key) {
+      return scores[key] is int && scores[key] >= 1 && scores[key] <= 5;
+    }
+
+    // every rating question q4..q25 answered with an integer 1-5
+    function isValidScores(scores) {
+      return scores is map
+        && scores.keys().hasOnly(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25'])
+        && scores.keys().hasAll(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25'])
+        && isScore(scores, 'q4')
+        && isScore(scores, 'q5')
+        && isScore(scores, 'q6')
+        && isScore(scores, 'q7')
+        && isScore(scores, 'q8')
+        && isScore(scores, 'q9')
+        && isScore(scores, 'q10')
+        && isScore(scores, 'q11')
+        && isScore(scores, 'q12')
+        && isScore(scores, 'q13')
+        && isScore(scores, 'q14')
+        && isScore(scores, 'q15')
+        && isScore(scores, 'q16')
+        && isScore(scores, 'q17')
+        && isScore(scores, 'q18')
+        && isScore(scores, 'q19')
+        && isScore(scores, 'q20')
+        && isScore(scores, 'q21')
+        && isScore(scores, 'q22')
+        && isScore(scores, 'q23')
+        && isScore(scores, 'q24')
+        && isScore(scores, 'q25');
+    }
+
     match /surveyResponses/{responseId} {
       allow create: if request.resource.data.keys().hasOnly([
           'identity', 'channels', 'device', 'scores', 'issueCount',
           'issueTypes', 'improvement', 'suggestion', 'createdAt'
         ])
         && request.resource.data.createdAt == request.time
-        && isShortString(request.resource.data.identity, 50)
-        && isShortString(request.resource.data.device, 50)
-        && isShortString(request.resource.data.issueCount, 50)
+        && request.resource.data.identity in identityOptions()
+        && request.resource.data.device in deviceOptions()
+        && request.resource.data.issueCount in issueCountOptions()
         && request.resource.data.channels is list
-        && request.resource.data.channels.size() <= 20
+        && request.resource.data.channels.size() >= 1
+        && request.resource.data.channels.hasOnly(channelOptions())
         && request.resource.data.issueTypes is list
-        && request.resource.data.issueTypes.size() <= 20
-        && request.resource.data.scores is map
-        && request.resource.data.scores.size() <= 50
+        && request.resource.data.issueTypes.hasOnly(issueTypeOptions())
+        && isValidScores(request.resource.data.scores)
         && isShortString(request.resource.data.improvement, 2000)
         && isShortString(request.resource.data.suggestion, 2000);
 

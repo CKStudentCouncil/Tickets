@@ -31,10 +31,23 @@
           v-if="purchaseLimit"
           class="ticket-limit"
         >
-          每人限購 {{ purchaseLimit }} 張
+          每人限購 {{ purchaseLimit }} 張（以購票人本人計算，入場時核對身分）
+        </p>
+
+        <p
+          v-if="ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS"
+          class="ticket-limit"
+        >
+          限六校在學學生購買，入場時須出示學生證，資格不符者不得入場
         </p>
 
         <div class="divider" />
+
+        <p v-if="status.state === 'upcoming'" class="ticket-limit">
+          {{ formatDateTime(ticketType.salesStartTime) }} 開賣・倒數 {{ formatCountdown(ticketType.salesStartTime, now) }}
+        </p>
+        <p v-else-if="status.state === 'unavailable'" class="ticket-limit">開賣時間尚未公布</p>
+        <p v-else-if="status.state === 'ended'" class="ticket-limit">此票種已結束販售</p>
 
         <button
           v-if="status.state === 'selling' && !showOrderForm"
@@ -139,6 +152,8 @@ import {
   getTicketStatus
 } from 'src/services/ticketTypeService'
 import { CAMPUS_SCHOOLS, SCHOOLS } from 'src/data/schools'
+import { useNow } from 'src/composables/useNow'
+import { formatCountdown, formatDateTime } from 'src/utils/datetime'
 
 const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orderValidation.js
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -155,8 +170,11 @@ const ticketType = computed(() =>
   ticketTypes.value.find((type) => type.id === route.params.id) || null
 )
 
+// ticks every second so the buy button appears the moment sales open (PARTY-24)
+const now = useNow(1000)
+
 const status = computed(() =>
-  ticketType.value ? getTicketStatus(ticketType.value) : null
+  ticketType.value ? getTicketStatus(ticketType.value, now.value) : null
 )
 
 const purchaseLimit = computed(() =>

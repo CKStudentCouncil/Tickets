@@ -9,3 +9,5 @@ dist/
 .idea/
 .pnp.*
 .yarn/
+# deploy-time function settings (not secrets) are shared
+!functions/.env

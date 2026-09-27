@@ -116,3 +116,17 @@ export function startOfDayInputValue(days) {
   const date = toDateTimeInputValue(new Date(Date.now() + days * DAY_MS)).slice(0, 10)
   return `${date}T00:00`
 }
+
+// "3 天 04:05:06" / "04:05:06" until `target`
+export function formatCountdown(target, now = new Date()) {
+  const ms = Math.max(0, (parseDate(target)?.getTime() || 0) - now.getTime())
+  const totalSeconds = Math.floor(ms / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const clock = [
+    Math.floor((totalSeconds % 86400) / 3600),
+    Math.floor((totalSeconds % 3600) / 60),
+    totalSeconds % 60
+  ].map((n) => String(n).padStart(2, '0')).join(':')
+
+  return days ? `${days} 天 ${clock}` : clock
+}

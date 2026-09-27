@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { SITE_URL, SCHOOL_CODES, CAMPUS_SCHOOLS } from '../../lib/constants.js'
+import { SITE_URL, SCHOOL_CODES, CAMPUS_SCHOOLS, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -19,6 +19,11 @@ test('school lists match src/data/schools.js', async () => {
   const schools = await import(srcFile('data/schools.js'))
   assert.deepEqual(schools.SCHOOL_CODES, SCHOOL_CODES)
   assert.deepEqual(schools.CAMPUS_SCHOOLS, [...CAMPUS_SCHOOLS])
+})
+
+test('ELIGIBLE_IDENTITIES match src/data/ticketTypes.js (PARTY-27)', async () => {
+  const frontend = await import(srcFile('data/ticketTypes.js'))
+  assert.deepEqual(frontend.ELIGIBLE_IDENTITIES, ELIGIBLE_IDENTITIES)
 })
 
 test('client and server parse admin datetimes identically', async () => {

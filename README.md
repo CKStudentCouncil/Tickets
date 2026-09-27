@@ -156,6 +156,14 @@ All checks run on the server (`functions/lib/orderValidation.js`), but buyers do
 
 Until buyers are required to sign in (for example with a school Google account), these limits must be enforced at the door by checking student IDs, and the sales policy should say so.
 
+## Bot Protection (App Check)
+
+`createOrder` can be called by scripts. To make the functions accept only requests from this site:
+
+1. Firebase console → App Check → register the web app with **reCAPTCHA Enterprise** and copy the site key.
+2. Put the key in `APP_CHECK_SITE_KEY` in `src/config/app.js` and deploy the site.
+3. Watch App Check metrics for a day, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy the functions.
+
 ## Staff Accounts
 
 The first super admin must be created by hand: in the Firebase console add `users/{uid}` with `role: "super_admin"`, using the uid shown under Authentication.

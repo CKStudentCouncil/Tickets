@@ -452,7 +452,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore'
+import { doc, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
@@ -461,9 +461,16 @@ import {
   getDateTimePart as getPart,
   parseDate,
   setDateTimePart,
+  toDateTimeInput,
   toDateTimeInputValue
 } from 'src/utils/datetime'
 import { excerpt, splitParagraphs } from 'src/utils/text'
+import {
+  STORIES,
+  fetchAllContent,
+  migrateLegacyContent,
+  toPublishTimestamp
+} from 'src/services/contentService'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -606,15 +613,16 @@ async function loadStories() {
   loading.value = true
 
   try {
-    const snapshot = await getDocs(
-      collection(db, 'partyStories')
-    )
+    const items = await fetchAllContent(STORIES)
 
-    stories.value = snapshot.docs
-      .map(document => ({
-        id: document.id,
-        ...document.data()
-      }))
+    // one-off upgrade of stories saved before publishAt became a Timestamp
+    const migrated = await migrateLegacyContent(STORIES, items)
+    if (migrated) {
+      toast.show(`已更新 ${migrated} 篇舊格式的舞會介紹`)
+      return loadStories()
+    }
+
+    stories.value = items
       .sort((a, b) => {
         return (
           (Number(a.order) || 0) -
@@ -658,7 +666,7 @@ function openEditStory(story) {
     title: story.title || '',
     subtitle: story.subtitle || '',
     content: story.content || '',
-    publishAt: story.publishAt || '',
+    publishAt: toDateTimeInput(story.publishAt),
     order: Number(story.order) || 0,
     enabled: story.enabled !== false
   }
@@ -706,7 +714,7 @@ async function saveStory() {
     await setDoc(
       doc(
         db,
-        'partyStories',
+        STORIES,
         storyId
       ),
       {
@@ -719,8 +727,9 @@ async function saveStory() {
         content:
           storyForm.value.content.trim(),
 
+        // Timestamp: the rules hide stories before this moment (PARTY-16)
         publishAt:
-          storyForm.value.publishAt,
+          toPublishTimestamp(storyForm.value.publishAt),
 
         order:
           Number(storyForm.value.order) || 0,
@@ -731,8 +740,9 @@ async function saveStory() {
         updatedAt:
           new Date(),
 
-        updatedBy:
-          auth.displayName
+        // uid only: stories are public, names/emails must not leak (PARTY-26)
+        updatedByUid:
+          auth.user.uid
       }
     )
 
@@ -777,7 +787,7 @@ async function deleteStory(story) {
     await deleteDoc(
       doc(
         db,
-        'partyStories',
+        STORIES,
         story.id
       )
     )

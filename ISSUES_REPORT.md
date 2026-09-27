@@ -32,7 +32,7 @@
 | PARTY-6 | Urgent | 部署設定指向錯誤專案 | ✅（部署本身需負責人執行） |
 | PARTY-7 | High | pendingUsers 權限與管理錯誤 | ✅ 🚀 |
 | PARTY-8 | High | manager 登入被導首頁、掃碼被擋 | ✅ |
-| PARTY-9 | High | 連結與 QR Code 指向 souvenir.cksc.tw | 🟡（正式主機待定） |
+| PARTY-9 | High | 連結與 QR Code 指向 souvenir.cksc.tw | ✅ |
 | PARTY-10 | High | 數量驗證不足、校內票與限購可繞過 | 🟡（身分驗證政策待定） |
 | PARTY-11 | High | 確認信 UTC；老師辦公室欄位沒送出 | ✅ |
 | PARTY-12 | Low | 清理遺留程式碼與 repo 雜項 | ✅（檔案刪除需負責人執行） |
@@ -199,7 +199,7 @@
 - 已登入的人開啟登入頁時，直接導向 `redirect` 目標，掃碼後不會遺失訂單頁。
 - 掃碼直接開啟訂單頁時，按「返回」會回到後台，而不是首頁。
 
-## PARTY-9　連結與 QR Code 指向 souvenir.cksc.tw — 🟡 Done，正式主機待定
+## PARTY-9　連結與 QR Code 指向 souvenir.cksc.tw — ✅ Done
 
 - 網域抽成常數：前端 `src/config/app.js` 與 functions `lib/constants.js` 各一處 `SITE_URL`，由單元測試確認兩者一致。
 - QR Code（信件與網站）、問卷連結、確認信連結全部改為 `https://tickets.cksc.tw`；站內連結改用 router。
@@ -207,7 +207,9 @@
 - 頁尾「建中校慶紀念品 → souvenir.cksc.tw」是刻意保留的外部連結。
 - `quasar.config.js` 的 `publicPath` 目前是 `/`，沒有 `/Tickets/` 子路徑。
 
-**待決定**：GitHub Pages（`.github/workflows/deploy.yml`）和 Firebase Hosting 兩套設定都還在，正式網域 `tickets.cksc.tw` 要用哪一個？確定後刪除另一套，並把網域加到 Firebase Auth 的授權網域。
+**已決定**：正式網域為 `https://tickets.cksc.tw`（負責人確認），與程式中的 `SITE_URL` 一致。
+
+**部署時請確認**：`tickets.cksc.tw` 已加入 Firebase Auth 的授權網域，否則幹部無法登入。GitHub Pages（`.github/workflows/deploy.yml`）與 Firebase Hosting 兩套設定都還在，請保留實際綁定 `tickets.cksc.tw` 的那一套，另一套可刪除。
 
 ## PARTY-10　下單驗證不足 — 🟡 Done，政策待定
 
@@ -282,7 +284,7 @@ git rm -rf agent .idea .firebase .pnp.cjs .pnp.loader.mjs .yarn yarn.lock public
 
 1. **換掉 Gmail app password**：它曾以明文寫在 `functions/README.md`，至今仍留在 git 歷史中。
 2. 執行 PARTY-12 的 `git rm` 指令，再 commit 所有變更。
-3. 決定正式主機（PARTY-9）與校內票驗證政策（PARTY-10），並改寫銷售條款。
+3. 決定校內票驗證政策（PARTY-10）並改寫銷售條款；確認 `tickets.cksc.tw` 已加入 Firebase Auth 授權網域（PARTY-9）。
 4. 設定 SES secrets，然後部署：`firebase deploy -P cksc-ticket --only firestore:rules,functions`。
 5. 部署後清查 `users` 裡的角色（PARTY-1），刪除舊的隨機 id 邀請並重新邀請（PARTY-7）。
 6. 開賣前的建議項目：

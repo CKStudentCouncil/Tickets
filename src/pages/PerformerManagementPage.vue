@@ -757,12 +757,12 @@
 
 <script setup>
 import {
-  addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
-  getDocs,
   serverTimestamp,
+  setDoc,
   updateDoc
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -776,9 +776,16 @@ import {
   parseDate,
   setDateTimePart,
   startOfDayInputValue,
+  toDateTimeInput,
   toDateTimeInputValue
 } from 'src/utils/datetime'
 import { excerpt as getExcerpt, splitParagraphs } from 'src/utils/text'
+import {
+  LINEUP,
+  fetchAllContent,
+  migrateLegacyContent,
+  toPublishTimestamp
+} from 'src/services/contentService'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -1265,107 +1272,45 @@ async function saveItem() {
 
   saving.value = true
 
+  // New items get their id up front, and the document is written only after
+  // the image upload succeeded: a failed upload leaves nothing behind and a
+  // retry cannot create a duplicate (PARTY-21).
+  const itemRef = editingId.value
+    ? doc(db, LINEUP, editingId.value)
+    : doc(collection(db, LINEUP))
+  let uploadedPath = ''
+
   try {
-    const basePayload = {
-      type:
-        form.value.type,
+    let imageUrl = oldImageUrl.value || ''
+    let imageStoragePath = oldImageStoragePath.value || ''
 
-      name:
-        form.value.name.trim(),
-
-      title:
-        form.value.title.trim(),
-
-      content:
-        form.value.content.trim(),
-
-      publishAt:
-        form.value.publishAt,
-
-      updatedAt:
-        serverTimestamp(),
-
-      updatedBy:
-        auth.displayName
+    if (selectedFile.value) {
+      const uploaded = await uploadImage(itemRef.id)
+      imageUrl = uploaded.url
+      imageStoragePath = uploadedPath = uploaded.storagePath
     }
 
-    let itemId
+    const payload = {
+      type: form.value.type,
+      name: form.value.name.trim(),
+      title: form.value.title.trim(),
+      content: form.value.content.trim(),
+      // Timestamp: the rules hide items before this moment (PARTY-16)
+      publishAt: toPublishTimestamp(form.value.publishAt),
+      imageUrl: imageUrl && !imageUrl.startsWith('blob:') ? imageUrl : '',
+      imageStoragePath: imageStoragePath || '',
+      updatedAt: serverTimestamp(),
+      // uid only: the lineup is public, names/emails must not leak (PARTY-26)
+      updatedByUid: auth.user.uid
+    }
 
-    if (
-      !editingId.value
-    ) {
-      const newDoc =
-        await addDoc(
-          collection(
-            db,
-            'partyLineup'
-          ),
-          {
-            ...basePayload,
-
-            imageUrl:
-              '',
-
-            imageStoragePath:
-              '',
-
-            createdAt:
-              serverTimestamp(),
-
-            createdBy:
-              auth.displayName
-          }
-        )
-
-      itemId =
-        newDoc.id
+    if (editingId.value) {
+      await updateDoc(itemRef, { ...payload, updatedBy: deleteField(), createdBy: deleteField() })
     } else {
-      itemId =
-        editingId.value
+      await setDoc(itemRef, { ...payload, createdAt: serverTimestamp(), createdByUid: auth.user.uid })
     }
 
-    let imageUrl =
-      oldImageUrl.value || ''
-
-    let imageStoragePath =
-      oldImageStoragePath.value || ''
-
-    if (
-      selectedFile.value
-    ) {
-      const uploaded =
-        await uploadImage(
-          itemId
-        )
-
-      imageUrl =
-        uploaded.url
-
-      imageStoragePath =
-        uploaded.storagePath
-    }
-
-    await updateDoc(
-      doc(
-        db,
-        'partyLineup',
-        itemId
-      ),
-      {
-        ...basePayload,
-
-        imageUrl:
-          imageUrl &&
-          !imageUrl.startsWith(
-            'blob:'
-          )
-            ? imageUrl
-            : '',
-
-        imageStoragePath:
-          imageStoragePath || ''
-      }
-    )
+    uploadedPath = '' // saved: the document now owns the new image
 
     if (
       selectedFile.value &&
@@ -1388,6 +1333,9 @@ async function saveItem() {
 
     cancelEdit()
   } catch (error) {
+    // the document write failed after a successful upload: drop the image
+    if (uploadedPath) await deleteImageByStoragePath(uploadedPath)
+
     console.error(
       'Failed to save lineup item:',
       error
@@ -1420,7 +1368,7 @@ async function removeItem(item) {
     await deleteDoc(
       doc(
         db,
-        'partyLineup',
+        LINEUP,
         item.id
       )
     )
@@ -1463,23 +1411,16 @@ async function loadItems() {
   loading.value = true
 
   try {
-    const snapshot =
-      await getDocs(
-        collection(
-          db,
-          'partyLineup'
-        )
-      )
+    const loaded = await fetchAllContent(LINEUP)
 
-    items.value =
-      snapshot.docs.map(
-        document => ({
-          id:
-            document.id,
+    // one-off upgrade of items saved before publishAt became a Timestamp
+    const migrated = await migrateLegacyContent(LINEUP, loaded)
+    if (migrated) {
+      toast.show(`已更新 ${migrated} 筆舊格式的資料`)
+      return loadItems()
+    }
 
-          ...document.data()
-        })
-      )
+    items.value = loaded
   } catch (error) {
     console.error(
       'Failed to load lineup:',
@@ -1534,9 +1475,7 @@ function getStatus(item) {
 }
 
 function normalizePublishAt(value) {
-  if (!value) return ''
-  if (typeof value === 'string') return value.slice(0, 16)
-  return value?.toDate ? toDateTimeInputValue(value.toDate()) : ''
+  return toDateTimeInput(value)
 }
 
 function setPart(part, value) {

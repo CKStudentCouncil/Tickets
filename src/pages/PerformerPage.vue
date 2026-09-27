@@ -209,36 +209,31 @@
 </template>
 
 <script setup>
-import { collection, getDocs } from 'firebase/firestore'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { db } from 'src/boot/firebase'
-import { formatLongDate as formatDate, isPublished, parseDate } from 'src/utils/datetime'
+import { fetchPublishedLineup } from 'src/services/contentService'
+import { formatLongDate as formatDate, parseDate } from 'src/utils/datetime'
 import { splitParagraphs as getParagraphs } from 'src/utils/text'
+
+// Unpublished items are no longer readable at all (PARTY-16), so newly
+// published ones appear by re-querying instead of filtering locally.
+const REFRESH_MS = 60 * 1000
 
 const items = ref([])
 const loading = ref(true)
-const now = ref(new Date())
 
 let refreshTimer = null
 
-// re-evaluated every 30s so scheduled items appear without a reload
-const publishedItems = computed(() =>
-  items.value.filter((item) => isPublished(item.publishAt, now.value))
-)
-
 const clubs = computed(() =>
-  publishedItems.value.filter((item) => item.type === 'club').sort(sortByPublishDate)
+  items.value.filter((item) => item.type === 'club').sort(sortByPublishDate)
 )
 
 const artists = computed(() =>
-  publishedItems.value.filter((item) => item.type === 'artist').sort(sortByPublishDate)
+  items.value.filter((item) => item.type === 'artist').sort(sortByPublishDate)
 )
 
 onMounted(async () => {
   await loadItems()
-  refreshTimer = setInterval(() => {
-    now.value = new Date()
-  }, 30000)
+  refreshTimer = setInterval(loadItems, REFRESH_MS)
 })
 
 onUnmounted(() => {
@@ -246,14 +241,10 @@ onUnmounted(() => {
 })
 
 async function loadItems() {
-  loading.value = true
-
   try {
-    const snapshot = await getDocs(collection(db, 'partyLineup'))
-    items.value = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }))
+    items.value = await fetchPublishedLineup()
   } catch (error) {
     console.error('Failed to load party lineup:', error)
-    items.value = []
   } finally {
     loading.value = false
   }

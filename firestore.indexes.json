@@ -18,6 +18,20 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "partyStories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "enabled",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "publishAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

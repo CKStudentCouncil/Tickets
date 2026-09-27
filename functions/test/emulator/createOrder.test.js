@@ -28,7 +28,7 @@ const iso = (offsetMs) => new Date(Date.now() + offsetMs).toISOString()
 const TICKET_TYPES = [
   { id: 'open', name: '一階票', price: 900, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 100, purchaseLimitPerPerson: 4 },
   { id: 'small', name: '限量票', price: 500, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 5, unlimited: true, purchaseLimitPerPerson: null },
-  { id: 'campus', name: '校內票', price: 700, eligibleBuyerIdentity: 'campus_students', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 0, purchaseLimitPerPerson: 2 },
+  { id: 'campus', name: '校內票', price: 700, eligibleBuyerIdentity: 'campus_students', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), unlimitedStock: true, purchaseLimitPerPerson: 2 },
   { id: 'future', name: '二階票', price: 1200, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(HOUR), salesEndTime: iso(2 * HOUR), totalTicketQuantity: 0, purchaseLimitPerPerson: null }
 ]
 
@@ -83,7 +83,7 @@ describe('createOrder', () => {
     }, {})
 
     assert.equal(result.status, 201)
-    assert.match(result.id, /^TFG\d{12}$/)
+    assert.match(result.id, /^TFG\d{8}[A-HJ-NP-Z2-9]{6}$/)
     assert.match(result.token, /^[0-9a-f]{48}$/)
 
     const saved = (await db.doc(`orders/${result.id}`).get()).data()
@@ -103,11 +103,41 @@ describe('createOrder', () => {
     assert.equal((await db.doc(`orders/${id}`).get()).data().userId, 'real-uid')
   })
 
-  test('order ids count up per day', async () => {
-    const first = await callCreate(order('a@example.com', [{ id: 'open', quantity: 1 }]), {})
-    const second = await callCreate(order('b@example.com', [{ id: 'open', quantity: 1 }], { school: '建國中學' }), {})
-    assert.equal(Number(first.id.slice(-4)) + 1, Number(second.id.slice(-4)))
-    assert.match(second.id, /^CKS/)
+  test('order ids carry the school code and Taiwan date', async () => {
+    const { id } = await callCreate(order('b@example.com', [{ id: 'open', quantity: 1 }], { school: '建國中學' }), {})
+    assert.match(id, /^CKS\d{8}[A-HJ-NP-Z2-9]{6}$/)
+  })
+
+  test('retrying with the same requestId returns the same order, once (PARTY-20)', async () => {
+    const payload = { ...order('retry@example.com', [{ id: 'open', quantity: 2 }]), requestId: 'req-0123456789abcdef' }
+    const first = await callCreate(payload, {})
+    const second = await callCreate(payload, {})
+
+    assert.equal(first.status, 201)
+    assert.equal(second.status, 200)
+    assert.equal(second.id, first.id)
+    assert.equal(second.token, first.token)
+    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
+  })
+
+  test('every order gets a secret ticket code for its QR (PARTY-19)', async () => {
+    const { id, token } = await callCreate(order('code@example.com', [{ id: 'open', quantity: 1 }]), {})
+    const saved = (await db.doc(`orders/${id}`).get()).data()
+    assert.match(saved.ticketCode, /^[\w-]{12}$/)
+    assert.equal(saved.emailStatus, 'pending')
+
+    const { orders } = await callGetOrders({ orders: [{ id, token }] }, {})
+    assert.equal(orders[0].ticketCode, saved.ticketCode)
+  })
+
+  test('a ticket type without stock or the unlimited switch sells nothing (PARTY-18)', async () => {
+    await db.doc('settings/ticketTypes').set({
+      types: [{ ...TICKET_TYPES[0], id: 'nostock', totalTicketQuantity: 0 }]
+    })
+    await assert.rejects(
+      callCreate(order('a@example.com', [{ id: 'nostock', quantity: 1 }]), {}),
+      { code: 'resource-exhausted' }
+    )
   })
 
   test('rejects unknown, not-yet-on-sale and campus-only tickets for outsiders', async () => {

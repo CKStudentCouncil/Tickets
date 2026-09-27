@@ -5,10 +5,7 @@ import { parseDate } from 'src/utils/datetime'
 // Single source of ticket configuration; also read by functions/lib/orders.js
 const ticketTypesRef = () => doc(db, 'settings', 'ticketTypes')
 
-export const ELIGIBLE_IDENTITIES = {
-  CAMPUS_STUDENTS: 'campus_students',
-  ALL_USERS: 'all_users'
-}
+export { ELIGIBLE_IDENTITIES } from 'src/data/ticketTypes'
 
 export async function fetchTicketTypes() {
   const snapshot = await getDoc(ticketTypesRef())
@@ -17,8 +14,10 @@ export async function fetchTicketTypes() {
   return Array.isArray(types) ? types.filter((type) => type?.id && type?.name) : []
 }
 
-export function saveTicketTypes(types, updatedBy) {
-  return setDoc(ticketTypesRef(), { types, updatedAt: new Date(), updatedBy })
+// The document is public, so only the editor's uid is stored, never a
+// name or email (PARTY-26). setDoc replaces the old `updatedBy` field.
+export function saveTicketTypes(types, updatedByUid) {
+  return setDoc(ticketTypesRef(), { types, updatedAt: new Date(), updatedByUid })
 }
 
 export function getTicketStatus(ticketType, now = new Date()) {

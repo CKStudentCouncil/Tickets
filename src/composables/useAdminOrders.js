@@ -161,6 +161,7 @@ export function useAdminOrders({ showToast }) {
   const activeTab = ref('all')
   const selectedSchool = ref('all')
   const customerSearchInput = ref('')
+  const emailFilter = ref('all') // all / failed / pending confirmation emails
   const debouncedCustomerSearch = ref('')
 
   const applyDebouncedSearch = debounce((val) => {
@@ -176,6 +177,7 @@ export function useAdminOrders({ showToast }) {
 
     return ordersList.filter((order) => {
       if (selectedSchool.value !== 'all' && order.school !== selectedSchool.value) return false
+      if (emailFilter.value !== 'all' && order.emailStatus !== emailFilter.value) return false
       if (!q) return true
       return (
         (order.customerName || '').toLowerCase().includes(q) ||
@@ -293,6 +295,8 @@ export function useAdminOrders({ showToast }) {
     activeTab,
     selectedSchool,
     customerSearchInput,
+    emailFilter,
+    patchOrder,
     currentOrders,
     deliveredTabCount,
     currentStats,

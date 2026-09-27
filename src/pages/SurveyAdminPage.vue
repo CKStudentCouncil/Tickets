@@ -418,6 +418,10 @@ onMounted(async () => {
   }
 })
 
+function isValidScore(v) {
+  return Number.isInteger(v) && v >= 1 && v <= 5
+}
+
 const averages = computed(() => {
   const result = {}
 
@@ -429,7 +433,8 @@ const averages = computed(() => {
       for (const q of section.questions) {
         const v = res.scores?.[q.id]
 
-        if (v) {
+        // same filter as scoreDistribution: only integers 1-5 count (PARTY-23)
+        if (isValidScore(v)) {
           sum += v
           count++
         }
@@ -532,7 +537,7 @@ function scoreDistribution(section) {
     for (const q of section.questions) {
       const v = res.scores?.[q.id]
 
-      if (v >= 1 && v <= 5) {
+      if (isValidScore(v)) {
         dist[v]++
       }
     }
@@ -564,7 +569,7 @@ function questionScoreStats(question) {
   for (const res of responses.value) {
     const v = res.scores?.[question.id]
 
-    if (v >= 1 && v <= 5) {
+    if (isValidScore(v)) {
       dist[v]++
       sum += v
       count++

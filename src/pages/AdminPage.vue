@@ -68,6 +68,18 @@
 
     <div
       v-if="canManageOrders"
+      class="filter-block"
+    >
+      <label>確認信：</label>
+      <select v-model="emailFilter">
+        <option value="all">全部</option>
+        <option value="failed">寄送失敗</option>
+        <option value="pending">尚未寄出</option>
+      </select>
+    </div>
+
+    <div
+      v-if="canManageOrders"
       class="tabs"
     >
       <button
@@ -216,7 +228,20 @@
         </div>
 
         <div class="notify-actions">
+          <p v-if="notifyProgress" class="preview-count">
+            已寄出 <span class="num">{{ notifyProgress.sentCount }}</span> / <span class="num">{{ notifyProgress.total }}</span> 位
+          </p>
           <button
+            v-if="interruptedJobId"
+            type="button"
+            class="btn"
+            :disabled="sendingNotify"
+            @click="runNotificationJob({ jobId: interruptedJobId })"
+          >
+            {{ sendingNotify ? '發送中...' : '繼續寄送' }}
+          </button>
+          <button
+            v-else
             type="button"
             class="btn"
             :disabled="!canSendNotify || sendingNotify"
@@ -386,6 +411,10 @@
             <li v-if="order.office">辦公室：{{ order.office }}</li>
           </ul>
         </div>
+        <p>
+          <strong>確認信：</strong>{{ emailStatusLabel(order) }}
+          <span v-if="order.emailStatus === 'failed' && order.emailError" class="mono">（{{ order.emailError }}）</span>
+        </p>
         <div class="items-box">
           <strong>購買票券：</strong>
           <ul>
@@ -398,6 +427,15 @@
           </ul>
         </div>
         <div class="order-actions">
+          <button
+            v-if="order.customerEmail"
+            type="button"
+            class="btn-outline"
+            :disabled="resendingId === order.id"
+            @click="resendEmail(order)"
+          >
+            {{ resendingId === order.id ? '寄送中...' : '補寄確認信' }}
+          </button>
           <button
             type="button"
             class="btn"
@@ -427,6 +465,7 @@ import { functions } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { useAdminOrders } from 'src/composables/useAdminOrders'
+import { resendOrderEmail } from 'src/services/orderService'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -452,6 +491,9 @@ function createNotifyForm(school = 'all') {
 
 const showNotifyModal = ref(false)
 const sendingNotify = ref(false)
+const notifyProgress = ref(null)
+const interruptedJobId = ref('')
+const resendingId = ref('')
 const notifyForm = ref(createNotifyForm())
 
 const {
@@ -461,6 +503,8 @@ const {
   activeTab,
   selectedSchool,
   customerSearchInput,
+  emailFilter,
+  patchOrder,
   currentOrders,
   deliveredTabCount,
   currentStats,
@@ -549,26 +593,78 @@ async function confirmSendNotify() {
     return
   }
 
+  await runNotificationJob({
+    type: notifyForm.value.type,
+    school: notifyForm.value.school,
+    // the subject input only exists for custom notices (PARTY-22)
+    subject: notifyForm.value.type === 'custom' ? notifyForm.value.subject.trim() : '',
+    paymentTime: notifyForm.value.paymentTime.trim(),
+    pickupTime: notifyForm.value.pickupTime.trim(),
+    location: notifyForm.value.location.trim(),
+    message: notifyForm.value.message.trim()
+  })
+}
+
+// The function sends in rate-limited batches and saves progress in a job
+// (PARTY-17): 'partial' means it ran out of time and must be called again,
+// an error leaves a job that can be resumed without re-sending anyone.
+async function runNotificationJob(request) {
+  const sendOrderNotification = httpsCallable(functions, 'sendOrderNotification', {
+    timeout: 560 * 1000
+  })
+
   sendingNotify.value = true
   try {
-    const sendOrderNotification = httpsCallable(functions, 'sendOrderNotification')
-    const result = await sendOrderNotification({
-      type: notifyForm.value.type,
-      school: notifyForm.value.school,
-      subject: notifyForm.value.subject.trim(),
-      paymentTime: notifyForm.value.paymentTime.trim(),
-      pickupTime: notifyForm.value.pickupTime.trim(),
-      location: notifyForm.value.location.trim(),
-      message: notifyForm.value.message.trim()
-    })
-    toast.show(`已成功寄送給 ${result.data.sentCount} 位訂購者`)
+    let result = (await sendOrderNotification(request)).data
+    notifyProgress.value = result
+
+    while (result.status === 'partial') {
+      result = (await sendOrderNotification({ jobId: result.jobId })).data
+      notifyProgress.value = result
+    }
+
+    interruptedJobId.value = ''
+    toast.show(`已成功寄送給 ${result.sentCount} 位訂購者`)
     showNotifyModal.value = false
+    notifyProgress.value = null
     notifyForm.value = createNotifyForm(selectedSchool.value)
   } catch (error) {
     console.error('Send notification error:', error)
+    const details = error?.details
+    if (details?.jobId) {
+      interruptedJobId.value = details.jobId
+      notifyProgress.value = details
+    }
     toast.show(error?.message ? `發送失敗：${error.message}` : '發送失敗，請稍後再試')
   } finally {
     sendingNotify.value = false
+  }
+}
+
+const EMAIL_STATUS_LABELS = {
+  sent: '已寄出',
+  failed: '寄送失敗',
+  pending: '尚未寄出',
+  skipped: '無 Email'
+}
+
+function emailStatusLabel(order) {
+  return EMAIL_STATUS_LABELS[order.emailStatus] || '—'
+}
+
+async function resendEmail(order) {
+  if (!window.confirm(`確定要重新寄送確認信給 ${order.customerEmail} 嗎？`)) return
+
+  resendingId.value = order.id
+  try {
+    await resendOrderEmail(order.id)
+    patchOrder(order.id, { emailStatus: 'sent', emailError: '' })
+    toast.show('確認信已寄出')
+  } catch (error) {
+    patchOrder(order.id, { emailStatus: 'failed', emailError: error?.message || '' })
+    toast.show(error?.message || '寄送失敗')
+  } finally {
+    resendingId.value = ''
   }
 }
 </script>

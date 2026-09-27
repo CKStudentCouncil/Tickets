@@ -40,6 +40,9 @@ export function getBuyerOrderUrl(orderId, accessToken) {
   return `${SITE_URL}/orders/${encodeURIComponent(orderId)}?t=${encodeURIComponent(accessToken || '')}`
 }
 
-export function getAdminOrderUrl(orderId) {
-  return `${SITE_URL}/admin/orders/${encodeURIComponent(orderId)}`
+// Ticket QR target for door staff. `ticketCode` is a random per-order code, so
+// a QR code cannot be forged just by guessing an order id.
+export function getAdminOrderUrl(orderId, ticketCode = '') {
+  const url = `${SITE_URL}/admin/orders/${encodeURIComponent(orderId)}`
+  return ticketCode ? `${url}?c=${encodeURIComponent(ticketCode)}` : url
 }

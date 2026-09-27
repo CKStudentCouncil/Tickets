@@ -4,6 +4,8 @@ import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getAnalytics, isSupported } from 'firebase/analytics'
 import { getFunctions } from 'firebase/functions'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
+import { APP_CHECK_SITE_KEY } from 'src/config/app'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDpURP6Src9JzM5nttBCpA9eCllwRobJtc',
@@ -16,6 +18,14 @@ const firebaseConfig = {
 }
 
 export const app = initializeApp(firebaseConfig)
+
+// Lets the functions tell requests from this site apart from scripts
+if (APP_CHECK_SITE_KEY) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(APP_CHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true
+  })
+}
 
 export const auth = getAuth(app)
 export const db = getFirestore(app)

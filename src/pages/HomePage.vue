@@ -82,19 +82,19 @@
           :key="ticketType.id"
           :to="`/product/${ticketType.id}`"
           class="product-card"
-          :class="{ 'is-muted': getTicketStatus(ticketType).state !== 'selling' }"
+          :class="{ 'is-muted': statusOf(ticketType).state !== 'selling' }"
         >
           <div class="product-image">
             <img
               :src="getTicketImage(ticketType)"
               :alt="ticketType.name"
               loading="lazy"
-              :class="{ 'is-muted-img': getTicketStatus(ticketType).state !== 'selling' }"
+              :class="{ 'is-muted-img': statusOf(ticketType).state !== 'selling' }"
               @error="handleImageError"
             >
-            <span class="status-chip" :class="`status-${getTicketStatus(ticketType).className}`">
+            <span class="status-chip" :class="`status-${statusOf(ticketType).className}`">
               <span class="status-dot" />
-              <span>{{ getTicketStatus(ticketType).label }}</span>
+              <span>{{ statusOf(ticketType).label }}</span>
             </span>
           </div>
 
@@ -128,14 +128,22 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { fetchTicketTypes, getTicketStatus } from 'src/services/ticketTypeService'
+import { useNow } from 'src/composables/useNow'
 
 const ticketTypes = ref([])
 const loadingTicketTypes = ref(true)
 const ticketTypesError = ref(false)
 const collectionSection = ref(null)
 
+// status labels follow the clock without a reload (PARTY-24)
+const now = useNow(10000)
+
+function statusOf(ticketType) {
+  return getTicketStatus(ticketType, now.value)
+}
+
 const availableTicketTypes = computed(() =>
-  ticketTypes.value.filter((ticketType) => getTicketStatus(ticketType).state !== 'ended')
+  ticketTypes.value.filter((ticketType) => statusOf(ticketType).state !== 'ended')
 )
 
 function scrollToCollection() {

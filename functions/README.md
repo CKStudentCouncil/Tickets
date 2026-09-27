@@ -9,6 +9,7 @@ functions/
 ├── index.js                     # entry point, re-exports every function
 ├── lib/
 │   ├── common.js                # admin SDK init, assertRole
+│   ├── params.js                # deploy-time settings (see Settings)
 │   ├── constants.js             # region, SITE_URL, schools, roles
 │   ├── time.js                  # Taiwan-time parsing
 │   ├── orderValidation.js       # pure order checks (unit-tested)
@@ -26,15 +27,27 @@ functions/
 
 | Function | Trigger | Who | Purpose |
 |---|---|---|---|
-| `createOrder` | callable | anyone | Validates the order against `settings/ticketTypes` (price, sale window, eligibility, stock, per-person limit) in one transaction, assigns the order ID and returns `{ id, token }` |
+| `createOrder` | callable | anyone | Validates the order against `settings/ticketTypes` (price, sale window, eligibility, stock, per-person limit) in one transaction, assigns a random order ID (`CKS20261105K7Q2MX`) and returns `{ id, token }`. A retried call with the same `requestId` returns the same order |
 | `getOrders` | callable | anyone with a token | Returns the orders whose `{ id, token }` pairs match (buyers have no account) |
 | `releaseOrderStock` | `orders/{id}` deleted | — | Returns the order's tickets to stock and to the buyer's allowance (once, via `stockReleases/{id}`) |
-| `sendOrderQRCode` | `orders/{id}` created | — | Emails the confirmation with a QR code linking to `/admin/orders/{id}` |
-| `sendOrderNotification` | callable | manager+ | BCC mail-out to buyers (optionally one school) |
+| `sendOrderQRCode` | `orders/{id}` created | — | Emails the confirmation with a QR code linking to `/admin/orders/{id}?c={ticketCode}`; records `emailStatus` on the order and retries failures for an hour |
+| `resendOrderEmail` | callable | admin+ | Resends the confirmation email (button in the admin order list) |
+| `sendOrderNotification` | callable | manager+ | BCC mail-out to buyers (optionally one school), paced by recipients per second; progress is kept in `notificationJobs/{jobId}` so an interrupted send resumes without duplicates |
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
 
-Stock and purchase limits are tracked in `ticketSales/{ticketTypeId}` and `buyerPurchases/{sha256(email)}`; order serial numbers in `orderCounters/{YYYYMMDD}`. These collections, and `stockReleases/{orderId}`, are only written by `createOrder` and `releaseOrderStock`.
+Stock and purchase limits are tracked in `ticketSales/{ticketTypeId}` and `buyerPurchases/{sha256(email)}`; order serial numbers in `orderCounters/{YYYYMMDD}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}` and `notificationJobs/{jobId}`, are only written by the functions (the Firestore rules deny clients).
+
+## Settings (`functions/.env`)
+
+| Name | Default | Meaning |
+|---|---|---|
+| `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` / `getOrders` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
+| `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances; set 2-3 around the sale opening, back to 0 afterwards |
+| `ORDER_LIMIT_PER_IP` | `0` | Max orders per client IP per 10 minutes (0 = off). Schools and mobile carriers share IPs, keep it generous |
+| `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, used to pace notifications |
+
+Change a value and redeploy the functions.
 
 ## Secrets
 

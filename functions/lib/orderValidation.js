@@ -1,5 +1,5 @@
 // Pure order validation used by createOrder (unit-tested in test/).
-import { createHash } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 import { https } from 'firebase-functions'
 
 import { SCHOOL_CODES, CAMPUS_SCHOOLS, ELIGIBLE_IDENTITIES } from './constants.js'
@@ -11,6 +11,25 @@ export const MAX_TICKETS_PER_ORDER = 20
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const TICKET_TYPE_ID_PATTERN = /^[\w-]{1,100}$/
+
+// Order ids: school code + Taiwan date + random suffix, e.g. CKS20261105K7Q2MX.
+// A random suffix (instead of a shared daily serial) keeps every checkout off
+// one hot counter document. Legacy ids end in a 4-digit serial.
+const ORDER_SUFFIX_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I
+export const ORDER_ID_PATTERN = /^[A-Z]{1,4}\d{8}(\d{4}|[A-HJ-NP-Z2-9]{6})$/
+
+export function generateOrderId(schoolCode, dateKey) {
+  let suffix = ''
+  for (let i = 0; i < 6; i++) {
+    suffix += ORDER_SUFFIX_ALPHABET[randomInt(ORDER_SUFFIX_ALPHABET.length)]
+  }
+  return `${schoolCode}${dateKey}${suffix}`
+}
+
+// Client-generated id that makes a retried checkout return the same order
+export function isValidRequestId(value) {
+  return typeof value === 'string' && /^[\w-]{16,64}$/.test(value)
+}
 
 function cleanString(value, maxLength) {
   return String(value ?? '').trim().slice(0, maxLength)
@@ -98,6 +117,14 @@ export function sanitizeOrderInput(payload) {
   return { order, quantities }
 }
 
+// null = unlimited. Unlimited stock must be switched on explicitly
+// (unlimitedStock); a missing or 0 total means nothing can be sold.
+export function getStockLimit(ticketType) {
+  if (ticketType.unlimitedStock === true) return null
+  const total = Number(ticketType.totalTicketQuantity)
+  return Number.isInteger(total) && total > 0 ? total : 0
+}
+
 export function getPurchaseLimit(ticketType) {
   return ticketType.unlimited ? null : Number(ticketType.purchaseLimitPerPerson) || null
 }
@@ -123,9 +150,9 @@ export function checkTicketType(ticketType, quantity, { now, school, sold, alrea
     throw new HttpsError('permission-denied', `${ticketType.name}僅限校內學生購買`)
   }
 
-  const total = Number(ticketType.totalTicketQuantity || 0)
+  const stock = getStockLimit(ticketType)
 
-  if (total > 0 && sold + quantity > total) {
+  if (stock !== null && sold + quantity > stock) {
     throw new HttpsError('resource-exhausted', `${ticketType.name}剩餘票量不足`)
   }
 

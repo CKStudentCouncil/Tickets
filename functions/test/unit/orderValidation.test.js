@@ -2,6 +2,10 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  ORDER_ID_PATTERN,
+  generateOrderId,
+  getStockLimit,
+  isValidRequestId,
   sanitizeOrderInput,
   checkTicketType,
   getBuyerKey,
@@ -163,10 +167,17 @@ describe('checkTicketType', () => {
     expectHttpsError(() => checkTicketType(campus, 1, { ...ok, school: '建中老師' }), 'permission-denied')
   })
 
-  test('stock: exactly sold out passes, one more fails, 0 means unlimited', () => {
+  test('stock: exactly sold out passes, one more fails', () => {
     assert.doesNotThrow(() => checkTicketType(ticketType, 2, { ...ok, sold: 98 }))
     expectHttpsError(() => checkTicketType(ticketType, 3, { ...ok, sold: 98 }), 'resource-exhausted')
-    assert.doesNotThrow(() => checkTicketType({ ...ticketType, totalTicketQuantity: 0 }, 4, { ...ok, sold: 10000 }))
+  })
+
+  test('stock: 0 or missing total sells nothing; unlimited must be explicit (PARTY-18)', () => {
+    expectHttpsError(() => checkTicketType({ ...ticketType, totalTicketQuantity: 0 }, 1, ok), 'resource-exhausted')
+    expectHttpsError(() => checkTicketType({ ...ticketType, totalTicketQuantity: '' }, 1, ok), 'resource-exhausted')
+    assert.doesNotThrow(() =>
+      checkTicketType({ ...ticketType, totalTicketQuantity: 0, unlimitedStock: true }, 4, { ...ok, sold: 10000 })
+    )
   })
 
   test('per-person limit counts earlier purchases; unlimited skips it', () => {
@@ -194,5 +205,37 @@ describe('time helpers', () => {
   test('getBuyerKey ignores case and surrounding spaces', () => {
     assert.equal(getBuyerKey(' A@B.com '), getBuyerKey('a@b.com'))
     assert.match(getBuyerKey('a@b.com'), /^[0-9a-f]{64}$/)
+  })
+})
+
+describe('order ids (PARTY-20)', () => {
+  test('random suffix, valid pattern, no confusable characters', () => {
+    const ids = new Set(Array.from({ length: 2000 }, () => generateOrderId('CKS', '20261105')))
+    assert.equal(ids.size, 2000)
+    for (const id of ids) {
+      assert.match(id, ORDER_ID_PATTERN)
+      assert.doesNotMatch(id.slice(11), /[01IO]/)
+    }
+  })
+
+  test('legacy serial ids still match; junk does not', () => {
+    assert.match('CKS202611050001', ORDER_ID_PATTERN)
+    assert.match('HSNU20261105K7Q2MX', ORDER_ID_PATTERN)
+    assert.doesNotMatch('../settings/x', ORDER_ID_PATTERN)
+    assert.doesNotMatch('CKS2026110', ORDER_ID_PATTERN)
+  })
+
+  test('request ids', () => {
+    assert.ok(isValidRequestId('0f8c2b7e-1d2a-4c3b-9e8f-123456789abc'))
+    assert.ok(!isValidRequestId('short'))
+    assert.ok(!isValidRequestId('bad/../id-bad/../id'))
+    assert.ok(!isValidRequestId(42))
+  })
+
+  test('getStockLimit', () => {
+    assert.equal(getStockLimit({ totalTicketQuantity: 50 }), 50)
+    assert.equal(getStockLimit({ totalTicketQuantity: 0 }), 0)
+    assert.equal(getStockLimit({ totalTicketQuantity: 2.5 }), 0)
+    assert.equal(getStockLimit({ unlimitedStock: true }), null)
   })
 })

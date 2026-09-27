@@ -242,13 +242,24 @@
               </div>
             </label>
 
-            <label class="field">
-              <span>五、票券總量（0 = 不限量）</span>
+            <label class="field ticket-limit-field">
+              <span>五、票券總量</span>
+
+              <div class="ticket-limit-controls">
+                <input
+                  v-model="ticketType.unlimitedStock"
+                  type="checkbox"
+                >
+
+                <span>不限量</span>
+              </div>
 
               <input
                 v-model.number="ticketType.totalTicketQuantity"
                 type="number"
-                min="0"
+                min="1"
+                placeholder="請輸入張數"
+                :disabled="ticketType.unlimitedStock"
               >
             </label>
 
@@ -318,7 +329,9 @@ function createEmptyTicketType() {
     salesStartTime: '',
     salesEndTime: '',
     price: 0,
-    totalTicketQuantity: 0,
+    // blank on purpose: the admin must enter a total or tick 不限量 (PARTY-18)
+    totalTicketQuantity: null,
+    unlimitedStock: false,
     unlimited: false,
     purchaseLimitPerPerson: 1
   }
@@ -425,6 +438,10 @@ async function loadTicketTypeSettings() {
           ...ticketType,
           salesStartTime: toDateTimeInput(ticketType.salesStartTime),
           salesEndTime: toDateTimeInput(ticketType.salesEndTime),
+          // old entries saved 0 meaning "unlimited"; make the admin choose again
+          totalTicketQuantity: Number(ticketType.totalTicketQuantity) > 0
+            ? Number(ticketType.totalTicketQuantity)
+            : null,
           price: Number(ticketType.price) || 0
         }))
       : [createEmptyTicketType()]
@@ -506,13 +523,17 @@ function validateTicketTypeForm() {
       return false
     }
 
+    const total = Number(ticketType.totalTicketQuantity)
+
     if (
-      Number(
-        ticketType.totalTicketQuantity
-      ) < 0
+      !ticketType.unlimitedStock &&
+      (ticketType.totalTicketQuantity === null ||
+        ticketType.totalTicketQuantity === '' ||
+        !Number.isInteger(total) ||
+        total < 1)
     ) {
       toast.show(
-        `「${label}」的票券總量不可為負數`
+        `請填寫「${label}」的票券總量（正整數），或勾選「不限量」`
       )
 
       return false
@@ -554,13 +575,17 @@ async function saveTicketTypeSettings() {
         salesStartTime: toStoredDateTime(ticketType.salesStartTime),
         salesEndTime: toStoredDateTime(ticketType.salesEndTime),
         price: Number(ticketType.price) || 0,
-        totalTicketQuantity: Number(ticketType.totalTicketQuantity) || 0,
+        totalTicketQuantity: ticketType.unlimitedStock
+          ? null
+          : Number(ticketType.totalTicketQuantity),
+        unlimitedStock: !!ticketType.unlimitedStock,
         unlimited: !!ticketType.unlimited,
         purchaseLimitPerPerson: ticketType.unlimited
           ? null
           : Number(ticketType.purchaseLimitPerPerson) || 1
       })),
-      auth.displayName
+      // uid, not name/email: this document is publicly readable (PARTY-26)
+      auth.user.uid
     )
 
     toast.show(

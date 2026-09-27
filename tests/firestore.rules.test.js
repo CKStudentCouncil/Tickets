@@ -1,6 +1,7 @@
 // Firestore security rules tests. Run with `npm run test:rules` (needs Java
 // for the Firestore emulator).
 import { after, before, beforeEach, describe, test } from 'node:test'
+import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   assertFails,
@@ -13,11 +14,15 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   serverTimestamp,
   setDoc,
+  Timestamp,
+  where,
   updateDoc,
   writeBatch
 } from 'firebase/firestore'
+import * as SURVEY from '../src/data/surveyQuestions.js'
 
 let env
 
@@ -274,8 +279,6 @@ describe('pendingUsers (PARTY-7)', () => {
 describe('settings and public content', () => {
   test('everyone can read; only super admins can write', async () => {
     await assertSucceeds(getDoc(doc(anon(), 'settings', 'ticketTypes')))
-    await assertSucceeds(getDocs(collection(anon(), 'partyStories')))
-    await assertSucceeds(getDocs(collection(anon(), 'partyLineup')))
     await assertFails(setDoc(doc(as(staff.admin), 'settings', 'ticketTypes'), { types: [] }))
     await assertFails(setDoc(doc(as(staff.admin), 'partyStories', 's1'), { title: 't' }))
     await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'settings', 'ticketTypes'), { types: [] }))
@@ -283,27 +286,117 @@ describe('settings and public content', () => {
   })
 })
 
-describe('surveyResponses', () => {
-  const response = () => ({
-    identity: '建中學生',
-    channels: ['Instagram'],
-    device: '手機',
-    scores: { q1: 5 },
-    issueCount: '沒有遇到問題',
+describe('scheduled content (PARTY-16)', () => {
+  const HOUR = 60 * 60 * 1000
+  const at = (offset) => Timestamp.fromMillis(Date.now() + offset)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'partyStories', 'live'), { title: 'live', enabled: true, publishAt: at(-HOUR) })
+      await setDoc(doc(db, 'partyStories', 'future'), { title: 'future', enabled: true, publishAt: at(HOUR) })
+      await setDoc(doc(db, 'partyStories', 'off'), { title: 'off', enabled: false, publishAt: at(-HOUR) })
+      await setDoc(doc(db, 'partyLineup', 'live'), { name: 'live', publishAt: at(-HOUR) })
+      await setDoc(doc(db, 'partyLineup', 'future'), { name: 'future', publishAt: at(HOUR) })
+      await setDoc(doc(db, 'partyLineup', 'legacy'), { name: 'legacy', publishAt: '2026-01-01T00:00' })
+    })
+  })
+
+  test('the public query used by the site works and returns only published items', async () => {
+    const stories = await assertSucceeds(getDocs(query(
+      collection(anon(), 'partyStories'),
+      where('enabled', '==', true),
+      where('publishAt', '<=', Timestamp.now())
+    )))
+    assert.deepEqual(stories.docs.map((d) => d.id), ['live'])
+
+    const lineup = await assertSucceeds(getDocs(query(
+      collection(anon(), 'partyLineup'),
+      where('publishAt', '<=', Timestamp.now())
+    )))
+    assert.deepEqual(lineup.docs.map((d) => d.id), ['live'])
+  })
+
+  test('unfiltered listing and direct reads of hidden items are denied', async () => {
+    await assertFails(getDocs(collection(anon(), 'partyStories')))
+    await assertFails(getDocs(collection(anon(), 'partyLineup')))
+    await assertFails(getDoc(doc(anon(), 'partyStories', 'future')))
+    await assertFails(getDoc(doc(anon(), 'partyStories', 'off')))
+    await assertFails(getDoc(doc(anon(), 'partyLineup', 'future')))
+    await assertFails(getDoc(doc(anon(), 'partyLineup', 'legacy')))
+    await assertSucceeds(getDoc(doc(anon(), 'partyLineup', 'live')))
+  })
+
+  test('super admins still see drafts', async () => {
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'partyStories')))
+    await assertSucceeds(getDoc(doc(as(staff.superAdmin), 'partyLineup', 'future')))
+  })
+})
+
+describe('surveyResponses (PARTY-23)', () => {
+  const allScores = (value = 5) =>
+    Object.fromEntries(
+      SURVEY.SCALE_SECTIONS.flatMap((section) => section.questions).map((q) => [q.id, value])
+    )
+
+  const response = (extra = {}) => ({
+    identity: SURVEY.IDENTITY_OPTIONS[0],
+    channels: [SURVEY.CHANNEL_OPTIONS[0]],
+    device: SURVEY.DEVICE_OPTIONS[0],
+    scores: allScores(),
+    issueCount: SURVEY.ISSUE_COUNT_OPTIONS[0],
     issueTypes: [],
     improvement: '',
     suggestion: '',
-    createdAt: serverTimestamp()
+    createdAt: serverTimestamp(),
+    ...extra
   })
 
   test('anyone can submit a well-formed response', async () => {
     await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', 'r1'), response()))
   })
 
-  test('malformed responses are rejected', async () => {
-    await assertFails(setDoc(doc(anon(), 'surveyResponses', 'r2'), { ...response(), admin: true }))
-    await assertFails(setDoc(doc(anon(), 'surveyResponses', 'r3'), { ...response(), createdAt: 'yesterday' }))
-    await assertFails(setDoc(doc(anon(), 'surveyResponses', 'r4'), { ...response(), suggestion: 'x'.repeat(2001) }))
+  test('every option offered by the survey page is accepted by the rules', async () => {
+    let i = 0
+    for (const identity of SURVEY.IDENTITY_OPTIONS) {
+      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ identity })))
+    }
+    for (const device of SURVEY.DEVICE_OPTIONS) {
+      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ device })))
+    }
+    for (const issueCount of SURVEY.ISSUE_COUNT_OPTIONS) {
+      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ issueCount })))
+    }
+    await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({
+      channels: SURVEY.CHANNEL_OPTIONS,
+      issueTypes: SURVEY.ISSUE_TYPE_OPTIONS
+    })))
+    for (const value of [1, 2, 3, 4, 5]) {
+      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ scores: allScores(value) })))
+    }
+  })
+
+  test('out-of-range, non-integer or missing scores are rejected', async () => {
+    const bad = (scores) => setDoc(doc(anon(), 'surveyResponses', 'bad'), response({ scores }))
+    await assertFails(bad({ ...allScores(), q4: 1000000 }))
+    await assertFails(bad({ ...allScores(), q4: '5' }))
+    await assertFails(bad({ ...allScores(), q4: 0 }))
+    await assertFails(bad({ ...allScores(), q4: 4.5 }))
+    await assertFails(bad({ ...allScores(), q99: 5 }))
+    const missing = allScores()
+    delete missing.q25
+    await assertFails(bad(missing))
+  })
+
+  test('unknown options and malformed fields are rejected', async () => {
+    const bad = (extra) => setDoc(doc(anon(), 'surveyResponses', 'bad'), response(extra))
+    await assertFails(bad({ identity: 'hacker' }))
+    await assertFails(bad({ channels: ['<script>'] }))
+    await assertFails(bad({ channels: [] }))
+    await assertFails(bad({ issueTypes: ['whatever'] }))
+    await assertFails(bad({ admin: true }))
+    await assertFails(bad({ createdAt: 'yesterday' }))
+    await assertFails(bad({ suggestion: 'x'.repeat(2001) }))
   })
 
   test('only staff can read responses', async () => {

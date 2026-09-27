@@ -40,6 +40,13 @@
         v-if="isAdminView"
         class="admin-toolbar"
       >
+        <p v-if="qrCheck === 'ok'" class="qr-check ok">✓ QR 驗證碼相符</p>
+        <p v-else-if="qrCheck === 'mismatch'" class="qr-check danger">
+          ⚠ QR 驗證碼不符，可能是偽造的 QR Code。請核對購票人姓名與證件後再處理。
+        </p>
+        <p v-else-if="qrCheck === 'none'" class="qr-check warn">
+          此頁不是由票券 QR Code 開啟，領票前請核對購票人身分。
+        </p>
         <div class="toggle-group">
           <span class="toggle-label">
             領票狀態
@@ -324,6 +331,16 @@ const orderId = computed(() => String(route.params.id || ''))
 // /admin/orders/:id is only reachable by managers (router guard)
 const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.isManager)
 
+// Code from the scanned ticket QR (?c=...), compared with the order's secret
+// ticketCode so a QR generated from a guessed order id is flagged (PARTY-19)
+const scannedCode = String(route.query.c || '')
+
+const qrCheck = computed(() => {
+  if (!isAdminView.value || !order.value?.ticketCode) return null
+  if (!scannedCode) return 'none'
+  return scannedCode === order.value.ticketCode ? 'ok' : 'mismatch'
+})
+
 async function loadOrder() {
   loading.value = true
 
@@ -352,7 +369,7 @@ async function loadOrder() {
   await nextTick()
 
   try {
-    if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value.id)
+    if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value)
   } catch (error) {
     console.error(`QR Code 產生失敗：${order.value.id}`, error)
     toast.show('QR Code 產生失敗')
@@ -361,6 +378,14 @@ async function loadOrder() {
 
 async function setDelivered(delivered) {
   if (!isAdminView.value || !order.value || order.value.delivered === delivered) {
+    return
+  }
+
+  if (
+    delivered &&
+    qrCheck.value === 'mismatch' &&
+    !window.confirm('QR 驗證碼不符，確定已核對身分並要標記為已領票嗎？')
+  ) {
     return
   }
 
@@ -790,6 +815,30 @@ onMounted(loadOrder)
 
 <style scoped>
 @import 'src/css/orderdetailpage.scss';
+
+.qr-check {
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.qr-check.ok {
+  background: #e7f5ec;
+  color: var(--success, #19703a);
+}
+
+.qr-check.warn {
+  background: #fff6e0;
+  color: #8a5a00;
+}
+
+.qr-check.danger {
+  background: #fdecea;
+  color: var(--danger, #a12622);
+}
 
 .qr-canvas-wrapper {
   display: flex;

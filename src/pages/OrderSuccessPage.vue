@@ -160,7 +160,7 @@ async function loadOrder() {
     trackGA4Purchase(order.value)
 
     await nextTick()
-    if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value.id)
+    if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value)
   } catch (error) {
     console.error('訂單載入失敗：', error)
   }

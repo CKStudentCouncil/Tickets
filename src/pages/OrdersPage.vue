@@ -203,7 +203,7 @@ async function renderQrs() {
     if (!canvas) continue
 
     try {
-      await renderOrderQr(canvas, order.id, 88)
+      await renderOrderQr(canvas, order, 88)
     } catch (error) {
       console.error(`QR Code 產生失敗：${order.id}`, error)
     }
@@ -236,7 +236,7 @@ async function openQr(order) {
   if (!modalQrCanvas.value) return
 
   try {
-    await renderOrderQr(modalQrCanvas.value, order.id)
+    await renderOrderQr(modalQrCanvas.value, order)
   } catch (error) {
     console.error('QR Code 產生失敗', error)
     toast.show('QR Code 產生失敗')

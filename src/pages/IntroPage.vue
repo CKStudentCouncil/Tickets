@@ -106,9 +106,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { collection, getDocs } from 'firebase/firestore'
-import { db } from 'src/boot/firebase'
-import { formatLongDate as formatDate, isPublished } from 'src/utils/datetime'
+import { formatLongDate as formatDate } from 'src/utils/datetime'
+import { fetchPublishedStories } from 'src/services/contentService'
 import { splitParagraphs as getParagraphs } from 'src/utils/text'
 
 const stories = ref([])
@@ -118,11 +117,8 @@ async function loadStories() {
   loading.value = true
 
   try {
-    const snapshot = await getDocs(collection(db, 'partyStories'))
-
-    stories.value = snapshot.docs
-      .map((document) => ({ id: document.id, ...document.data() }))
-      .filter((story) => story.enabled !== false && isPublished(story.publishAt))
+    // only enabled, already-published stories are readable (PARTY-16)
+    stories.value = (await fetchPublishedStories())
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
   } catch (error) {
     console.error('Load party stories error:', error)
