@@ -245,6 +245,10 @@ This project is maintained by the **Taipei Municipal Chien Kuo High School Stude
 - 80-1 Student Council Executive Department CIO
 - 80-2 Student Council Executive Department IT Associate
 
+
+### Dong Chen
+- 80-2 Student Council Executive Department IT Associate
+- 81-1 Student Council Executive Department CIO
 ---
 
 **CK Party Night Tickets**  
