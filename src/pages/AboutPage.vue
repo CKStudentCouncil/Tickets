@@ -82,8 +82,12 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
 function openSurvey() {
-  window.open('/survey', '_blank')
+  window.open(router.resolve({ name: 'survey' }).href, '_blank')
 }
 </script>
 

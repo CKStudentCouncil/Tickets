@@ -66,13 +66,14 @@ service cloud.firestore {
       // An invited staff member activates their own account on first login.
       // The role must be exactly the one in their invite, and the invite must
       // be deleted in the same batch so it can never be used twice.
-      allow create: if isSuperAdmin() || (
+      allow create: if (isSuperAdmin() && isStaffRole(request.resource.data.role)) || (
         signedIn()
         && request.auth.uid == userId
         && request.auth.token.email_verified == true
         && exists(pendingPath(signedInEmail()))
         && !existsAfter(pendingPath(signedInEmail()))
         && request.resource.data.role == get(pendingPath(signedInEmail())).data.role
+        && request.resource.data.get('name', '') == get(pendingPath(signedInEmail())).data.get('name', '')
         && request.resource.data.email == signedInEmail()
         && request.resource.data.uid == userId
         && request.resource.data.keys().hasOnly([
@@ -81,7 +82,7 @@ service cloud.firestore {
       );
 
       // Staff may refresh their own profile, never their role.
-      allow update: if isSuperAdmin() || (
+      allow update: if (isSuperAdmin() && isStaffRole(request.resource.data.role)) || (
         signedIn()
         && request.auth.uid == userId
         && onlyChanges(['email', 'displayName', 'photoURL', 'updatedAt'])
@@ -93,10 +94,15 @@ service cloud.firestore {
     // Invites, keyed by lower-case email. Only super admins can list them;
     // an invitee can read nothing but their own invite.
     match /pendingUsers/{email} {
-      allow get: if isSuperAdmin() || (signedIn() && signedInEmail() == email);
+      allow get: if isSuperAdmin() || (
+        signedIn()
+        && request.auth.token.email_verified == true
+        && signedInEmail() == email
+      );
       allow list: if isSuperAdmin();
 
       allow create, update: if isSuperAdmin()
+        && email == email.lower()
         && request.resource.data.email == email
         && isStaffRole(request.resource.data.role);
 

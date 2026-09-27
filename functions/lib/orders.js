@@ -4,7 +4,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import QRCode from 'qrcode'
 
 import { db, HttpsError } from './common.js'
-import { REGION, SCHOOL_CODES, getAdminOrderUrl } from './constants.js'
+import { REGION, SCHOOL_CODES, getAdminOrderUrl, getBuyerOrderUrl } from './constants.js'
 import { getTaiwanDateKey, toIsoString } from './time.js'
 import { checkTicketType, getBuyerKey, sanitizeOrderInput } from './orderValidation.js'
 import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
@@ -109,13 +109,14 @@ export const createOrder = functions
         finalTotal,
         userId: context.auth?.uid || null,
         accessToken,
+        stockCounted: true, // releaseOrderStock only refunds orders that were counted
         delivered: false,
         paid: false,
         createdAt: FieldValue.serverTimestamp()
       })
 
       return id
-    })
+    }, { maxAttempts: 10 }) // many buyers share the counters when sales open
 
     return { status: 201, id: orderId, token: accessToken }
   })
@@ -126,12 +127,15 @@ function tokensMatch(expected, actual) {
   return a.length > 0 && a.length === b.length && timingSafeEqual(a, b)
 }
 
-export function serializeOrder(id, data) {
-  const order = { ...data }
-  delete order.accessToken
+// What a buyer may see of their own order: no token, staff names or userId
+const BUYER_FIELDS = [
+  'customerName', 'customerEmail', 'customerPhone', 'school', 'class', 'number',
+  'office', 'items', 'originalTotal', 'finalTotal', 'paid', 'delivered'
+]
 
+export function serializeOrder(id, data) {
   return {
-    ...order,
+    ...Object.fromEntries(BUYER_FIELDS.filter((key) => key in data).map((key) => [key, data[key]])),
     id,
     createdAt: toIsoString(data.createdAt),
     deliveryUpdatedAt: toIsoString(data.deliveryUpdatedAt),
@@ -170,9 +174,13 @@ export const getOrders = functions
 // the trigger is delivered more than once.
 export const releaseOrderStock = functions
   .region(REGION)
+  .runWith({ failurePolicy: true }) // retried on failure; the marker keeps it idempotent
   .firestore.document('orders/{orderId}')
   .onDelete(async (snap, context) => {
     const order = snap.data() || {}
+    // orders created before the counters existed were never counted
+    if (order.stockCounted !== true) return
+
     const quantities = new Map()
 
     ;(Array.isArray(order.items) ? order.items : []).forEach((item) => {
@@ -237,7 +245,7 @@ export const sendOrderQRCode = functions
         from: SENDER,
         to: order.customerEmail,
         subject: `建中舞會購票系統購票成功 - 票券編號：${orderId}`,
-        html: generateEmailHTML(orderId, order),
+        html: generateEmailHTML(orderId, order, getBuyerOrderUrl(orderId, order.accessToken)),
         attachments: [
           {
             filename: 'ticket-qrcode.png',

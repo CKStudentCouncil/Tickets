@@ -95,6 +95,14 @@ describe('createOrder', () => {
     assert.equal(saved.isAdminOrder, undefined)
   })
 
+  test('userId comes from the signed-in caller, never the payload', async () => {
+    const { id } = await callCreate(
+      order('a@example.com', [{ id: 'open', quantity: 1 }], { userId: 'victim' }),
+      { auth: { uid: 'real-uid', token: {} } }
+    )
+    assert.equal((await db.doc(`orders/${id}`).get()).data().userId, 'real-uid')
+  })
+
   test('order ids count up per day', async () => {
     const first = await callCreate(order('a@example.com', [{ id: 'open', quantity: 1 }]), {})
     const second = await callCreate(order('b@example.com', [{ id: 'open', quantity: 1 }], { school: '建國中學' }), {})
@@ -123,8 +131,10 @@ describe('createOrder', () => {
     const sold = (await db.doc('ticketSales/small').get()).data()?.sold || 0
     t.diagnostic(`${succeeded} of ${attempts} concurrent orders succeeded for 5 tickets`)
 
-    assert.ok(succeeded >= 1, 'at least one order should succeed')
-    assert.ok(succeeded <= 5, `sold ${succeeded} of 5 tickets`)
+    const rejectionCodes = new Set(results.filter((r) => r.status === 'rejected').map((r) => r.reason?.code))
+
+    assert.equal(succeeded, 5, 'exactly the 5 available tickets should sell')
+    assert.deepEqual([...rejectionCodes], ['resource-exhausted'])
     assert.equal(sold, succeeded)
     assert.equal(await countOrdersOf('small'), succeeded)
   })
@@ -159,6 +169,8 @@ describe('getOrders', () => {
     assert.equal(good.orders.length, 1)
     assert.equal(good.orders[0].id, id)
     assert.equal(good.orders[0].accessToken, undefined)
+    assert.equal(good.orders[0].userId, undefined)
+    assert.equal(good.orders[0].stockCounted, undefined)
     assert.equal(typeof good.orders[0].createdAt, 'string')
 
     const bad = await callGetOrders({ orders: [{ id, token: 'wrong' }, { id }] }, {})
@@ -179,5 +191,14 @@ describe('releaseOrderStock', () => {
 
     // the buyer can buy the full allowance again
     await assert.doesNotReject(callCreate(order('a@example.com', [{ id: 'open', quantity: 4 }]), {}))
+  })
+
+  test('orders created before the counters existed are not refunded', async () => {
+    await db.doc('ticketSales/open').set({ sold: 2 })
+    const legacy = { items: [{ id: 'open', quantity: 2 }], customerEmail: 'old@example.com' }
+    await db.doc('orders/CKS202601010001').set(legacy)
+    const snap = await db.doc('orders/CKS202601010001').get()
+    await callRelease(snap, { params: { orderId: 'CKS202601010001' }, eventId: 'e3' })
+    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
   })
 })

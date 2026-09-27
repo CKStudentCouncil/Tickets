@@ -243,7 +243,7 @@
             </label>
 
             <label class="field">
-              <span>五、票券總量</span>
+              <span>五、票券總量（0 = 不限量）</span>
 
               <input
                 v-model.number="ticketType.totalTicketQuantity"
@@ -309,7 +309,10 @@ const savingTicketTypes = ref(false)
 
 function createEmptyTicketType() {
   return {
-    id: crypto.randomUUID(),
+    // randomUUID only exists in secure contexts (https / localhost)
+    id:
+      crypto.randomUUID?.() ??
+      `tt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
     name: '',
     eligibleBuyerIdentity: 'campus_students',
     salesStartTime: '',
@@ -492,6 +495,14 @@ function validateTicketTypeForm() {
         `「${label}」的票價不可為負數`
       )
 
+      return false
+    }
+
+    // a missing price would otherwise sell tickets for NT$ 0
+    if (
+      !Number(ticketType.price) &&
+      !window.confirm(`「${label}」的票價為 0，確定要免費販售嗎？`)
+    ) {
       return false
     }
 

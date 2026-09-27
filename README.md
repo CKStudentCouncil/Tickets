@@ -158,6 +158,8 @@ Until buyers are required to sign in (for example with a school Google account),
 
 ## Staff Accounts
 
+The first super admin must be created by hand: in the Firebase console add `users/{uid}` with `role: "super_admin"`, using the uid shown under Authentication.
+
 A super admin invites staff on `/admin/account` (stored as `pendingUsers/{email}`). The invited person then signs in with Google on `/admin/login` using that email, which activates the account with the invited role.
 
 ## Deployment
@@ -178,10 +180,10 @@ dist/spa
 
 ### Firebase
 
-To deploy the Firebase project and configured services:
+The frontend is hosted on GitHub Pages; deploy only the rules and functions:
 
 ```bash
-firebase deploy
+firebase deploy -P cksc-ticket --only firestore:rules,functions
 ```
 
 ## Main Routes

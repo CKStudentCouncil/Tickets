@@ -50,7 +50,7 @@ export function sanitizeOrderInput(payload) {
     throw new HttpsError('invalid-argument', 'Email 格式不正確')
   }
 
-  if (!SCHOOL_CODES[order.school]) {
+  if (!Object.hasOwn(SCHOOL_CODES, order.school)) {
     throw new HttpsError('invalid-argument', '請選擇學校或身分')
   }
 
@@ -74,8 +74,12 @@ export function sanitizeOrderInput(payload) {
     }
 
     // checked per item, so [{ qty: 5 }, { qty: -3 }] or 0.5 are rejected
-    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > MAX_TICKETS_PER_ORDER) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new HttpsError('invalid-argument', '票券數量必須為正整數')
+    }
+
+    if (quantity > MAX_TICKETS_PER_ORDER) {
+      throw new HttpsError('invalid-argument', `單筆訂單最多 ${MAX_TICKETS_PER_ORDER} 張`)
     }
 
     quantities.set(id, (quantities.get(id) || 0) + quantity)

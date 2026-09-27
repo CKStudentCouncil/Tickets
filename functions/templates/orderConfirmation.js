@@ -21,7 +21,8 @@ function formatOrderDate(createdAt) {
   return date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
 }
 
-export function generateEmailHTML(orderId, order) {
+// orderUrl: private link that lets the buyer open the order on any device
+export function generateEmailHTML(orderId, order, orderUrl = '') {
   const formattedDate = formatOrderDate(order.createdAt);
 
   const items = Array.isArray(order.items) ? order.items : [];
@@ -393,6 +394,23 @@ export function generateEmailHTML(orderId, order) {
                     <p style="margin:0 0 16px;font-family:${FONT};font-size:12px;line-height:1.8;color:${C.muted};">
                       為了讓我們持續改進購票體驗，誠摯邀請您填寫意見反饋表單。
                     </p>
+
+                    ${orderUrl ? `
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px;">
+                      <tr>
+                        <td style="border:1px solid ${C.ember};">
+                          <a
+                            href="${escapeHtml(orderUrl)}"
+                            target="_blank"
+                            rel="noopener"
+                            style="display:block;padding:11px 22px;font-family:${FONT};font-size:12px;font-weight:700;line-height:1.4;letter-spacing:.08em;color:${C.text};text-decoration:none;"
+                          >
+                            查看我的訂單
+                            <span style="color:${C.ember};margin-left:8px;">&#8599;</span>
+                          </a>
+                        </td>
+                      </tr>
+                    </table>` : ''}
 
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                       <tr>

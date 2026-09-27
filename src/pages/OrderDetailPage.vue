@@ -307,6 +307,7 @@ import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
 import { escapeHtml } from 'src/utils/text'
 import { renderOrderQr } from 'src/utils/qrcode'
+import { addGuestOrder } from 'src/utils/guestOrders'
 
 const route = useRoute()
 const router = useRouter()
@@ -325,6 +326,12 @@ const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.i
 
 async function loadOrder() {
   loading.value = true
+
+  // private link from the confirmation email: remember the order on this device
+  if (!isAdminView.value && typeof route.query.t === 'string' && route.query.t) {
+    addGuestOrder(orderId.value, route.query.t)
+    router.replace({ query: {} })
+  }
 
   try {
     const result = isAdminView.value
@@ -774,7 +781,8 @@ function goBack() {
     return
   }
 
-  router.push('/')
+  // opened straight from a QR scan: go to the admin area, not the shop
+  router.push(isAdminView.value ? { name: 'admin' } : '/')
 }
 
 onMounted(loadOrder)

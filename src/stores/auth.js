@@ -11,7 +11,8 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(true)
 
   const role = computed(() => user.value?.role || null)
-  const hasRole = (minRole) => (ROLE_RANK[role.value] || 0) >= ROLE_RANK[minRole]
+  const hasRole = (minRole) =>
+    (Object.hasOwn(ROLE_RANK, role.value) ? ROLE_RANK[role.value] : 0) >= ROLE_RANK[minRole]
 
   const isManager = computed(() => hasRole('manager'))
   const isAdmin = computed(() => hasRole('admin'))
@@ -23,7 +24,13 @@ export const useAuthStore = defineStore('auth', () => {
     () => user.value?.name || user.value?.displayName || user.value?.email || '管理員'
   )
 
+  // A slower, older load must not overwrite a newer one (e.g. the auth
+  // listener finishing after refresh() on first login).
+  let loadSeq = 0
+
   async function loadUser(firebaseUser) {
+    const seq = ++loadSeq
+
     if (!firebaseUser) {
       user.value = null
       return
@@ -38,9 +45,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
-      user.value = { ...base, ...(userDoc.exists() ? userDoc.data() : {}) }
+      if (seq === loadSeq) user.value = { ...base, ...(userDoc.exists() ? userDoc.data() : {}) }
     } catch {
-      user.value = { ...base, role: null }
+      if (seq === loadSeq) user.value = { ...base, role: null }
     }
   }
 

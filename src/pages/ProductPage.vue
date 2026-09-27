@@ -140,7 +140,7 @@ import {
 } from 'src/services/ticketTypeService'
 import { CAMPUS_SCHOOLS, SCHOOLS } from 'src/data/schools'
 
-const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orders.js
+const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orderValidation.js
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const route = useRoute()
@@ -205,7 +205,9 @@ const schoolOptions = computed(() =>
 
 const needsClass = computed(() => CAMPUS_SCHOOLS.includes(buyer.value.school))
 
-const maxQuantity = computed(() => purchaseLimit.value || MAX_TICKETS_PER_ORDER)
+const maxQuantity = computed(() =>
+  Math.min(purchaseLimit.value || MAX_TICKETS_PER_ORDER, MAX_TICKETS_PER_ORDER)
+)
 
 const canSubmitOrder = computed(() =>
   !!buyer.value.school &&
