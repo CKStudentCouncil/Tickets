@@ -17,6 +17,7 @@ import {
 import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
 import { CREATE_ORDER_MIN_INSTANCES, ENFORCE_APP_CHECK, ORDER_LIMIT_PER_IP } from './params.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
+import { heroAttachment } from '../templates/shared.js'
 
 const ORDER_ID_ATTEMPTS = 3
 const RATE_WINDOW_MS = 10 * 60 * 1000
@@ -286,7 +287,8 @@ export async function sendConfirmationEmail(orderId, order, transporter = create
         contentType: 'image/png',
         cid: 'qrcode',
         contentDisposition: 'inline'
-      }
+      },
+      heroAttachment()
     ]
   })
 }

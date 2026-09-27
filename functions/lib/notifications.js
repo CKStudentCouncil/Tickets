@@ -6,6 +6,7 @@ import { REGION } from './constants.js'
 import { createTransporter, MAIL_SECRETS, SENDER, SENDER_EMAIL } from './mailer.js'
 import { SES_RECIPIENTS_PER_SECOND } from './params.js'
 import { generateOrderNotificationHTML } from '../templates/notification.js'
+import { heroAttachment } from '../templates/shared.js'
 
 const NOTIFY_TYPES = ['payment', 'pickup', 'both', 'custom']
 
@@ -165,7 +166,8 @@ export const sendOrderNotification = functions
           to: NOTIFY_TO,
           bcc: batch,
           subject: job.subject,
-          html
+          html,
+          attachments: [heroAttachment()]
         })
       } catch (error) {
         console.error(`[sendOrderNotification] job ${ref.id} stopped at ${job.nextIndex}/${total}:`, error)

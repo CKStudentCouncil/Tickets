@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { SITE_URL, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
+import { EVENT_META } from '../../templates/shared.js'
 
 const srcFile = (path) => new URL(`../../../src/${path}`, import.meta.url)
 
@@ -42,4 +43,9 @@ test('notification email links to this site only', () => {
   const html = generateOrderNotificationHTML({ type: 'custom', message: 'hi' })
   assert.doesNotMatch(html, /souvenir\.cksc\.tw/)
   assert.match(html, new RegExp(`${SITE_URL.replace(/\./g, '\\.')}/survey`))
+})
+
+test('email hero shows the same date and venue as the homepage hero', () => {
+  const home = readFileSync(srcFile('pages/HomePage.vue'), 'utf8')
+  assert.ok(home.includes(EVENT_META), `HomePage.vue no longer contains "${EVENT_META}"`)
 })
