@@ -303,6 +303,15 @@ describe('settings and public content', () => {
     await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'settings', 'ticketTypes'), { types: [] }))
     await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'partyLineup', 'l1'), { name: 'n' }))
   })
+
+  test('only super admins set the shop opening time, which anyone can read', async () => {
+    const openAt = { openAt: '2026-11-05T12:00:00+08:00' }
+    await assertSucceeds(getDoc(doc(anon(), 'settings', 'shop')))
+    await assertFails(setDoc(doc(anon(), 'settings', 'shop'), openAt))
+    await assertFails(setDoc(doc(as(staff.manager), 'settings', 'shop'), openAt))
+    await assertFails(setDoc(doc(as(staff.admin), 'settings', 'shop'), openAt))
+    await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'settings', 'shop'), openAt))
+  })
 })
 
 describe('scheduled content (PARTY-16)', () => {
