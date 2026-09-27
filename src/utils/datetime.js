@@ -94,8 +94,12 @@ export function getDateTimePart(value, part) {
   return part === 'date' ? date : time.slice(0, 5)
 }
 
-// Returns the updated "YYYY-MM-DDTHH:mm" string ('' when no date is set)
+// Returns the updated "YYYY-MM-DDTHH:mm" string ('' when no date is set).
+// An emptied input (e.g. Backspace while retyping the day) keeps the stored
+// value, so the other part isn't lost or reset to `defaultTime`.
 export function setDateTimePart(value, part, newValue, defaultTime = '00:00') {
+  if (!newValue) return value || ''
+
   const [date = '', time = ''] = (value || '').split('T')
   const nextDate = part === 'date' ? newValue : date
   const nextTime = (part === 'time' ? newValue : time.slice(0, 5)) || defaultTime

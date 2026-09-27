@@ -10,8 +10,6 @@ import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { safeRedirect } from 'src/utils/redirect'
 
-const SHOP_ROUTES = ['home', 'product', 'order-success', 'orders', 'order-detail']
-
 export default defineRouter(function () {
   const createHistory = process.env.SERVER
     ? createMemoryHistory
@@ -27,6 +25,10 @@ export default defineRouter(function () {
 
   Router.beforeEach(async (to) => {
     const authStore = useAuthStore()
+    const shopStore = useShopStore()
+
+    // load the opening time while the sign-in state resolves, not after
+    if (to.meta.shop) shopStore.init()
     await authStore.init()
 
     if (to.meta.isAdminSection) {
@@ -51,12 +53,12 @@ export default defineRouter(function () {
       return safeRedirect(to.query.redirect, authStore.isManager ? '/admin' : '/')
     }
 
-    if (SHOP_ROUTES.includes(to.name) && !authStore.isManager) {
-      const shopStore = useShopStore()
+    if (to.meta.shop && !authStore.isManager) {
       await shopStore.init()
 
       if (!shopStore.isOpen()) {
-        return { name: 'comingsoon' }
+        // /comingsoon brings the visitor back here once the shop opens
+        return { name: 'comingsoon', query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
       }
     }
 

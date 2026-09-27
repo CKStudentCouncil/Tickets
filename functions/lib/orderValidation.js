@@ -1,6 +1,6 @@
 // Pure order validation used by createOrder (unit-tested in test/).
 import { createHash, randomInt } from 'node:crypto'
-import { https } from 'firebase-functions'
+import { https } from 'firebase-functions/v1'
 
 import { SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from './constants.js'
 import { parseTaipeiDateTime } from './time.js'

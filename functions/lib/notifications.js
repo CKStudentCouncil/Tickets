@@ -1,5 +1,5 @@
-import * as functions from 'firebase-functions'
-import { FieldValue } from 'firebase-admin/firestore'
+import * as functions from 'firebase-functions/v1'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 
 import { db, HttpsError, assertRole } from './common.js'
 import { REGION } from './constants.js'
@@ -23,6 +23,11 @@ const MAX_BCC_PER_BATCH = 49
 const TIMEOUT_SECONDS = 540
 // Stop starting new batches after this, save progress and let the client continue
 const TIME_BUDGET_MS = 480 * 1000
+// A sending call holds a lease on its job, so a second call (a retry after a
+// dropped connection, or another staff member) cannot send the same batches
+// again. It outlasts the function timeout, so a crashed call's lease expires.
+const LEASE_MS = (TIMEOUT_SECONDS + 60) * 1000
+const JOB_ID_PATTERN = /^[A-Za-z0-9]{1,40}$/
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -86,74 +91,114 @@ async function collectRecipients(school) {
   return [...emails]
 }
 
-async function createJob(data, context) {
-  const type = NOTIFY_TYPES.includes(data?.type) ? data.type : 'payment'
-  const school = readField(data, 'school') || 'all'
-  const fields = {
-    paymentTime: readField(data, 'paymentTime'),
-    pickupTime: readField(data, 'pickupTime'),
-    location: readField(data, 'location'),
-    message: readField(data, 'message')
-  }
+function progressOf(ref, job, status) {
+  return { status, jobId: ref.id, sentCount: job.nextIndex, total: job.recipients.length }
+}
 
-  validateNotification(type, fields)
+// Step 1: validate the notice and save its recipients as a job, without
+// sending anything. The client holds the jobId (and confirms the real
+// recipient count) before the first email goes out, so after any
+// interruption it resumes this job instead of starting a second one.
+export const prepareOrderNotification = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    await assertRole(context, 'manager')
 
-  const job = {
-    type,
-    school,
-    subject: resolveSubject(type, readField(data, 'subject')),
-    fields,
-    recipients: await collectRecipients(school),
-    nextIndex: 0,
-    status: 'sending',
-    createdBy: context.auth.uid,
-    createdAt: FieldValue.serverTimestamp()
-  }
+    const type = NOTIFY_TYPES.includes(data?.type) ? data.type : 'payment'
+    const school = readField(data, 'school') || 'all'
+    const fields = {
+      paymentTime: readField(data, 'paymentTime'),
+      pickupTime: readField(data, 'pickupTime'),
+      location: readField(data, 'location'),
+      message: readField(data, 'message')
+    }
 
-  const ref = db.collection('notificationJobs').doc()
-  await ref.set(job)
+    validateNotification(type, fields)
+
+    const recipients = await collectRecipients(school)
+    if (recipients.length === 0) {
+      return { status: 'empty', jobId: null, sentCount: 0, total: 0 }
+    }
+
+    const job = {
+      type,
+      school,
+      subject: resolveSubject(type, readField(data, 'subject')),
+      fields,
+      recipients,
+      nextIndex: 0,
+      status: 'ready',
+      createdBy: context.auth.uid,
+      createdAt: FieldValue.serverTimestamp()
+    }
+
+    const ref = db.collection('notificationJobs').doc()
+    await ref.set(job)
+    return progressOf(ref, job, 'ready')
+  })
+
+// Takes the job's lease; refuses while another call holds it
+async function claimJob(jobId) {
+  const ref = db.doc(`notificationJobs/${jobId}`)
+
+  const job = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new HttpsError('not-found', '找不到這次寄送紀錄')
+
+    const current = snap.data()
+    if (current.status === 'done') return current
+
+    if (current.leaseUntil && current.leaseUntil.toMillis() > Date.now()) {
+      throw new HttpsError(
+        'failed-precondition',
+        '這則通知仍在寄送中，請稍候再按「繼續寄送」',
+        progressOf(ref, current, 'sending')
+      )
+    }
+
+    tx.update(ref, { status: 'sending', leaseUntil: Timestamp.fromMillis(Date.now() + LEASE_MS) })
+    return current
+  })
+
   return { ref, job }
 }
 
-async function loadJob(jobId) {
-  const ref = db.doc(`notificationJobs/${jobId}`)
-  const snap = await ref.get()
-  if (!snap.exists) throw new HttpsError('not-found', '找不到這次寄送紀錄')
-  return { ref, job: snap.data() }
+function releaseJob(ref, patch) {
+  return ref.update({ ...patch, leaseUntil: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() })
 }
 
-// Managers get the notification screen in the admin UI, so they may send too.
-// Progress is saved in notificationJobs/{jobId} after every batch. When the
-// time budget runs out the call returns status 'partial' and the client calls
-// again with the jobId; after an SES error staff can resume the same job, so
-// nobody receives the notice twice.
+// Step 2: send a prepared job. Managers get the notification screen in the
+// admin UI, so they may send too. Progress is saved in
+// notificationJobs/{jobId} after every batch. When the time budget runs out
+// the call returns status 'partial' and the client calls again with the same
+// jobId; after an error staff resume the same job, so nobody receives the
+// notice twice.
 export const sendOrderNotification = functions
   .region(REGION)
   .runWith({ secrets: MAIL_SECRETS, timeoutSeconds: TIMEOUT_SECONDS })
   .https.onCall(async (data, context) => {
     await assertRole(context, 'manager')
 
+    const jobId = String(data?.jobId || '')
+    if (!JOB_ID_PATTERN.test(jobId)) {
+      throw new HttpsError('invalid-argument', '寄送紀錄無效，請重新整理頁面後再試')
+    }
+
     const startedAt = Date.now()
-    const { ref, job } = data?.jobId
-      ? await loadJob(String(data.jobId))
-      : await createJob(data, context)
+    const { ref, job } = await claimJob(jobId)
 
     const total = job.recipients.length
-    const progress = (status) => ({ status, jobId: ref.id, sentCount: job.nextIndex, total })
+    const progress = (status) => progressOf(ref, job, status)
 
-    if (job.status === 'done' || job.nextIndex >= total) {
-      await ref.update({ status: 'done' })
-      return progress('done')
-    }
+    if (job.status === 'done') return progress('done')
 
     const transporter = createTransporter()
     const html = generateOrderNotificationHTML({ type: job.type, ...job.fields })
     const rate = SES_RECIPIENTS_PER_SECOND.value()
 
-    await ref.update({ status: 'sending' })
-
     while (job.nextIndex < total) {
       if (Date.now() - startedAt > TIME_BUDGET_MS) {
+        await releaseJob(ref, { status: 'partial' })
         return progress('partial')
       }
 
@@ -171,7 +216,7 @@ export const sendOrderNotification = functions
         })
       } catch (error) {
         console.error(`[sendOrderNotification] job ${ref.id} stopped at ${job.nextIndex}/${total}:`, error)
-        await ref.update({ status: 'failed', error: String(error.message || error).slice(0, 500) })
+        await releaseJob(ref, { status: 'failed', error: String(error.message || error).slice(0, 500) })
         throw new HttpsError(
           'unavailable',
           `寄送中斷：已寄出 ${job.nextIndex} / ${total} 位，可稍後按「繼續寄送」`,
@@ -186,7 +231,7 @@ export const sendOrderNotification = functions
       if (job.nextIndex < total && waitMs > 0) await sleep(waitMs)
     }
 
-    await ref.update({ status: 'done' })
+    await releaseJob(ref, { status: 'done' })
     console.log(`Sent ${job.type} notification to ${total} recipients (job ${ref.id})`)
 
     return progress('done')

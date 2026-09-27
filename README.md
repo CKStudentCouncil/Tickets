@@ -27,13 +27,13 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 src/
 ├── pages/          # Route-level screens
 ├── layouts/        # MainLayout (header, navigation, footer)
-├── components/     # AppToast
-├── composables/    # useAdminOrders (admin order list, stats, Excel export)
-├── services/       # orderService, ticketTypeService (all Firestore / callable access)
-├── stores/         # auth (user + role), toast
-├── data/           # schools, survey questions
+├── components/     # AppToast, CountdownText
+├── composables/    # useAdminOrders (admin order list, stats, Excel export), useNow
+├── services/       # orderService, ticketTypeService, shopService, contentService (Firestore / callable access)
+├── stores/         # auth (user + role), shop (opening time), toast
+├── data/           # schools, survey questions, ticket eligibility
 ├── utils/          # datetime, text, qrcode, pdf, analytics, redirect, debounce
-├── config/         # launch date
+├── config/         # site URL, App Check key, default opening time, party date and venue
 └── router/         # routes and navigation guard
 
 functions/          # Cloud Functions, see functions/README.md
@@ -94,10 +94,10 @@ This launches the Quasar/Vite development server.
 Create a production build with:
 
 ```bash
-docker run --rm -p 9000:9000 cksc-tickets npm run build
+docker run --rm -v "$PWD/dist:/app/dist" cksc-tickets npm run build
 ```
 
-The generated SPA files are written to:
+The volume keeps the output after the container is removed. The generated SPA files are written to:
 
 ```text
 dist/spa
@@ -165,6 +165,7 @@ Buyers read their orders straight from Firestore: `orders/{id}.userId` is the bu
 1. Firebase console → App Check → register the web app with **reCAPTCHA Enterprise** and copy the site key. The key's allowed domains must include `tickets.cksc.tw`.
 2. Put the key in `APP_CHECK_SITE_KEY` in `src/config/app.js` and deploy the site.
 3. Watch App Check metrics for a day, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy the functions.
+4. Optionally enforce App Check for Cloud Firestore as well (Firebase console → App Check → APIs). Anyone can submit the survey without signing in, so this is what stops scripts from flooding `surveyResponses`.
 
 reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). The first time you run it, the browser console prints `App Check debug token: …`; add that token in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile gets its own token.
 
@@ -220,13 +221,15 @@ firebase deploy -P cksc-ticket --only firestore:rules,functions
 
 ### Launch Gate
 
-The storefront launch gate is enforced in:
+Super admins set the opening time on `/admin/management` (stored in `settings/shop`; 立即開賣 uses the server's clock). Until a time is saved, `SHOP_OPEN_AT` in `src/config/app.js` (and its copy in `functions/lib/constants.js`) is the default.
 
-```text
-src/router/index.js
-```
+Before the opening time:
 
-Before `SHOP_OPEN_AT` in `src/config/app.js`, visitors are redirected to `/comingsoon`. Staff accounts can bypass this restriction.
+- visitors are sent to `/comingsoon` (`src/router/index.js`, routes with `meta.shop`), which takes them back to the page they asked for once the shop opens;
+- visitors already in the shop are sent back if the opening time turns out to be later (`src/layouts/MainLayout.vue`);
+- `createOrder` refuses orders.
+
+Staff accounts bypass all three.
 
 ## Maintainers
 

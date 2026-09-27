@@ -179,14 +179,28 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
+import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
 
+const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const shop = useShopStore()
 const toast = useToastStore()
+
+// The router guard checks the opening time on the way in. A visitor already
+// in the shop goes back to Coming Soon if it turns out to be later: the
+// settings arrived after the guard stopped waiting, or a super admin
+// postponed the opening.
+watch(
+  () => route.meta.shop && !auth.isManager && shop.loaded && !shop.isOpenNow,
+  (mustLeave) => {
+    if (mustLeave) router.replace({ name: 'comingsoon', query: { redirect: route.fullPath } })
+  }
+)
 
 const menuOpen = ref(false)
 const currentYear = computed(() => new Date().getFullYear())

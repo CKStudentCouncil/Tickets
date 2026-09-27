@@ -130,7 +130,10 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if isManager() || isOrderOwner();
+      // Managers (door staff) open single orders from ticket QR codes; only
+      // admins may list every buyer's details.
+      allow get: if isManager() || isOrderOwner();
+      allow list: if isAdmin() || isOrderOwner();
       allow create: if false;
 
       allow update: if (
@@ -150,31 +153,36 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Buyers never update or delete orders. orderCounters, ticketSales,
-    // buyerPurchases, orderRequests, rateLimits and stockReleases are only
+    // Buyers never update or delete orders. ticketSales, buyerPurchases,
+    // orderRequests, rateLimits, stockReleases and notificationJobs are only
     // touched by Cloud Functions and fall through to the deny-all rule below.
 
     // =========================
     // Ticket types & public content
     // =========================
 
-    // Rules are OR-ed across matches, so documents with their own rule below
-    // must be excluded here or this one would let any shape through.
+    // Every settings document is public. Writes are granted only by the
+    // per-document matches below, so a new settings document stays read-only
+    // until it gets its own rule.
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isSuperAdmin() && settingId != 'shop';
     }
 
-    // Site opening time (src/services/shopService.js). openAt is Taiwan time
-    // as "YYYY-MM-DDTHH:mm:00+08:00"; a malformed value would silently put
-    // the site back on the built-in default, so only that shape is accepted.
-    // Deleting it also falls back to the default.
+    // Ticket configuration (src/services/ticketTypeService.js), also read by
+    // createOrder
+    match /settings/ticketTypes {
+      allow write: if isSuperAdmin();
+    }
+
+    // Site opening time (src/services/shopService.js), also checked by
+    // createOrder. openAt is a timestamp, so it can never be an unparsable
+    // value that silently puts the site back on the built-in default.
+    // Deleting the document also falls back to the default.
     match /settings/shop {
       allow create, update: if isSuperAdmin()
         && request.resource.data.keys().hasOnly(['openAt', 'updatedAt', 'updatedByUid'])
-        && request.resource.data.openAt is string
-        && request.resource.data.openAt.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:00[+]08:00')
-        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.openAt is timestamp
+        && request.resource.data.updatedAt == request.time
         && request.resource.data.updatedByUid == request.auth.uid;
       allow delete: if isSuperAdmin();
     }
@@ -323,7 +331,8 @@ service cloud.firestore {
         && isShortString(request.resource.data.improvement, 2000)
         && isShortString(request.resource.data.suggestion, 2000);
 
-      allow read, delete: if isManager();
+      allow read: if isManager();
+      allow delete: if isSuperAdmin();
       allow update: if false;
     }
 

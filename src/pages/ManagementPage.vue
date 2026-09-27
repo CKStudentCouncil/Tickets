@@ -37,7 +37,7 @@
           <button
             type="button"
             class="btn-outline"
-            :disabled="savingShopOpenAt || !shop.ready || shop.isOpen(now)"
+            :disabled="savingShopOpenAt || !shop.loaded || shop.isOpenNow"
             @click="openShopNow"
           >
             立即開賣
@@ -46,7 +46,7 @@
           <button
             type="button"
             class="btn"
-            :disabled="savingShopOpenAt || !shop.ready"
+            :disabled="savingShopOpenAt || !shop.loaded"
             @click="saveShopOpenTime"
           >
             {{ savingShopOpenAt ? '儲存中...' : '儲存開賣時間' }}
@@ -68,22 +68,31 @@
           <input
             type="date"
             :value="getPart(shopOpenInput, 'date')"
-            @input="shopOpenInput = setDateTimePart(shopOpenInput, 'date', $event.target.value, '12:00')"
+            @input="editShopOpen('date', $event.target.value)"
           >
 
           <input
             type="time"
             :value="getPart(shopOpenInput, 'time')"
-            @input="shopOpenInput = setDateTimePart(shopOpenInput, 'time', $event.target.value, '12:00')"
+            @input="editShopOpen('time', $event.target.value)"
           >
         </div>
 
         <p
-          v-if="shop.ready"
+          v-if="shop.loaded"
           class="time-summary"
-          :class="{ ok: shop.isOpen(now) }"
+          :class="{ ok: shop.isOpenNow }"
         >
-          {{ shopOpenSummary }}
+          {{ shopOpenSummary }}<CountdownText
+            v-if="!shop.isOpenNow"
+            :target="shop.openAt"
+          />
+        </p>
+        <p
+          v-else-if="shop.ready"
+          class="time-summary error"
+        >
+          目前無法讀取開賣時間，請檢查網路後重新整理
         </p>
       </div>
     </div>
@@ -356,16 +365,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import CountdownText from 'src/components/CountdownText.vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
-import { useNow } from 'src/composables/useNow'
 import { fetchTicketTypes, saveTicketTypes } from 'src/services/ticketTypeService'
 import { saveShopOpenAt } from 'src/services/shopService'
 import {
   addDaysInputValue,
-  formatCountdown,
   formatDateTime,
   getDateTimePart as getPart,
   parseDate,
@@ -378,29 +386,56 @@ import {
 const auth = useAuthStore()
 const shop = useShopStore()
 const toast = useToastStore()
-const now = useNow()
 
 /* ---------- shop opening time (settings/shop) ---------- */
 
 const shopOpenInput = ref('')
+// the admin has changed the inputs since they last showed the saved time
+const shopOpenEdited = ref(false)
 const savingShopOpenAt = ref(false)
 
+// the countdown is appended by <CountdownText>, which ticks on its own
 const shopOpenSummary = computed(() => {
   const when = formatDateTime(shop.openAt)
   const source = shop.isCustomised ? '' : '（預設時間）'
 
-  return shop.isOpen(now.value)
+  return shop.isOpenNow
     ? `已開賣・${when} 起${source}`
-    : `尚未開賣・${when} 開賣${source}，還有 ${formatCountdown(shop.openAt, now.value)}`
+    : `尚未開賣・${when} 開賣${source}，還有 `
 })
 
-async function storeShopOpenAt(inputValue, message) {
+function editShopOpen(part, value) {
+  shopOpenInput.value = setDateTimePart(shopOpenInput.value, part, value, '12:00')
+  shopOpenEdited.value = true
+}
+
+// The inputs show the saved time and follow changes made elsewhere (another
+// super admin, 立即開賣 on another device). Unsaved edits are kept, with a
+// warning, so saving can't silently undo a change the admin never saw.
+watch(
+  () => shop.loaded && shop.openAt.getTime(),
+  () => {
+    if (!shop.loaded) return
+
+    const saved = toDateTimeInputValue(shop.openAt)
+
+    if (!shopOpenEdited.value) {
+      shopOpenInput.value = saved
+    } else if (saved !== shopOpenInput.value) {
+      toast.show(`開賣時間已被更新為 ${formatDateTime(shop.openAt)}，你尚未儲存的修改可能會覆蓋它`, 6000)
+    }
+  },
+  { immediate: true }
+)
+
+// openAt: a Date, or null for the server's current time
+async function storeShopOpenAt(openAt, message) {
   savingShopOpenAt.value = true
 
   try {
-    // stored with an explicit +08:00 so every device reads the same instant
-    await saveShopOpenAt(toStoredDateTime(inputValue), auth.user.uid)
-    shopOpenInput.value = inputValue
+    await saveShopOpenAt(openAt, auth.user.uid)
+    shopOpenEdited.value = false
+    shopOpenInput.value = toDateTimeInputValue(shop.openAt)
     toast.show(message)
   } catch (error) {
     console.error('Save shop opening time error:', error)
@@ -411,23 +446,31 @@ async function storeShopOpenAt(inputValue, message) {
 }
 
 function saveShopOpenTime() {
-  if (!parseDate(shopOpenInput.value)) {
+  const openAt = parseDate(shopOpenInput.value)
+
+  if (!openAt) {
     toast.show('請填寫開賣日期與時間')
     return
   }
 
-  storeShopOpenAt(shopOpenInput.value, '開賣時間已儲存')
+  // a past time (or a mistyped year) opens the site at once
+  if (
+    openAt <= new Date() &&
+    !window.confirm(`${formatDateTime(openAt)} 已經過去，儲存後所有訪客將立即可以進入首頁與購票頁面。確定要儲存嗎？`)
+  ) {
+    return
+  }
+
+  storeShopOpenAt(openAt, '開賣時間已儲存')
 }
 
 function openShopNow() {
   if (!window.confirm('確定要立即開賣嗎？所有訪客將可立即進入首頁與購票頁面（實際可下單時間仍依各票種的販售時段）。')) return
 
-  storeShopOpenAt(toDateTimeInputValue(new Date()), '已立即開賣')
-}
-
-async function loadShopOpenTime() {
-  await shop.init()
-  shopOpenInput.value = toDateTimeInputValue(shop.openAt)
+  // replaces any unsaved edit; the server's clock is used, so a wrong clock
+  // on this device can't delay the opening
+  shopOpenEdited.value = false
+  storeShopOpenAt(null, '已立即開賣')
 }
 
 /* ---------- ticket types ---------- */
@@ -726,7 +769,7 @@ async function saveTicketTypeSettings() {
 onMounted(() => {
   if (!auth.isSuperAdmin) return
 
-  loadShopOpenTime()
+  shop.init()
   loadTicketTypeSettings()
 })
 </script>

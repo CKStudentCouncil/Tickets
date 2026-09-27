@@ -110,9 +110,11 @@ describe('orders (PARTY-2)', () => {
     await assertFails(deleteDoc(doc(db, 'orders', ORDER_ID)))
   })
 
-  test('staff can read orders', async () => {
+  test('managers open single orders; only admins list every order', async () => {
     await assertSucceeds(getDoc(doc(as(staff.manager), 'orders', ORDER_ID)))
+    await assertFails(getDocs(collection(as(staff.manager), 'orders')))
     await assertSucceeds(getDocs(collection(as(staff.admin), 'orders')))
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'orders')))
   })
 
   test('managers can only change the pickup status', async () => {
@@ -304,27 +306,79 @@ describe('settings and public content', () => {
     await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'partyLineup', 'l1'), { name: 'n' }))
   })
 
-  test('only super admins set the shop opening time, which anyone can read', async () => {
-    const shop = (who, fields = {}) => ({
-      openAt: '2026-11-05T12:00:00+08:00',
-      updatedAt: new Date(),
-      updatedByUid: who.uid,
-      ...fields
-    })
-    const shopDoc = (who) => doc(as(who), 'settings', 'shop')
+  test('settings documents without their own rule are read-only, even for super admins', async () => {
+    await assertSucceeds(getDoc(doc(anon(), 'settings', 'other')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'settings', 'other'), { x: 1 }))
+  })
+})
 
+describe('settings/shop (opening time)', () => {
+  const shop = (who, fields = {}) => ({
+    openAt: Timestamp.fromDate(new Date('2026-11-05T12:00:00+08:00')),
+    updatedAt: serverTimestamp(),
+    updatedByUid: who.uid,
+    ...fields
+  })
+  const shopDoc = (who) => doc(as(who), 'settings', 'shop')
+  const seed = (data) =>
+    env.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), 'settings', 'shop'), data))
+
+  // each is rejected on create and on update
+  const malformed = [
+    { openAt: '2026-11-05T12:00:00+08:00' }, // the old string format
+    { openAt: null },
+    { updatedAt: Timestamp.fromDate(new Date('2020-01-01T00:00:00Z')) }, // client-chosen time
+    { updatedAt: 'now' },
+    { updatedByUid: staff.admin.uid },
+    { note: 'x' }
+  ]
+
+  test('anyone can read; only super admins write, the way saveShopOpenAt does', async () => {
     await assertSucceeds(getDoc(doc(anon(), 'settings', 'shop')))
     await assertFails(setDoc(doc(anon(), 'settings', 'shop'), shop({ uid: 'anon' })))
     await assertFails(setDoc(shopDoc(staff.manager), shop(staff.manager)))
     await assertFails(setDoc(shopDoc(staff.admin), shop(staff.admin)))
-    await assertSucceeds(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin)))
 
-    // shape: Taiwan-time string, known fields, editor's own uid
-    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: '2026-11-05T12:00' })))
-    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: '2026-11-05T12:00:00Z' })))
-    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: new Date() })))
-    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { note: 'x' })))
-    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.admin)))
+    await assertSucceeds(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin))) // create
+    await assertSucceeds(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin))) // update
+    // 立即開賣 stores the server time
+    await assertSucceeds(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: serverTimestamp() })))
+  })
+
+  test('a malformed or incomplete document is rejected on create', async () => {
+    for (const fields of malformed) {
+      await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, fields)))
+    }
+    for (const key of ['openAt', 'updatedAt', 'updatedByUid']) {
+      const data = shop(staff.superAdmin)
+      delete data[key]
+      await assertFails(setDoc(shopDoc(staff.superAdmin), data))
+    }
+  })
+
+  test('a malformed or incomplete document is rejected on update', async () => {
+    await seed({ openAt: Timestamp.now(), updatedAt: Timestamp.now(), updatedByUid: staff.superAdmin.uid })
+
+    for (const fields of malformed) {
+      await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, fields)))
+      await assertFails(updateDoc(shopDoc(staff.superAdmin), { updatedAt: serverTimestamp(), ...fields }))
+    }
+    // a partial update keeps the old updatedAt, which is not this request's time
+    await assertFails(updateDoc(shopDoc(staff.superAdmin), { openAt: Timestamp.now() }))
+  })
+
+  test('a stray field already on the document does not block later saves', async () => {
+    await seed({ openAt: Timestamp.now(), note: 'added in the console' })
+    await assertSucceeds(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin)))
+  })
+
+  test('only super admins can delete it', async () => {
+    await seed({ openAt: Timestamp.now() })
+
+    await assertFails(deleteDoc(doc(anon(), 'settings', 'shop')))
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(deleteDoc(shopDoc(who)))
+    }
     await assertSucceeds(deleteDoc(shopDoc(staff.superAdmin)))
   })
 })
@@ -442,8 +496,16 @@ describe('surveyResponses (PARTY-23)', () => {
     await assertFails(bad({ suggestion: 'x'.repeat(2001) }))
   })
 
-  test('only staff can read responses', async () => {
+  test('only staff can read responses, and only super admins delete them', async () => {
     await assertFails(getDocs(collection(anon(), 'surveyResponses')))
     await assertSucceeds(getDocs(collection(as(staff.manager), 'surveyResponses')))
+
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'surveyResponses', 'r1'), { identity: '其他' })
+    )
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(deleteDoc(doc(as(who), 'surveyResponses', 'r1')))
+    }
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r1')))
   })
 })

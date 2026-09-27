@@ -2,18 +2,18 @@
 // the Taiwan-time parser; these tests fail if the copies drift apart.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 
-import { SITE_URL, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 import { EVENT_META } from '../../templates/shared.js'
 
 const srcFile = (path) => new URL(`../../../src/${path}`, import.meta.url)
 
-test('SITE_URL matches src/config/app.js', () => {
-  const app = readFileSync(srcFile('config/app.js'), 'utf8')
-  assert.match(app, new RegExp(`SITE_URL = '${SITE_URL.replace(/\./g, '\\.')}'`))
+test('SITE_URL and the default opening time match src/config/app.js', async () => {
+  const app = await import(srcFile('config/app.js'))
+  assert.equal(app.SITE_URL, SITE_URL)
+  assert.equal(app.SHOP_OPEN_AT.getTime(), SHOP_OPEN_AT.getTime())
 })
 
 test('school lists match src/data/schools.js', async () => {
@@ -45,7 +45,7 @@ test('notification email links to this site only', () => {
   assert.match(html, new RegExp(`${SITE_URL.replace(/\./g, '\\.')}/survey`))
 })
 
-test('email hero shows the same date and venue as the homepage hero', () => {
-  const home = readFileSync(srcFile('pages/HomePage.vue'), 'utf8')
-  assert.ok(home.includes(EVENT_META), `HomePage.vue no longer contains "${EVENT_META}"`)
+test('email hero shows the same date and venue as the site (src/config/app.js)', async () => {
+  const app = await import(srcFile('config/app.js'))
+  assert.equal(`${app.EVENT_DATE} · ${app.EVENT_VENUE}`, EVENT_META)
 })

@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from 'src/boot/firebase'
 import { parseDate } from 'src/utils/datetime'
 
@@ -17,7 +17,7 @@ export async function fetchTicketTypes() {
 // The document is public, so only the editor's uid is stored, never a
 // name or email (PARTY-26). setDoc replaces the old `updatedBy` field.
 export function saveTicketTypes(types, updatedByUid) {
-  return setDoc(ticketTypesRef(), { types, updatedAt: new Date(), updatedByUid })
+  return setDoc(ticketTypesRef(), { types, updatedAt: serverTimestamp(), updatedByUid })
 }
 
 export function getTicketStatus(ticketType, now = new Date()) {

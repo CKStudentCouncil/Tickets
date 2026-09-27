@@ -1,11 +1,11 @@
-import * as functions from 'firebase-functions'
+import * as functions from 'firebase-functions/v1'
 import { FieldValue } from 'firebase-admin/firestore'
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import QRCode from 'qrcode'
 
-import { db, HttpsError, assertRole } from './common.js'
-import { REGION, SCHOOL_CODES, getAdminOrderUrl, getBuyerOrderUrl } from './constants.js'
-import { getTaiwanDateKey } from './time.js'
+import { db, HttpsError, assertRole, getRoleRank } from './common.js'
+import { REGION, SCHOOL_CODES, SHOP_OPEN_AT, getAdminOrderUrl, getBuyerOrderUrl } from './constants.js'
+import { getTaiwanDateKey, parseTaipeiDateTime } from './time.js'
 import {
   ORDER_ID_PATTERN,
   checkTicketType,
@@ -15,7 +15,7 @@ import {
   sanitizeOrderInput
 } from './orderValidation.js'
 import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
-import { CREATE_ORDER_MIN_INSTANCES, ENFORCE_APP_CHECK, ORDER_LIMIT_PER_IP } from './params.js'
+import { CREATE_ORDER_MIN_INSTANCES, ENFORCE_APP_CHECK, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
 import { heroAttachment } from '../templates/shared.js'
 
@@ -28,7 +28,7 @@ const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 //   ticketSales/{ticketTypeId}      { sold }
 //   buyerPurchases/{sha256(email)}  { quantities: { [ticketTypeId]: n } }, per account email
 //   orderRequests/{requestId}       { orderId } — makes retried checkouts idempotent
-//   rateLimits/{sha256(ip)}_{slot}  { count }  — only when ORDER_LIMIT_PER_IP > 0
+//   rateLimits/{uid}_{slot}         { count }  — only when ORDER_LIMIT_PER_ACCOUNT > 0
 //   stockReleases/{orderId}         marks a deleted order as already released
 
 class OrderIdTaken extends Error {}
@@ -53,18 +53,24 @@ function getBuyerAccount(context) {
   return { uid: context.auth.uid, email: String(token.email).toLowerCase() }
 }
 
-function getClientIp(context) {
-  const forwarded = context.rawRequest?.headers?.['x-forwarded-for']
-  return String(forwarded || '').split(',')[0].trim() || context.rawRequest?.ip || ''
+// The site's opening time (settings/shop, set on the management page). The
+// /comingsoon page only hides the shop in the browser, so the same gate is
+// enforced here; staff may order before it, as they may browse the shop.
+async function assertShopOpen(account) {
+  const snap = await db.doc('settings/shop').get()
+  const openAt = parseTaipeiDateTime(snap.data()?.openAt) || SHOP_OPEN_AT
+
+  if (new Date() < openAt && (await getRoleRank(account.uid)) === 0) {
+    throw new HttpsError('failed-precondition', '尚未開賣')
+  }
 }
 
-async function enforceIpLimit(context) {
-  const limit = ORDER_LIMIT_PER_IP.value()
-  const ip = getClientIp(context)
-  if (!limit || !ip) return
+async function enforceAccountLimit(account) {
+  const limit = ORDER_LIMIT_PER_ACCOUNT.value()
+  if (!limit) return
 
   const slot = Math.floor(Date.now() / RATE_WINDOW_MS)
-  const ref = db.doc(`rateLimits/${createHash('sha256').update(ip).digest('hex')}_${slot}`)
+  const ref = db.doc(`rateLimits/${account.uid}_${slot}`)
 
   await db.runTransaction(async (tx) => {
     const count = Number((await tx.get(ref)).data()?.count || 0)
@@ -101,7 +107,8 @@ export const createOrder = functions
     const { order, quantities } = sanitizeOrderInput(data?.orderPayload, account.email)
     const requestId = isValidRequestId(data?.requestId) ? data.requestId : null
 
-    await enforceIpLimit(context)
+    await assertShopOpen(account)
+    await enforceAccountLimit(account)
 
     const dateKey = getTaiwanDateKey()
     const schoolCode = SCHOOL_CODES[order.school]

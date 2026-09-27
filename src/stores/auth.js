@@ -50,7 +50,16 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
-      if (seq === loadSeq) user.value = { ...base, ...(userDoc.exists() ? userDoc.data() : {}) }
+      // uid and email always come from the signed-in account: the rules
+      // compare against request.auth, not whatever the users doc holds
+      if (seq === loadSeq) {
+        user.value = {
+          ...base,
+          ...(userDoc.exists() ? userDoc.data() : {}),
+          uid: base.uid,
+          email: base.email
+        }
+      }
     } catch {
       if (seq === loadSeq) user.value = { ...base, role: null }
     }

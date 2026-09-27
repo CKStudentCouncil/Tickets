@@ -69,6 +69,8 @@ after(() => fft.cleanup())
 beforeEach(async () => {
   await clearFirestore()
   await db.doc('settings/ticketTypes').set({ types: TICKET_TYPES })
+  // the shop is open unless a test says otherwise
+  await db.doc('settings/shop').set({ openAt: new Date(Date.now() - HOUR) })
 })
 
 describe('createOrder', () => {
@@ -143,6 +145,23 @@ describe('createOrder', () => {
       callCreate(order([{ id: 'nostock', quantity: 1 }]), as('a@example.com')),
       { code: 'resource-exhausted' }
     )
+  })
+
+  test('before the site opens only staff can order, whatever the sale window', async () => {
+    const payload = order([{ id: 'open', quantity: 1 }])
+
+    await db.doc('settings/shop').set({ openAt: new Date(Date.now() + HOUR) })
+    await assert.rejects(callCreate(payload, as('early@example.com')), { code: 'failed-precondition' })
+
+    await db.doc('users/staff-uid').set({ role: 'manager' })
+    await assert.doesNotReject(callCreate(payload, as('staff@example.com', { uid: 'staff-uid' })))
+
+    // a legacy Taiwan-time string is read the same way
+    await db.doc('settings/shop').set({ openAt: '2999-01-01T12:00:00+08:00' })
+    await assert.rejects(callCreate(payload, as('early@example.com')), { code: 'failed-precondition' })
+
+    await db.doc('settings/shop').set({ openAt: new Date(Date.now() - HOUR) })
+    await assert.doesNotReject(callCreate(payload, as('early@example.com')))
   })
 
   test('rejects unknown and not-yet-on-sale tickets', async () => {

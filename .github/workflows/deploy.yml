@@ -15,7 +15,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Unit, Firestore rules and createOrder emulator tests; the site is only
+  # published when they pass
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      # the Firestore emulator runs on Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm install -g firebase-tools
+
+      - run: npm ci
+
+      - run: npm ci --prefix functions
+
+      - run: npm test
+
+      - run: npm run test:rules
+
+      - run: npm run test:emulator --prefix functions
+
   build:
+    needs: test
+
     runs-on: ubuntu-latest
 
     steps:

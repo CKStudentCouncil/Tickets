@@ -3,10 +3,12 @@ const routes = [
     path: '/',
     component: () => import('layouts/MainLayout.vue'),
     children: [
+      // meta.shop: hidden behind /comingsoon until the shop opens (router guard)
       {
         path: '',
         name: 'home',
-        component: () => import('pages/HomePage.vue')
+        component: () => import('pages/HomePage.vue'),
+        meta: { shop: true }
       },
       {
         path: 'survey',
@@ -21,26 +23,27 @@ const routes = [
       {
         path: 'product/:id',
         name: 'product',
-        component: () => import('pages/ProductPage.vue')
+        component: () => import('pages/ProductPage.vue'),
+        meta: { shop: true }
       },
       // buyers see their orders only while signed in (firestore.rules)
       {
         path: 'order-success',
         name: 'order-success',
         component: () => import('pages/OrderSuccessPage.vue'),
-        meta: { requiresAuth: true }
+        meta: { shop: true, requiresAuth: true }
       },
       {
         path: 'orders',
         name: 'orders',
         component: () => import('pages/OrdersPage.vue'),
-        meta: { requiresAuth: true }
+        meta: { shop: true, requiresAuth: true }
       },
       {
         path: 'orders/:id',
         name: 'order-detail',
         component: () => import('pages/OrderDetailPage.vue'),
-        meta: { requiresAuth: true }
+        meta: { shop: true, requiresAuth: true }
       },
       {
         // one Google sign-in for buyers and staff

@@ -1,6 +1,8 @@
-// gtag is loaded in index.html (and by Firebase Analytics in boot/firebase.js)
+import { logEvent } from 'firebase/analytics'
+import { analytics } from 'src/boot/firebase'
+
+// Firebase Analytics (src/boot/firebase.js); skipped where the browser
+// doesn't support it or it hasn't loaded yet
 export function trackEvent(eventName, params = {}) {
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', eventName, params)
-  }
+  if (analytics) logEvent(analytics, eventName, params)
 }

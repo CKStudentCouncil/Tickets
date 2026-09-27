@@ -1479,7 +1479,6 @@ function normalizePublishAt(value) {
 }
 
 function setPart(part, value) {
-  if (!value) return
   form.value.publishAt = setDateTimePart(form.value.publishAt, part, value)
 }
 

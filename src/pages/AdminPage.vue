@@ -21,7 +21,7 @@
   </div>
 
   <div
-    v-else-if="loading"
+    v-else-if="canManageOrders && loading"
     class="state-screen"
   >
     <p>載入中...</p>
@@ -224,24 +224,33 @@
             <p>地點：<strong>{{ notifyForm.location || '（尚未填寫）' }}</strong></p>
             <p v-if="notifyForm.message">補充說明：{{ notifyForm.message }}</p>
           </template>
-          <p class="preview-count">將發送給{{ notifyTargetSchoolLabel }} <span class="num">{{ notifyRecipientCount }}</span> 位訂購者</p>
+          <p v-if="canManageOrders" class="preview-count">將發送給{{ notifyTargetSchoolLabel }} <span class="num">{{ notifyRecipientCount }}</span> 位訂購者</p>
+          <p v-else class="preview-count">將發送給{{ notifyTargetSchoolLabel }}的訂購者（按下確認發送後會顯示人數）</p>
         </div>
 
         <div class="notify-actions">
-          <p v-if="notifyProgress" class="preview-count">
-            已寄出 <span class="num">{{ notifyProgress.sentCount }}</span> / <span class="num">{{ notifyProgress.total }}</span> 位
+          <p v-if="pendingJob" class="preview-count">
+            {{ sendingNotify ? '' : '上次的通知尚未寄完：' }}已寄出 <span class="num">{{ pendingJob.sentCount }}</span> / <span class="num">{{ pendingJob.total }}</span> 位
           </p>
           <button
-            v-if="interruptedJobId"
+            v-if="pendingJob"
             type="button"
             class="btn"
             :disabled="sendingNotify"
-            @click="runNotificationJob({ jobId: interruptedJobId })"
+            @click="runNotificationJob(pendingJob)"
           >
             {{ sendingNotify ? '發送中...' : '繼續寄送' }}
           </button>
           <button
-            v-else
+            v-if="pendingJob && !sendingNotify"
+            type="button"
+            class="btn-outline"
+            @click="discardPendingJob"
+          >
+            放棄這次寄送
+          </button>
+          <button
+            v-if="!pendingJob"
             type="button"
             class="btn"
             :disabled="!canSendNotify || sendingNotify"
@@ -491,8 +500,6 @@ function createNotifyForm(school = 'all') {
 
 const showNotifyModal = ref(false)
 const sendingNotify = ref(false)
-const notifyProgress = ref(null)
-const interruptedJobId = ref('')
 const resendingId = ref('')
 const notifyForm = ref(createNotifyForm())
 
@@ -520,14 +527,15 @@ const {
 
 const deliveryStats = computed(() => calculateDeliveryStats(currentOrders.value))
 
-// Mirrors the recipient filtering in functions/lib/notifications.js
+// Admins only (managers can't list orders); mirrors collectRecipients in
+// functions/lib/notifications.js, which gives the count everyone confirms
 const notifyRecipientCount = computed(() => {
   const emails = new Set()
 
   orders.value.forEach((order) => {
     if (notifyForm.value.school !== 'all' && order.school !== notifyForm.value.school) return
     const email = String(order.customerEmail || '').trim().toLowerCase()
-    if (email) emails.add(email)
+    if (email && !email.startsWith('no-reply@') && !email.startsWith('noreply@')) emails.add(email)
   })
 
   return emails.size
@@ -537,12 +545,14 @@ const notifyTargetSchoolLabel = computed(() =>
   notifyForm.value.school === 'all' ? '全部學校' : notifyForm.value.school
 )
 
+// Only admins may list every order (firestore.rules); managers get the
+// notification tools only
 onMounted(() => {
-  if (canAccessAdmin.value) fetchOrders()
+  if (canManageOrders.value) fetchOrders()
 })
 
 onActivated(() => {
-  if (canAccessAdmin.value) fetchOrders()
+  if (canManageOrders.value) fetchOrders()
 })
 
 function viewOrderDetail(orderId) {
@@ -580,62 +590,109 @@ function closeNotifyModal() {
   showNotifyModal.value = false
 }
 
+const prepareOrderNotification = httpsCallable(functions, 'prepareOrderNotification')
+// one call keeps sending for up to 8 minutes
+const sendOrderNotification = httpsCallable(functions, 'sendOrderNotification', {
+  timeout: 560 * 1000
+})
+
+// The notice being sent, { jobId, sentCount, total }. Kept in this browser
+// until it is done, so after an error, a dropped connection or a reload it
+// is resumed rather than sent again from the start (PARTY-17).
+const PENDING_JOB_KEY = 'cksc_notification_job'
+
+function loadPendingJob() {
+  try {
+    const job = JSON.parse(localStorage.getItem(PENDING_JOB_KEY) || 'null')
+    return job?.jobId ? job : null
+  } catch {
+    return null
+  }
+}
+
+const pendingJob = ref(loadPendingJob())
+
+function setPendingJob(job) {
+  pendingJob.value = job ? { jobId: job.jobId, sentCount: job.sentCount, total: job.total } : null
+
+  try {
+    if (job) localStorage.setItem(PENDING_JOB_KEY, JSON.stringify(pendingJob.value))
+    else localStorage.removeItem(PENDING_JOB_KEY)
+  } catch {
+    // storage unavailable (private mode); the job still resumes this session
+  }
+}
+
+function discardPendingJob() {
+  if (!window.confirm('確定要放棄這次寄送嗎？尚未寄出的訂購者將不會收到這則通知。')) return
+  setPendingJob(null)
+}
+
 async function confirmSendNotify() {
   if (!canSendNotify.value) {
     toast.show(notifyForm.value.type === 'custom' ? '請填寫訊息內容' : '請填寫必要的時間與地點')
     return
   }
+
+  // The server saves the recipient list as a job; nothing is sent yet
+  let job
+  sendingNotify.value = true
+  try {
+    job = (await prepareOrderNotification({
+      type: notifyForm.value.type,
+      school: notifyForm.value.school,
+      // the subject input only exists for custom notices (PARTY-22)
+      subject: notifyForm.value.type === 'custom' ? notifyForm.value.subject.trim() : '',
+      paymentTime: notifyForm.value.paymentTime.trim(),
+      pickupTime: notifyForm.value.pickupTime.trim(),
+      location: notifyForm.value.location.trim(),
+      message: notifyForm.value.message.trim()
+    })).data
+  } catch (error) {
+    console.error('Prepare notification error:', error)
+    toast.show(error?.message ? `發送失敗：${error.message}` : '發送失敗，請稍後再試')
+    return
+  } finally {
+    sendingNotify.value = false
+  }
+
+  if (!job.total) {
+    toast.show(`${notifyTargetSchoolLabel.value}目前沒有可寄送的訂購者`)
+    return
+  }
+
   if (
     !window.confirm(
-      `確定要寄送${notifyTypeLabel.value}給${notifyTargetSchoolLabel.value} ${notifyRecipientCount.value} 位訂購者嗎？此動作無法復原。`
+      `確定要寄送${notifyTypeLabel.value}給${notifyTargetSchoolLabel.value} ${job.total} 位訂購者嗎？此動作無法復原。`
     )
   ) {
     return
   }
 
-  await runNotificationJob({
-    type: notifyForm.value.type,
-    school: notifyForm.value.school,
-    // the subject input only exists for custom notices (PARTY-22)
-    subject: notifyForm.value.type === 'custom' ? notifyForm.value.subject.trim() : '',
-    paymentTime: notifyForm.value.paymentTime.trim(),
-    pickupTime: notifyForm.value.pickupTime.trim(),
-    location: notifyForm.value.location.trim(),
-    message: notifyForm.value.message.trim()
-  })
+  await runNotificationJob(job)
 }
 
-// The function sends in rate-limited batches and saves progress in a job
-// (PARTY-17): 'partial' means it ran out of time and must be called again,
-// an error leaves a job that can be resumed without re-sending anyone.
-async function runNotificationJob(request) {
-  const sendOrderNotification = httpsCallable(functions, 'sendOrderNotification', {
-    timeout: 560 * 1000
-  })
-
+// Sends in rate-limited batches: 'partial' means the call ran out of time
+// and must be called again. The job is remembered before the first email.
+async function runNotificationJob(job) {
+  setPendingJob(job)
   sendingNotify.value = true
+
   try {
-    let result = (await sendOrderNotification(request)).data
-    notifyProgress.value = result
+    let result
+    do {
+      result = (await sendOrderNotification({ jobId: job.jobId })).data
+      setPendingJob(result)
+    } while (result.status === 'partial')
 
-    while (result.status === 'partial') {
-      result = (await sendOrderNotification({ jobId: result.jobId })).data
-      notifyProgress.value = result
-    }
-
-    interruptedJobId.value = ''
+    setPendingJob(null)
     toast.show(`已成功寄送給 ${result.sentCount} 位訂購者`)
     showNotifyModal.value = false
-    notifyProgress.value = null
     notifyForm.value = createNotifyForm(selectedSchool.value)
   } catch (error) {
     console.error('Send notification error:', error)
-    const details = error?.details
-    if (details?.jobId) {
-      interruptedJobId.value = details.jobId
-      notifyProgress.value = details
-    }
-    toast.show(error?.message ? `發送失敗：${error.message}` : '發送失敗，請稍後再試')
+    if (error?.details?.jobId) setPendingJob(error.details)
+    toast.show(error?.message ? `發送失敗：${error.message}` : '發送失敗，請稍後再按「繼續寄送」')
   } finally {
     sendingNotify.value = false
   }

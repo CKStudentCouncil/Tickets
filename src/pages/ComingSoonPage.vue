@@ -10,24 +10,31 @@
 </template>
 
 <script setup>
-import { onMounted, watchEffect } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useShopStore } from 'src/stores/shop'
-import { useNow } from 'src/composables/useNow'
+import { safeRedirect } from 'src/utils/redirect'
 
+const route = useRoute()
 const router = useRouter()
 const shop = useShopStore()
-const now = useNow()
 
 onMounted(() => shop.init())
 
 // Let waiting visitors in as soon as the shop opens (at the set time, or
-// when a super admin opens it now) without them having to reload
-watchEffect(() => {
-  if (shop.ready && shop.isOpen(now.value)) {
-    router.replace({ name: 'home' })
-  }
-})
+// when a super admin opens it now) without them having to reload, back to
+// the page they asked for. Once only: the navigation may take a while.
+let leaving = false
+
+watch(
+  () => shop.ready && shop.isOpenNow,
+  (open) => {
+    if (!open || leaving) return
+    leaving = true
+    router.replace(safeRedirect(route.query.redirect, '/'))
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

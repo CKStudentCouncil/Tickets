@@ -6,6 +6,10 @@ export const REGION = 'asia-east1'
 // Production site; QR codes and email links point here.
 export const SITE_URL = 'https://tickets.cksc.tw'
 
+// Opening time used until a super admin sets settings/shop.openAt; before it
+// only staff can order. Keep in sync with src/config/app.js
+export const SHOP_OPEN_AT = new Date('2026-11-05T12:00:00+08:00')
+
 // Keep in sync with src/data/schools.js
 export const SCHOOL_CODES = {
   建國中學: 'CKS',

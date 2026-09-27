@@ -11,9 +11,10 @@ export const ENFORCE_APP_CHECK = defineBoolean('ENFORCE_APP_CHECK', { default: f
 // opening to avoid cold starts, set back to 0 afterwards (it costs money).
 export const CREATE_ORDER_MIN_INSTANCES = defineInt('CREATE_ORDER_MIN_INSTANCES', { default: 0 })
 
-// Max orders per client IP per 10 minutes, 0 = off. Schools and mobile
-// carriers put many buyers behind one IP, so keep this generous.
-export const ORDER_LIMIT_PER_IP = defineInt('ORDER_LIMIT_PER_IP', { default: 0 })
+// Max orders per signed-in account per 10 minutes, 0 = off. Counted per
+// account rather than per IP: the client IP header can be forged by the
+// caller, and schools and mobile carriers put many buyers behind one IP.
+export const ORDER_LIMIT_PER_ACCOUNT = defineInt('ORDER_LIMIT_PER_ACCOUNT', { default: 0 })
 
 // SES sending rate of the AWS account, in recipients per second.
 export const SES_RECIPIENTS_PER_SECOND = defineInt('SES_RECIPIENTS_PER_SECOND', { default: 14 })

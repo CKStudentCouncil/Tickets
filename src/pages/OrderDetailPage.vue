@@ -240,12 +240,12 @@
 
             <div>
               <dt>日期</dt>
-              <dd>2026 年 12 月 13 日</dd>
+              <dd>{{ EVENT_DATE_LONG }}</dd>
             </div>
 
             <div>
               <dt>地點</dt>
-              <dd>建中明道樓後停車場</dd>
+              <dd>{{ EVENT_VENUE }}</dd>
             </div>
 
             <div>
@@ -305,6 +305,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
 import { fetchOrder, updateOrderDelivery } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
@@ -695,10 +696,10 @@ ${
         <div>CK PARTY NIGHT</div>
 
         <div class="label">日期</div>
-        <div>2026 年 12 月 13 日</div>
+        <div>${EVENT_DATE_LONG}</div>
 
         <div class="label">地點</div>
-        <div>建中明道樓後停車場</div>
+        <div>${EVENT_VENUE}</div>
       </div>
     </div>
 

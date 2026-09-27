@@ -50,7 +50,7 @@
           <p class="title-lockup-sub">2026 · CK PARTY NIGHT</p>
           <h1 class="title-lockup-brand">COSMOS</h1>
         </div>
-        <p class="hero-meta">2026/12/13 · 建中明道樓後停車場</p>
+        <p class="hero-meta">{{ EVENT_DATE }} · {{ EVENT_VENUE }}</p>
         <a href="#collection" class="primary-link" @click.prevent="scrollToCollection">
           開始購票
           <q-icon name="south_east" />
@@ -128,6 +128,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { fetchTicketTypes, getTicketStatus } from 'src/services/ticketTypeService'
+import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
 import { useNow } from 'src/composables/useNow'
 
 const ticketTypes = ref([])
