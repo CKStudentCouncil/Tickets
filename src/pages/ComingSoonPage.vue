@@ -9,6 +9,27 @@
   </div>
 </template>
 
+<script setup>
+import { onMounted, watchEffect } from 'vue'
+import { useRouter } from 'vue-router'
+import { useShopStore } from 'src/stores/shop'
+import { useNow } from 'src/composables/useNow'
+
+const router = useRouter()
+const shop = useShopStore()
+const now = useNow()
+
+onMounted(() => shop.init())
+
+// Let waiting visitors in as soon as the shop opens (at the set time, or
+// when a super admin opens it now) without them having to reload
+watchEffect(() => {
+  if (shop.ready && shop.isOpen(now.value)) {
+    router.replace({ name: 'home' })
+  }
+})
+</script>
+
 <style scoped>
 .hero-content {
   position: relative;

@@ -7,7 +7,7 @@ import {
 } from 'vue-router'
 import routes from './routes'
 import { useAuthStore } from 'src/stores/auth'
-import { SHOP_OPEN_AT } from 'src/config/app'
+import { useShopStore } from 'src/stores/shop'
 import { safeRedirect } from 'src/utils/redirect'
 
 const SHOP_ROUTES = ['home', 'product', 'order-success', 'orders', 'order-detail']
@@ -51,8 +51,13 @@ export default defineRouter(function () {
       return safeRedirect(to.query.redirect, authStore.isManager ? '/admin' : '/')
     }
 
-    if (new Date() < SHOP_OPEN_AT && SHOP_ROUTES.includes(to.name) && !authStore.isManager) {
-      return { name: 'comingsoon' }
+    if (SHOP_ROUTES.includes(to.name) && !authStore.isManager) {
+      const shopStore = useShopStore()
+      await shopStore.init()
+
+      if (!shopStore.isOpen()) {
+        return { name: 'comingsoon' }
+      }
     }
 
     if (to.meta.requiresAuth && !authStore.isLoggedIn) {

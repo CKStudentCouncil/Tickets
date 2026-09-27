@@ -29,6 +29,65 @@
       <h1>票種管理</h1>
     </div>
 
+    <div class="panel shop-open-panel">
+      <div class="notify-header">
+        <h2>開賣時間</h2>
+
+        <div class="ticket-type-header-actions">
+          <button
+            type="button"
+            class="btn-outline"
+            :disabled="savingShopOpenAt || !shop.ready || shop.isOpen(now)"
+            @click="openShopNow"
+          >
+            立即開賣
+          </button>
+
+          <button
+            type="button"
+            class="btn"
+            :disabled="savingShopOpenAt || !shop.ready"
+            @click="saveShopOpenTime"
+          >
+            {{ savingShopOpenAt ? '儲存中...' : '儲存開賣時間' }}
+          </button>
+        </div>
+      </div>
+
+      <p class="panel-copy">
+        開賣前，前台的首頁與購票頁面會顯示 Coming Soon（工作人員不受影響）；時間一到，正在等候的訪客會自動進入首頁。
+        實際可下單的時間仍以下方各票種的販售時段為準。
+      </p>
+
+      <div class="time-group shop-open-group">
+        <div class="time-label">
+          開賣時間（臺灣時間）
+        </div>
+
+        <div class="time-inputs">
+          <input
+            type="date"
+            :value="getPart(shopOpenInput, 'date')"
+            @input="shopOpenInput = setDateTimePart(shopOpenInput, 'date', $event.target.value, '12:00')"
+          >
+
+          <input
+            type="time"
+            :value="getPart(shopOpenInput, 'time')"
+            @input="shopOpenInput = setDateTimePart(shopOpenInput, 'time', $event.target.value, '12:00')"
+          >
+        </div>
+
+        <p
+          v-if="shop.ready"
+          class="time-summary"
+          :class="{ ok: shop.isOpen(now) }"
+        >
+          {{ shopOpenSummary }}
+        </p>
+      </div>
+    </div>
+
     <div class="panel ticket-type-panel">
       <div class="notify-header">
         <h2>票種管理</h2>
@@ -297,12 +356,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
+import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
+import { useNow } from 'src/composables/useNow'
 import { fetchTicketTypes, saveTicketTypes } from 'src/services/ticketTypeService'
+import { saveShopOpenAt } from 'src/services/shopService'
 import {
   addDaysInputValue,
+  formatCountdown,
+  formatDateTime,
   getDateTimePart as getPart,
   parseDate,
   setDateTimePart,
@@ -312,7 +376,61 @@ import {
 } from 'src/utils/datetime'
 
 const auth = useAuthStore()
+const shop = useShopStore()
 const toast = useToastStore()
+const now = useNow()
+
+/* ---------- shop opening time (settings/shop) ---------- */
+
+const shopOpenInput = ref('')
+const savingShopOpenAt = ref(false)
+
+const shopOpenSummary = computed(() => {
+  const when = formatDateTime(shop.openAt)
+  const source = shop.isCustomised ? '' : '（預設時間）'
+
+  return shop.isOpen(now.value)
+    ? `已開賣・${when} 起${source}`
+    : `尚未開賣・${when} 開賣${source}，還有 ${formatCountdown(shop.openAt, now.value)}`
+})
+
+async function storeShopOpenAt(inputValue, message) {
+  savingShopOpenAt.value = true
+
+  try {
+    // stored with an explicit +08:00 so every device reads the same instant
+    await saveShopOpenAt(toStoredDateTime(inputValue), auth.user.uid)
+    shopOpenInput.value = inputValue
+    toast.show(message)
+  } catch (error) {
+    console.error('Save shop opening time error:', error)
+    toast.show('開賣時間儲存失敗，請稍後再試')
+  } finally {
+    savingShopOpenAt.value = false
+  }
+}
+
+function saveShopOpenTime() {
+  if (!parseDate(shopOpenInput.value)) {
+    toast.show('請填寫開賣日期與時間')
+    return
+  }
+
+  storeShopOpenAt(shopOpenInput.value, '開賣時間已儲存')
+}
+
+function openShopNow() {
+  if (!window.confirm('確定要立即開賣嗎？所有訪客將可立即進入首頁與購票頁面（實際可下單時間仍依各票種的販售時段）。')) return
+
+  storeShopOpenAt(toDateTimeInputValue(new Date()), '已立即開賣')
+}
+
+async function loadShopOpenTime() {
+  await shop.init()
+  shopOpenInput.value = toDateTimeInputValue(shop.openAt)
+}
+
+/* ---------- ticket types ---------- */
 
 const ticketTypeForm = ref([])
 const loadingTicketTypes = ref(false)
@@ -606,12 +724,23 @@ async function saveTicketTypeSettings() {
 }
 
 onMounted(() => {
-  if (auth.isSuperAdmin) loadTicketTypeSettings()
+  if (!auth.isSuperAdmin) return
+
+  loadShopOpenTime()
+  loadTicketTypeSettings()
 })
 </script>
 
 <style scoped>
 @import 'src/css/managementpage.scss';
+
+.shop-open-panel {
+  margin-bottom: 24px;
+}
+
+.shop-open-group {
+  max-width: 460px;
+}
 
 .price-input {
   display: flex;
