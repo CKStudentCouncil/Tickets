@@ -34,8 +34,50 @@
   justify-content: space-between;
   gap: 20px;
   background: linear-gradient(180deg, rgba(5, 6, 8, 0.7), transparent);
-  backdrop-filter: blur(6px);
   max-height: 60px;
+}
+
+/* progressive blur: stacked backdrop-filter layers, each masked to a band,
+   strongest at the top and fading out toward the bottom edge */
+.blur-container {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.blur-filter {
+  position: absolute;
+  inset: 0;
+}
+.blur-container .blur-filter:nth-child(1) {
+  -webkit-backdrop-filter: blur(3.8px);
+  backdrop-filter: blur(3.8px);
+  -webkit-mask: linear-gradient(#000 0% 28.5%, #000000b3 42.3%, #0000 52.1%);
+  mask: linear-gradient(#000 0% 28.5%, #000000b3 42.3%, #0000 52.1%);
+}
+.blur-container .blur-filter:nth-child(2) {
+  -webkit-backdrop-filter: blur(2.5px);
+  backdrop-filter: blur(2.5px);
+  -webkit-mask: linear-gradient(#0000 18.7%, #0009 32.4%, #000 41.8% 58.9%, #00000080 68.2%, #0000 76.3%);
+  mask: linear-gradient(#0000 18.7%, #0009 32.4%, #000 41.8% 58.9%, #00000080 68.2%, #0000 76.3%);
+}
+.blur-container .blur-filter:nth-child(3) {
+  -webkit-backdrop-filter: blur(1.2px);
+  backdrop-filter: blur(1.2px);
+  -webkit-mask: linear-gradient(#0000 33.7%, #0006 47.9%, #000 56.2% 73.8%, #0009 82.5%, #0000 89.4%);
+  mask: linear-gradient(#0000 33.7%, #0006 47.9%, #000 56.2% 73.8%, #0009 82.5%, #0000 89.4%);
+}
+.blur-container .blur-filter:nth-child(4) {
+  -webkit-backdrop-filter: blur(0.8px);
+  backdrop-filter: blur(0.8px);
+  -webkit-mask: linear-gradient(#0000 48.3%, #0000004d 62.7%, #000 71.5% 86.9%, #000000b3 93.2%, #0000 98.1%);
+  mask: linear-gradient(#0000 48.3%, #0000004d 62.7%, #000 71.5% 86.9%, #000000b3 93.2%, #0000 98.1%);
+}
+.blur-container .blur-filter:nth-child(5) {
+  -webkit-backdrop-filter: blur(0.4px);
+  backdrop-filter: blur(0.4px);
+  -webkit-mask: linear-gradient(#0000 73.6%, #0006 84.2%, #000c 91.7%, #000 100%);
+  mask: linear-gradient(#0000 73.6%, #0006 84.2%, #000c 91.7%, #000 100%);
 }
 .brand {
   display: flex;
