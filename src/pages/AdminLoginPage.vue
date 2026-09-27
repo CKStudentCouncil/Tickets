@@ -8,6 +8,11 @@
       </header>
 
       <div class="auth-card">
+        <div v-if="isInLineApp" class="notice">
+          <p class="notice-title">LINE 用戶請注意</p>
+          <p>Google 不允許在 LINE 內建瀏覽器登入，請點右上角選單，改用 Safari 或 Chrome 開啟此頁面。</p>
+        </div>
+
         <button
           type="button"
           class="google-btn"
@@ -66,6 +71,7 @@ import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
+import { safeRedirect } from 'src/utils/redirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -136,12 +142,6 @@ async function linkUserAccount(user) {
   await batch.commit()
 
   return pendingData.role
-}
-
-// only same-site paths, never "//evil.com"
-function safeRedirect(value) {
-  const path = String(value || '')
-  return path.startsWith('/') && !path.startsWith('//') ? path : '/admin'
 }
 
 async function afterLogin(user) {

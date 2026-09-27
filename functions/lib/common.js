@@ -23,7 +23,9 @@ export async function assertRole(context, minRole) {
   const userDoc = await db.collection('users').doc(context.auth.uid).get()
   const role = userDoc.exists ? userDoc.data()?.role : null
 
-  if ((ROLE_RANK[role] || 0) < ROLE_RANK[minRole]) {
+  const rank = Object.hasOwn(ROLE_RANK, role) ? ROLE_RANK[role] : 0
+
+  if (rank < ROLE_RANK[minRole]) {
     throw new HttpsError('permission-denied', '權限不足')
   }
 

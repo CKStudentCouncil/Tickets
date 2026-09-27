@@ -35,6 +35,11 @@ export const ELIGIBLE_IDENTITIES = {
 
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 
+// Private link for the buyer: opening it restores the order on any device
+export function getBuyerOrderUrl(orderId, accessToken) {
+  return `${SITE_URL}/orders/${encodeURIComponent(orderId)}?t=${encodeURIComponent(accessToken || '')}`
+}
+
 export function getAdminOrderUrl(orderId) {
   return `${SITE_URL}/admin/orders/${encodeURIComponent(orderId)}`
 }

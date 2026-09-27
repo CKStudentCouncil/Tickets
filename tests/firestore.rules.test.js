@@ -184,6 +184,38 @@ describe('users (PARTY-1)', () => {
   })
 })
 
+describe('activation edge cases (PARTY-1)', () => {
+  const activate = (user, email, data) => {
+    const db = as(user)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'users', user.uid), data)
+    batch.delete(doc(db, 'pendingUsers', email))
+    return batch.commit()
+  }
+  const profileFor = (uid, email, extra = {}) => ({
+    email, displayName: 'D', photoURL: '', name: '新幹部', role: 'manager', uid,
+    createdAt: 'now', updatedAt: 'now', ...extra
+  })
+
+  test('a mixed-case Google email still matches its lower-case invite', async () => {
+    const user = { uid: 'mixed', email: 'Invitee@Example.com' }
+    await assertSucceeds(activate(user, 'invitee@example.com', profileFor(user.uid, 'invitee@example.com')))
+  })
+
+  test('extra keys, a different name, or someone else\'s invite are rejected', async () => {
+    const invitee = { uid: 'invitee-uid', email: 'invitee@example.com' }
+    await assertFails(activate(invitee, invitee.email, profileFor(invitee.uid, invitee.email, { isAdmin: true })))
+    await assertFails(activate(invitee, invitee.email, profileFor(invitee.uid, invitee.email, { name: '冒名' })))
+    const thief = { uid: 'thief', email: 'thief@example.com' }
+    await assertFails(activate(thief, 'invitee@example.com', profileFor(thief.uid, 'invitee@example.com')))
+  })
+
+  test('super admins can only assign staff roles', async () => {
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'users', staff.manager.uid), { role: 'owner' }))
+    await assertSucceeds(updateDoc(doc(as(staff.superAdmin), 'users', staff.manager.uid), { role: 'admin' }))
+  })
+})
+
 describe('pendingUsers (PARTY-7)', () => {
   const invitee = { uid: 'invitee-uid', email: 'invitee@example.com' }
   const other = { uid: 'other', email: 'other@example.com' }
@@ -194,9 +226,34 @@ describe('pendingUsers (PARTY-7)', () => {
     await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'pendingUsers')))
   })
 
-  test('an invitee can read only their own invite', async () => {
+  test('an invitee can read only their own invite, with a verified email', async () => {
     await assertSucceeds(getDoc(doc(as(invitee), 'pendingUsers', invitee.email)))
+    await assertFails(getDoc(doc(as(invitee, false), 'pendingUsers', invitee.email)))
     await assertFails(getDoc(doc(as(other), 'pendingUsers', invitee.email)))
+  })
+
+  test('super admins can change an invite role but not its email or casing', async () => {
+    const db = as(staff.superAdmin)
+    await assertSucceeds(updateDoc(doc(db, 'pendingUsers', invitee.email), { role: 'admin', updatedAt: 'now' }))
+    await assertFails(updateDoc(doc(db, 'pendingUsers', invitee.email), { email: 'x@example.com' }))
+    await assertFails(setDoc(doc(db, 'pendingUsers', 'Upper@example.com'), { email: 'Upper@example.com', role: 'manager' }))
+  })
+
+  test('delete-all: a super admin can delete 40 accounts and invites in one batch', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const seed = context.firestore()
+      for (let i = 0; i < 20; i++) {
+        await setDoc(doc(seed, 'users', `m${i}`), { email: `m${i}@example.com`, role: 'manager' })
+        await setDoc(doc(seed, 'pendingUsers', `p${i}@example.com`), { email: `p${i}@example.com`, role: 'manager' })
+      }
+    })
+    const db = as(staff.superAdmin)
+    const batch = writeBatch(db)
+    for (let i = 0; i < 20; i++) {
+      batch.delete(doc(db, 'users', `m${i}`))
+      batch.delete(doc(db, 'pendingUsers', `p${i}@example.com`))
+    }
+    await assertSucceeds(batch.commit())
   })
 
   test("nobody but super admins can delete someone else's invite, or an invite outside activation", async () => {

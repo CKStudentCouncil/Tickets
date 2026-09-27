@@ -8,6 +8,7 @@ import {
 import routes from './routes'
 import { useAuthStore } from 'src/stores/auth'
 import { SHOP_OPEN_AT } from 'src/config/app'
+import { safeRedirect } from 'src/utils/redirect'
 
 const SHOP_ROUTES = ['home', 'product', 'order-success', 'orders', 'order-detail']
 
@@ -45,8 +46,9 @@ export default defineRouter(function () {
       return { name: 'admin' }
     }
 
+    // already signed in (e.g. back from signInWithRedirect): keep the target
     if (to.name === 'admin-login' && authStore.isManager) {
-      return { name: 'admin' }
+      return safeRedirect(to.query.redirect)
     }
 
     if (new Date() < SHOP_OPEN_AT && SHOP_ROUTES.includes(to.name) && !authStore.isManager) {

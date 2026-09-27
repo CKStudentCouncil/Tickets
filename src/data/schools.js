@@ -1,4 +1,4 @@
-// Keep in sync with functions/lib/common.js
+// Keep in sync with functions/lib/constants.js
 export const SCHOOL_CODES = {
   建國中學: 'CKS',
   北一女中: 'TFG',

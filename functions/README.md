@@ -1,6 +1,6 @@
 # Cloud Functions
 
-Backend for the CK Party Night ticket system (Firebase Functions v1 API, Node 20, region `asia-east1`).
+Backend for the CK Party Night ticket system (Firebase Functions v1 API, Node 22, region `asia-east1`).
 
 ## Layout
 
@@ -8,9 +8,12 @@ Backend for the CK Party Night ticket system (Firebase Functions v1 API, Node 20
 functions/
 ├── index.js                     # entry point, re-exports every function
 ├── lib/
-│   ├── common.js                # admin SDK, roles, schools, Taiwan-time helpers
+│   ├── common.js                # admin SDK init, assertRole
+│   ├── constants.js             # region, SITE_URL, schools, roles
+│   ├── time.js                  # Taiwan-time parsing
+│   ├── orderValidation.js       # pure order checks (unit-tested)
 │   ├── mailer.js                # AWS SES transporter and sender address
-│   ├── orders.js                # createOrder, getOrders, sendOrderQRCode
+│   ├── orders.js                # createOrder, getOrders, releaseOrderStock, sendOrderQRCode
 │   ├── notifications.js         # sendOrderNotification
 │   └── lineup.js                # uploadLineupImage, deleteLineupImage
 └── templates/
@@ -25,12 +28,13 @@ functions/
 |---|---|---|---|
 | `createOrder` | callable | anyone | Validates the order against `settings/ticketTypes` (price, sale window, eligibility, stock, per-person limit) in one transaction, assigns the order ID and returns `{ id, token }` |
 | `getOrders` | callable | anyone with a token | Returns the orders whose `{ id, token }` pairs match (buyers have no account) |
+| `releaseOrderStock` | `orders/{id}` deleted | — | Returns the order's tickets to stock and to the buyer's allowance (once, via `stockReleases/{id}`) |
 | `sendOrderQRCode` | `orders/{id}` created | — | Emails the confirmation with a QR code linking to `/admin/orders/{id}` |
 | `sendOrderNotification` | callable | manager+ | BCC mail-out to buyers (optionally one school) |
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
 
-Stock and purchase limits are tracked in `ticketSales/{ticketTypeId}` and `buyerPurchases/{sha256(email)}`; order serial numbers in `orderCounters/{YYYYMMDD}`. These collections are only written by `createOrder`.
+Stock and purchase limits are tracked in `ticketSales/{ticketTypeId}` and `buyerPurchases/{sha256(email)}`; order serial numbers in `orderCounters/{YYYYMMDD}`. These collections, and `stockReleases/{orderId}`, are only written by `createOrder` and `releaseOrderStock`.
 
 ## Secrets
 
@@ -48,7 +52,9 @@ The sender is `no-reply@tickets.cksc.tw`, which must be allowed by the SES IAM p
 
 ```bash
 npm install
-npm run serve    # functions emulator
+npm test                 # unit tests (also run before every functions deploy)
+npm run test:emulator    # emulator tests, needs Java
+npm run serve            # functions emulator
 npm run deploy   # firebase deploy --only functions
 npm run logs
 ```

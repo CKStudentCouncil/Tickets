@@ -66,6 +66,19 @@ describe('sanitizeOrderInput', () => {
     )
   })
 
+  test('rejects Object.prototype names as schools', () => {
+    for (const school of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { school })), 'invalid-argument')
+    }
+  })
+
+  test('an over-sized single item gets the per-order limit message', () => {
+    assert.throws(
+      () => sanitizeOrderInput(withItems([{ id: 'a', quantity: 21 }])),
+      (error) => error.code === 'invalid-argument' && error.message.includes(String(MAX_TICKETS_PER_ORDER))
+    )
+  })
+
   test('rejects a bad email, unknown school and missing name', () => {
     expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { customerEmail: 'nope' })), 'invalid-argument')
     expectHttpsError(() => sanitizeOrderInput(withItems([{ id: 'a', quantity: 1 }], { school: 'Hogwarts' })), 'invalid-argument')

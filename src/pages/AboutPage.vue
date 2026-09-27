@@ -49,7 +49,10 @@
         <div class="team-member">
           <p class="member-name">鄧又嘉</p>
           <ul>
-            <li>建中班聯會 評議委員會副主任委員</li>
+            <li>建中班聯會 79-2選舉委員會主任委員</li>
+            <li>建中班聯會 80-1 評議委員會副主任委員</li>
+            <li>建中班聯會 80-2 評議委員會副主任委員</li>
+            <li>建中班聯會 81-1 評議委員會副主任委員</li>
           </ul>
         </div>
       </section>
@@ -79,8 +82,12 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
 function openSurvey() {
-  window.open('/survey', '_blank')
+  window.open(router.resolve({ name: 'survey' }).href, '_blank')
 }
 </script>
 
