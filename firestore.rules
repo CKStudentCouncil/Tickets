@@ -158,9 +158,25 @@ service cloud.firestore {
     // Ticket types & public content
     // =========================
 
+    // Rules are OR-ed across matches, so documents with their own rule below
+    // must be excluded here or this one would let any shape through.
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if isSuperAdmin() && settingId != 'shop';
+    }
+
+    // Site opening time (src/services/shopService.js). openAt is Taiwan time
+    // as "YYYY-MM-DDTHH:mm:00+08:00"; a malformed value would silently put
+    // the site back on the built-in default, so only that shape is accepted.
+    // Deleting it also falls back to the default.
+    match /settings/shop {
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['openAt', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.openAt is string
+        && request.resource.data.openAt.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:00[+]08:00')
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if isSuperAdmin();
     }
 
     // Scheduled content: the public can only read what is already published

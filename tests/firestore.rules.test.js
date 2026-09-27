@@ -305,12 +305,27 @@ describe('settings and public content', () => {
   })
 
   test('only super admins set the shop opening time, which anyone can read', async () => {
-    const openAt = { openAt: '2026-11-05T12:00:00+08:00' }
+    const shop = (who, fields = {}) => ({
+      openAt: '2026-11-05T12:00:00+08:00',
+      updatedAt: new Date(),
+      updatedByUid: who.uid,
+      ...fields
+    })
+    const shopDoc = (who) => doc(as(who), 'settings', 'shop')
+
     await assertSucceeds(getDoc(doc(anon(), 'settings', 'shop')))
-    await assertFails(setDoc(doc(anon(), 'settings', 'shop'), openAt))
-    await assertFails(setDoc(doc(as(staff.manager), 'settings', 'shop'), openAt))
-    await assertFails(setDoc(doc(as(staff.admin), 'settings', 'shop'), openAt))
-    await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'settings', 'shop'), openAt))
+    await assertFails(setDoc(doc(anon(), 'settings', 'shop'), shop({ uid: 'anon' })))
+    await assertFails(setDoc(shopDoc(staff.manager), shop(staff.manager)))
+    await assertFails(setDoc(shopDoc(staff.admin), shop(staff.admin)))
+    await assertSucceeds(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin)))
+
+    // shape: Taiwan-time string, known fields, editor's own uid
+    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: '2026-11-05T12:00' })))
+    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: '2026-11-05T12:00:00Z' })))
+    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { openAt: new Date() })))
+    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.superAdmin, { note: 'x' })))
+    await assertFails(setDoc(shopDoc(staff.superAdmin), shop(staff.admin)))
+    await assertSucceeds(deleteDoc(shopDoc(staff.superAdmin)))
   })
 })
 
