@@ -1,5 +1,5 @@
 // Runs createOrder / releaseOrderStock against the Firestore emulator:
-// `npm run test:emulator` (needs Java). The emulator project is a demo-
+// `yarn test:emulator` (needs Java). The emulator project is a demo-
 // project, so nothing ever reaches production.
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,7 +12,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
   storageBucket: `${PROJECT_ID}.appspot.com`
 })
 
-assert.ok(process.env.FIRESTORE_EMULATOR_HOST, 'run through `npm run test:emulator`')
+assert.ok(process.env.FIRESTORE_EMULATOR_HOST, 'run through `yarn test:emulator`')
 
 const fft = functionsTest({ projectId: PROJECT_ID })
 const { createOrder, releaseOrderStock } = await import('../../index.js')

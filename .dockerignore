@@ -1,5 +1,5 @@
 # 依賴與編譯產物 (Dependencies & Build Artifacts)
-node_modules
+**/node_modules
 .quasar
 dist
 

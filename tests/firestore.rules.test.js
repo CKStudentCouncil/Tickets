@@ -1,4 +1,4 @@
-// Firestore security rules tests. Run with `npm run test:rules` (needs Java
+// Firestore security rules tests. Run with `yarn test:rules` (needs Java
 // for the Firestore emulator).
 import { after, before, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'

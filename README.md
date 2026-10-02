@@ -43,8 +43,8 @@ public/             # Static assets (logo, GitHub Pages 404 redirect)
 
 ## Requirements
 
-- Node.js 18, 20, 22, or 24
-- npm or yarn
+- Node.js 22 or 24
+- Yarn 1.x (`corepack enable`)
 - Firebase CLI for Firebase deployment
 <!--
 ## Local Development
@@ -52,13 +52,13 @@ public/             # Static assets (logo, GitHub Pages 404 redirect)
 ### 1. Install Dependencies
 
 ```bash
-npm install
+yarn install
 ```
 
 ### 2. Start the Development Server
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 This launches the Quasar/Vite development server.
@@ -68,36 +68,30 @@ This launches the Quasar/Vite development server.
 Create a production build with:
 
 ```bash
-npm run build
+yarn build
 ```
 -->
 ## Local Development With Docker
 
 The Docker image runs the Quasar **dev server** for local development only; production is the static build in `dist/spa` served by Firebase Hosting / GitHub Pages.
 
-### 1. Build Image
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
-docker build -t cksc-tickets .
+docker compose up --build
 ```
 
-### 2. Run Container
-
-```bash
-docker run -p 9000:9000 cksc-tickets
-```
-
-This launches the Quasar/Vite development server.
+Open http://localhost:9000. The source folder is mounted into the container, so edits hot-reload. Stop with `Ctrl+C`; after changing dependencies, rebuild with `docker compose up --build -V` (`-V` recreates the container's `node_modules`).
 
 ## Production Build
 
 Create a production build with:
 
 ```bash
-docker run --rm -v "$PWD/dist:/app/dist" cksc-tickets npm run build
+docker compose run --rm app yarn build
 ```
 
-The volume keeps the output after the container is removed. The generated SPA files are written to:
+The output lands in your local folder:
 
 ```text
 dist/spa
@@ -107,9 +101,9 @@ dist/spa
 ## Tests
 
 ```bash
-cd functions && npm test          # order validation, time handling, SES mailer (no emulator needed)
-npm run test:rules                # Firestore rules, needs Java for the emulator
-cd functions && npm run test:emulator   # createOrder transaction / oversell test, needs Java
+cd functions && yarn test             # order validation, time handling, SES mailer (no emulator needed)
+yarn test:rules                        # Firestore rules, needs Java for the emulator
+cd functions && yarn test:emulator    # createOrder transaction / oversell test, needs Java
 ```
 
 ## Firebase Configuration
@@ -170,7 +164,7 @@ Buyers read their orders straight from Firestore: `orders/{id}.userId` is the bu
 reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). Until its debug token is registered, every Firebase call fails, Google sign-in included, with `AppCheck: Fetch server returned an HTTP error status. HTTP status: 403 (appCheck/fetch-status-error)`.
 
 - Either register the token the browser console prints (`App Check debug token: …`) in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile, and each origin (`localhost` vs `127.0.0.1`, Docker), makes up its own.
-- Or add one token there once (e.g. a UUID from `uuidgen`) and start the dev server with it: `APP_CHECK_DEBUG_TOKEN=<token> npm run dev`, or `docker run -e APP_CHECK_DEBUG_TOKEN=<token> -p 9000:9000 cksc-tickets`. Production builds never include it.
+- Or add one token there once (e.g. a UUID from `uuidgen`) and start the dev server with it: `APP_CHECK_DEBUG_TOKEN=<token> yarn dev`, or `APP_CHECK_DEBUG_TOKEN=<token> docker compose up`. Production builds never include it.
 
 A debug token lets any request pass App Check, so keep it out of the repository.
 

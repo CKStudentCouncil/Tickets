@@ -1,0 +1,15 @@
+# Local development: `docker compose up` runs the Quasar dev server on
+# http://localhost:9000 with the source mounted, so edits hot-reload.
+services:
+  app:
+    build: .
+    image: cksc-tickets
+    ports:
+      - '9000:9000'
+    volumes:
+      - .:/app
+      # keep the image's Linux node_modules instead of the host's macOS ones
+      - /app/node_modules
+    environment:
+      # optional App Check debug token, see README
+      APP_CHECK_DEBUG_TOKEN: ${APP_CHECK_DEBUG_TOKEN:-}

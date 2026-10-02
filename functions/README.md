@@ -64,10 +64,10 @@ The sender is `no-reply@tickets.cksc.tw`, which must be allowed by the SES IAM p
 ## Commands
 
 ```bash
-npm install
-npm test                 # unit tests (also run before every functions deploy)
-npm run test:emulator    # emulator tests, needs Java
-npm run serve            # functions emulator
-npm run deploy   # firebase deploy --only functions
-npm run logs
+yarn install
+yarn test                # unit tests (also run before every functions deploy)
+yarn test:emulator       # emulator tests, needs Java
+yarn serve               # functions emulator
+yarn deploy              # firebase deploy --only functions
+yarn logs
 ```

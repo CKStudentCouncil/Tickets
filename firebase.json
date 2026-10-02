@@ -12,7 +12,7 @@
       "source": "functions",
       "runtime": "nodejs22",
       "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" test"
+        "yarn --cwd \"$RESOURCE_DIR\" test"
       ]
     }
   ],
