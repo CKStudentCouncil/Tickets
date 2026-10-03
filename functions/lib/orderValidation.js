@@ -169,6 +169,36 @@ export function allocateStock({ available, shardSold, quantity, start }) {
   return remaining === 0 ? allocation : null
 }
 
+// Chooses the shards to lock from an unlocked look at all of them (`peekSold`,
+// read before the transaction). Returns null when they cannot hold `quantity`
+// (sold out), otherwise the shards to lock: one random shard that can hold the
+// whole order or, when none can, random shards with room until they add up.
+// Shards only fill up (except when an order is deleted), so a shard seen full
+// stays full.
+export function planShards({ available, peekSold, quantity, random }) {
+  const free = (k) => shardCapacity(available, k) - (peekSold[k] || 0)
+  const open = Array.from({ length: SHARD_COUNT }, (_, k) => k).filter((k) => free(k) > 0)
+
+  if (open.reduce((sum, k) => sum + free(k), 0) < quantity) return null
+
+  const whole = open.filter((k) => free(k) >= quantity)
+  if (whole.length > 0) return [whole[random(whole.length)]]
+
+  for (let i = open.length - 1; i > 0; i--) {
+    const j = random(i + 1)
+    ;[open[i], open[j]] = [open[j], open[i]]
+  }
+
+  const shards = []
+  let room = 0
+  for (const k of open) {
+    shards.push(k)
+    room += free(k)
+    if (room >= quantity) break
+  }
+  return shards
+}
+
 // Throws when this buyer may not buy `quantity` tickets of this type now.
 // `email` is the verified account email; `alreadyBought` comes from the
 // counter read in the transaction. Stock is checked by allocateStock.

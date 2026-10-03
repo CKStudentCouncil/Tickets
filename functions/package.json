@@ -14,7 +14,7 @@
     "logs": "firebase functions:log",
     "test": "node --test \"test/unit/*.test.js\"",
     "test:emulator": "firebase emulators:exec --only firestore --project demo-cksc-ticket \"node --test test/emulator/*.test.js\"",
-    "test:load": "firebase emulators:exec --only firestore --project demo-cksc-ticket \"node test/load/createOrder.load.js\""
+    "test:load": "for s in 0 1 2; do firebase emulators:exec --only firestore --project demo-cksc-ticket \"node test/load/createOrder.load.js $s\" || exit 1; done"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1139.0",

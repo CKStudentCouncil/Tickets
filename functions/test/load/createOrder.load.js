@@ -1,6 +1,8 @@
 // Load test for createOrder against the Firestore emulator (PARTY-28):
 // `yarn test:load` (needs Java). Many buyers check out at the same moment;
 // prints successes, latency and error codes per scenario. Not run in CI.
+// Each scenario gets a fresh emulator (`node createOrder.load.js <index>`):
+// after a large run the emulator stalls later scenarios in the same process.
 // The emulator locks more conservatively than production, so compare runs
 // with each other rather than reading the numbers as production capacity.
 import functionsTest from 'firebase-functions-test'
@@ -31,13 +33,6 @@ const SCENARIOS = [
   { label: '1000 buyers, plenty of stock', buyers: 1000, stock: 10000 }
 ]
 
-async function clearFirestore() {
-  await fetch(
-    `http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`,
-    { method: 'DELETE' }
-  )
-}
-
 async function soldOf(ticketTypeId) {
   const shards = await db.collection(`ticketSales/${ticketTypeId}/shards`).get()
   return shards.docs.reduce((sum, d) => sum + (d.data().sold || 0), 0)
@@ -46,11 +41,11 @@ async function soldOf(ticketTypeId) {
 const percentile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
 
 async function run({ label, buyers, stock }) {
-  await clearFirestore()
+  const typeId = 'load'
   await db.doc('settings/shop').set({ openAt: new Date(Date.now() - HOUR) })
   await db.doc('settings/ticketTypes').set({
     types: [{
-      id: 'load', name: '壓測票', price: 900, eligibleBuyerIdentity: 'all_users',
+      id: typeId, name: '壓測票', price: 900, eligibleBuyerIdentity: 'all_users',
       salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: stock, purchaseLimitPerPerson: 4
     }]
   })
@@ -65,7 +60,7 @@ async function run({ label, buyers, stock }) {
           {
             orderPayload: {
               customerName: '壓測', customerPhone: '0900000000', school: '北一女中', class: '101', number: '1',
-              items: [{ id: 'load', quantity: 1 }]
+              items: [{ id: typeId, quantity: 1 }]
             },
             requestId: `load-${i}-0123456789abcdef`
           },
@@ -86,7 +81,7 @@ async function run({ label, buyers, stock }) {
   console.log({
     scenario: label,
     succeeded: results.filter((r) => r.status === 'fulfilled').length,
-    sold: await soldOf('load'),
+    sold: await soldOf(typeId),
     totalMs: Date.now() - startedAt,
     p50Ms: percentile(latencies, 0.5),
     p95Ms: percentile(latencies, 0.95),
@@ -94,7 +89,12 @@ async function run({ label, buyers, stock }) {
   })
 }
 
-for (const scenario of SCENARIOS) await run(scenario)
+const scenario = SCENARIOS[Number(process.argv[2])]
+if (!scenario) {
+  console.error(`usage: node createOrder.load.js <0-${SCENARIOS.length - 1}>`)
+  process.exit(1)
+}
+await run(scenario)
 
 fft.cleanup()
 process.exit(0)

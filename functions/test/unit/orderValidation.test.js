@@ -5,6 +5,7 @@ import {
   ORDER_ID_PATTERN,
   SHARD_COUNT,
   allocateStock,
+  planShards,
   shardCapacity,
   generateOrderId,
   getStockLimit,
@@ -244,6 +245,33 @@ describe('stock shards (PARTY-28)', () => {
   test('a lowered stock never goes below what was already sold', () => {
     // shards sold 5 each (100 tickets), then the stock is lowered to 60
     assert.equal(allocateStock({ available: 60, shardSold: allShards(5), quantity: 1, start: 0 }), null)
+  })
+
+  test('planShards: sold out per the unlocked look means no shard is locked', () => {
+    const first = () => 0
+    assert.equal(planShards({ available: 100, peekSold: allShards(5), quantity: 1, random: first }), null)
+    assert.equal(planShards({ available: 0, peekSold: {}, quantity: 1, random: first }), null)
+    const twoLeft = { ...allShards(5), 4: 4, 9: 4 }
+    assert.equal(planShards({ available: 100, peekSold: twoLeft, quantity: 3, random: first }), null)
+  })
+
+  test('planShards: locks one random shard that can hold the whole order', () => {
+    const peekSold = { ...allShards(5), 4: 4, 9: 2, 15: 0 } // 100 tickets: room in 4 (1), 9 (3), 15 (5)
+    assert.deepEqual(planShards({ available: 100, peekSold, quantity: 3, random: () => 0 }), [9])
+    assert.deepEqual(planShards({ available: 100, peekSold, quantity: 3, random: () => 1 }), [15])
+  })
+
+  test('planShards: when no shard can hold the order, locks just enough shards with room', () => {
+    const peekSold = { ...allShards(5), 4: 4, 9: 4, 12: 3 } // room: 4 (1), 9 (1), 12 (2)
+    const shards = planShards({ available: 100, peekSold, quantity: 3, random: (n) => n - 1 })
+    const room = { 4: 1, 9: 1, 12: 2 }
+    assert.ok(shards.every((k) => k in room))
+    assert.ok(shards.reduce((sum, k) => sum + room[k], 0) >= 3)
+    assert.equal(new Set(shards).size, shards.length)
+  })
+
+  test('planShards: unread (new) shards count as empty', () => {
+    assert.deepEqual(planShards({ available: 40, peekSold: {}, quantity: 2, random: () => 3 }), [3])
   })
 })
 

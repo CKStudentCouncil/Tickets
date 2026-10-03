@@ -15,6 +15,7 @@ import {
   getBuyerKey,
   getStockLimit,
   isValidRequestId,
+  planShards,
   sanitizeOrderInput
 } from './orderValidation.js'
 import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
@@ -23,6 +24,8 @@ import { generateEmailHTML } from '../templates/orderConfirmation.js'
 import { heroAttachment } from '../templates/shared.js'
 
 const ORDER_ID_ATTEMPTS = 3
+// Fresh looks at the shards before giving up when the locked ones were full
+const STOCK_ATTEMPTS = 10
 const RATE_WINDOW_MS = 10 * 60 * 1000
 // Stop retrying a failed confirmation email after this long; staff can resend
 const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
@@ -37,49 +40,61 @@ const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 //   stockReleases/{orderId}         marks a deleted order as already released
 
 class OrderIdTaken extends Error {}
+// The shards chosen from the unlocked look filled up before they were locked
+class ShardsTaken extends Error {}
 
 const shardRef = (ticketTypeId, k) => db.doc(`ticketSales/${ticketTypeId}/shards/${k}`)
 const soldOf = (snap) => Number(snap.data()?.sold || 0)
 
-// Picks the shards each item's tickets are counted in; throws when a ticket
-// type is sold out. Reads one random shard per limited ticket type, and the
-// other shards only when that one cannot hold the order (nearly sold out).
-// Unlimited types read nothing: they just add to a random shard.
-async function reserveStock(tx, items, ticketTypes, legacySnaps) {
-  const plans = items.map((item, index) => {
-    const stock = getStockLimit(ticketTypes.get(item.id))
-    return {
-      item,
-      start: randomInt(SHARD_COUNT),
-      available: stock === null ? null : Math.max(0, stock - soldOf(legacySnaps[index])),
-      shardSold: {}
-    }
-  })
-  const limited = plans.filter((plan) => plan.available !== null)
-
-  if (limited.length > 0) {
-    const snaps = await tx.getAll(...limited.map((plan) => shardRef(plan.item.id, plan.start)))
-    snaps.forEach((snap, i) => { limited[i].shardSold[limited[i].start] = soldOf(snap) })
-  }
-
-  for (const plan of limited) {
-    const quantity = plan.item.quantity
-    plan.allocation = allocateStock({ ...plan, quantity })
-    if (plan.allocation) continue
-
-    const others = Array.from({ length: SHARD_COUNT }, (_, k) => k).filter((k) => k !== plan.start)
-    const snaps = await tx.getAll(...others.map((k) => shardRef(plan.item.id, k)))
-    snaps.forEach((snap, i) => { plan.shardSold[others[i]] = soldOf(snap) })
-
-    plan.allocation = allocateStock({ ...plan, quantity })
-    if (!plan.allocation) {
-      throw new HttpsError('resource-exhausted', `${plan.item.name}剩餘票量不足`)
-    }
-  }
+// Unlocked read of every shard of these ticket types before the transaction:
+// { [ticketTypeId]: { [k]: sold } }. Lets reserveStock lock only shards that
+// still have room, and turns buyers away without locking anything once a
+// type is sold out.
+async function peekShards(ticketTypeIds) {
+  const refs = ticketTypeIds.flatMap((id) => Array.from({ length: SHARD_COUNT }, (_, k) => shardRef(id, k)))
+  const snaps = await db.getAll(...refs)
 
   return Object.fromEntries(
-    plans.map((plan) => [plan.item.id, plan.allocation || { [plan.start]: plan.item.quantity }])
+    ticketTypeIds.map((id, i) => [
+      id,
+      Object.fromEntries(snaps.slice(i * SHARD_COUNT, (i + 1) * SHARD_COUNT).map((snap, k) => [k, soldOf(snap)]))
+    ])
   )
+}
+
+// Picks the shards each item's tickets are counted in. Locks only the shards
+// planShards chose from the unlocked look (normally one per ticket type);
+// throws ShardsTaken when they filled up meanwhile, so the caller looks again
+// rather than every checkout locking all shards near the end of a sale.
+// Unlimited types read nothing: they just add to a random shard.
+async function reserveStock(tx, items, ticketTypes, legacySnaps, peek) {
+  const plans = items.map((item, index) => {
+    const stock = getStockLimit(ticketTypes.get(item.id))
+    if (stock === null) return { item, allocation: { [randomInt(SHARD_COUNT)]: item.quantity } }
+
+    const available = Math.max(0, stock - soldOf(legacySnaps[index]))
+    const shards = planShards({ available, peekSold: peek[item.id], quantity: item.quantity, random: randomInt })
+    if (!shards) throw new HttpsError('resource-exhausted', `${item.name}剩餘票量不足`)
+
+    return { item, available, shards }
+  })
+  const limited = plans.filter((plan) => !plan.allocation)
+  const refs = limited.flatMap((plan) => plan.shards.map((k) => shardRef(plan.item.id, k)))
+  const snaps = refs.length > 0 ? await tx.getAll(...refs) : []
+
+  let next = 0
+  for (const plan of limited) {
+    const shardSold = Object.fromEntries(plan.shards.map((k) => [k, soldOf(snaps[next++])]))
+    plan.allocation = allocateStock({
+      available: plan.available,
+      shardSold,
+      quantity: plan.item.quantity,
+      start: plan.shards[0]
+    })
+    if (!plan.allocation) throw new ShardsTaken()
+  }
+
+  return Object.fromEntries(plans.map((plan) => [plan.item.id, plan.allocation]))
 }
 
 function assertAppCheck(context) {
@@ -167,8 +182,11 @@ export const createOrder = functions
     const buyerRef = db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`)
     const legacyRefs = ticketTypeIds.map((id) => db.doc(`ticketSales/${id}`))
     const requestRef = requestId ? db.doc(`orderRequests/${requestId}`) : null
+    let peek = await peekShards(ticketTypeIds)
+    let idAttempt = 1
+    let stockAttempt = 1
 
-    for (let attempt = 1; ; attempt++) {
+    for (;;) {
       const orderRef = db.doc(`orders/${generateOrderId(schoolCode, dateKey)}`)
 
       try {
@@ -225,7 +243,7 @@ export const createOrder = functions
             }
           })
 
-          const stockShards = await reserveStock(tx, items, ticketTypes, legacySnaps)
+          const stockShards = await reserveStock(tx, items, ticketTypes, legacySnaps, peek)
 
           Object.entries(stockShards).forEach(([id, allocation]) => {
             Object.entries(allocation).forEach(([k, n]) => {
@@ -268,7 +286,14 @@ export const createOrder = functions
           return { status: 201, id: orderRef.id }
         }, { maxAttempts: 10 })
       } catch (error) {
-        if (error instanceof OrderIdTaken && attempt < ORDER_ID_ATTEMPTS) continue
+        if (error instanceof OrderIdTaken && idAttempt++ < ORDER_ID_ATTEMPTS) continue
+        if (error instanceof ShardsTaken) {
+          if (stockAttempt++ >= STOCK_ATTEMPTS) {
+            throw new HttpsError('aborted', '目前購票人數眾多，請稍後再試一次')
+          }
+          peek = await peekShards(ticketTypeIds)
+          continue
+        }
         throw toHttpsError(error)
       }
     }
