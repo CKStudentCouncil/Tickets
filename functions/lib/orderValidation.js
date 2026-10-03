@@ -134,10 +134,45 @@ export function getPurchaseLimit(ticketType) {
   return ticketType.unlimited ? null : Number(ticketType.purchaseLimitPerPerson) || null
 }
 
-// Throws when `quantity` more tickets of this type may not be sold now.
-// `email` is the verified account email; `sold` and `alreadyBought` come from
-// the counters read in the transaction.
-export function checkTicketType(ticketType, quantity, { now, school, email, sold, alreadyBought }) {
+// Each ticket type's sales are counted in SHARD_COUNT documents
+// (ticketSales/{typeId}/shards/{k}) so simultaneous checkouts do not all
+// lock one counter (PARTY-28). Every shard may sell an equal share of the
+// stock. Never change this during a sale: the shares would no longer match
+// what each shard has already sold.
+export const SHARD_COUNT = 20
+
+// How many of `available` tickets shard `k` may sell
+export function shardCapacity(available, k) {
+  const base = Math.floor(available / SHARD_COUNT)
+  return base + (k < available % SHARD_COUNT ? 1 : 0)
+}
+
+// Takes `quantity` tickets from shard `start`, moving on to the next shards
+// when it is full. `shardSold` holds { [k]: sold } for the shards read so far;
+// unread shards are skipped. Returns { [k]: n }, or null when the read shards
+// cannot hold them.
+export function allocateStock({ available, shardSold, quantity, start }) {
+  const allocation = {}
+  let remaining = quantity
+
+  for (let i = 0; i < SHARD_COUNT && remaining > 0; i++) {
+    const k = (start + i) % SHARD_COUNT
+    if (!Object.hasOwn(shardSold, k)) continue
+
+    const take = Math.min(remaining, Math.max(0, shardCapacity(available, k) - shardSold[k]))
+    if (take > 0) {
+      allocation[k] = take
+      remaining -= take
+    }
+  }
+
+  return remaining === 0 ? allocation : null
+}
+
+// Throws when this buyer may not buy `quantity` tickets of this type now.
+// `email` is the verified account email; `alreadyBought` comes from the
+// counter read in the transaction. Stock is checked by allocateStock.
+export function checkTicketType(ticketType, quantity, { now, school, email, alreadyBought }) {
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -161,12 +196,6 @@ export function checkTicketType(ticketType, quantity, { now, school, email, sold
     if (school !== HOME_SCHOOL) {
       throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
     }
-  }
-
-  const stock = getStockLimit(ticketType)
-
-  if (stock !== null && sold + quantity > stock) {
-    throw new HttpsError('resource-exhausted', `${ticketType.name}剩餘票量不足`)
   }
 
   const limit = getPurchaseLimit(ticketType)

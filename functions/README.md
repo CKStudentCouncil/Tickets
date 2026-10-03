@@ -36,7 +36,9 @@ functions/
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
 
-Stock and purchase limits are tracked in `ticketSales/{ticketTypeId}` and `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}` and `notificationJobs/{jobId}`, are only written by the functions (the Firestore rules deny clients).
+Avoid saving the ticket types on the management page during a sale opening: every checkout reads `settings/ticketTypes` in its transaction, so a save then makes them wait.
+
+Stock is counted in 20 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-19}`, so simultaneous checkouts do not all lock one counter: each shard may sell an equal share of the stock and an order normally touches one random shard (`SHARD_COUNT` in `lib/orderValidation.js`; never change it during a sale). Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}` itself only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}` and `notificationJobs/{jobId}`, are only written by the functions (the Firestore rules deny clients).
 
 ## Settings (`functions/.env`)
 
@@ -67,6 +69,7 @@ The sender is `no-reply@tickets.cksc.tw`, which must be allowed by the SES IAM p
 yarn install
 yarn test                # unit tests (also run before every functions deploy)
 yarn test:emulator       # emulator tests, needs Java
+yarn test:load           # many simultaneous checkouts on the emulator (not in CI)
 yarn serve               # functions emulator
 yarn deploy              # firebase deploy --only functions
 yarn logs

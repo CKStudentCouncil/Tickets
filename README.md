@@ -104,6 +104,7 @@ dist/spa
 cd functions && yarn test             # order validation, time handling, SES mailer (no emulator needed)
 yarn test:rules                        # Firestore rules, needs Java for the emulator
 cd functions && yarn test:emulator    # createOrder transaction / oversell test, needs Java
+cd functions && yarn test:load        # load test: hundreds of simultaneous checkouts, needs Java
 ```
 
 ## Firebase Configuration

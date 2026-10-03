@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 
 import {
   ORDER_ID_PATTERN,
+  SHARD_COUNT,
+  allocateStock,
+  shardCapacity,
   generateOrderId,
   getStockLimit,
   isValidRequestId,
@@ -148,7 +151,7 @@ describe('checkTicketType', () => {
     totalTicketQuantity: 100,
     purchaseLimitPerPerson: 4
   }
-  const ok = { now, school: '北一女中', sold: 0, alreadyBought: 0 }
+  const ok = { now, school: '北一女中', alreadyBought: 0 }
 
   test('passes inside the sale window', () => {
     assert.doesNotThrow(() => checkTicketType(ticketType, 4, ok))
@@ -187,23 +190,60 @@ describe('checkTicketType', () => {
     assert.equal(isSchoolAccount('s1234@sub.gl.ck.tp.edu.tw'), false)
   })
 
-  test('stock: exactly sold out passes, one more fails', () => {
-    assert.doesNotThrow(() => checkTicketType(ticketType, 2, { ...ok, sold: 98 }))
-    expectHttpsError(() => checkTicketType(ticketType, 3, { ...ok, sold: 98 }), 'resource-exhausted')
-  })
-
-  test('stock: 0 or missing total sells nothing; unlimited must be explicit (PARTY-18)', () => {
-    expectHttpsError(() => checkTicketType({ ...ticketType, totalTicketQuantity: 0 }, 1, ok), 'resource-exhausted')
-    expectHttpsError(() => checkTicketType({ ...ticketType, totalTicketQuantity: '' }, 1, ok), 'resource-exhausted')
-    assert.doesNotThrow(() =>
-      checkTicketType({ ...ticketType, totalTicketQuantity: 0, unlimitedStock: true }, 4, { ...ok, sold: 10000 })
-    )
-  })
-
   test('per-person limit counts earlier purchases; unlimited skips it', () => {
     expectHttpsError(() => checkTicketType(ticketType, 1, { ...ok, alreadyBought: 4 }), 'failed-precondition')
     expectHttpsError(() => checkTicketType(ticketType, 5, ok), 'failed-precondition')
     assert.doesNotThrow(() => checkTicketType({ ...ticketType, unlimited: true }, 20, { ...ok, alreadyBought: 50 }))
+  })
+})
+
+describe('stock shards (PARTY-28)', () => {
+  const allShards = (sold = 0) => Object.fromEntries(Array.from({ length: SHARD_COUNT }, (_, k) => [k, sold]))
+  const total = (allocation) => Object.values(allocation).reduce((sum, n) => sum + n, 0)
+
+  test('shard capacities add up to the stock, the remainder going to the first shards', () => {
+    for (const available of [0, 1, 5, 19, 20, 21, 100, 1234]) {
+      const caps = Array.from({ length: SHARD_COUNT }, (_, k) => shardCapacity(available, k))
+      assert.equal(caps.reduce((a, b) => a + b, 0), available)
+      assert.ok(Math.max(...caps) - Math.min(...caps) <= 1)
+    }
+    assert.equal(shardCapacity(21, 0), 2)
+    assert.equal(shardCapacity(21, 1), 1)
+  })
+
+  test('takes everything from the start shard when it has room', () => {
+    assert.deepEqual(allocateStock({ available: 100, shardSold: { 7: 0 }, quantity: 4, start: 7 }), { 7: 4 })
+  })
+
+  test('returns null when only a full start shard was read', () => {
+    assert.equal(allocateStock({ available: 100, shardSold: { 7: 5 }, quantity: 1, start: 7 }), null)
+  })
+
+  test('spreads over the next shards, wrapping around, when the start one is short', () => {
+    const shardSold = { ...allShards(5), 19: 4, 0: 3 } // 100 tickets: 5 per shard
+    assert.deepEqual(allocateStock({ available: 100, shardSold, quantity: 3, start: 19 }), { 19: 1, 0: 2 })
+  })
+
+  test('sells exactly the stock and not one more', () => {
+    const shardSold = allShards(5)
+    shardSold[3] = 3 // 98 of 100 sold
+    assert.deepEqual(allocateStock({ available: 100, shardSold, quantity: 2, start: 10 }), { 3: 2 })
+    assert.equal(allocateStock({ available: 100, shardSold, quantity: 3, start: 10 }), null)
+  })
+
+  test('small stock: an order larger than one shard still fits across shards', () => {
+    const allocation = allocateStock({ available: 5, shardSold: allShards(), quantity: 4, start: 18 })
+    assert.equal(total(allocation), 4)
+    assert.equal(allocateStock({ available: 5, shardSold: allShards(), quantity: 6, start: 0 }), null)
+  })
+
+  test('nothing to sell when the stock is 0 (PARTY-18) or used up by legacy orders', () => {
+    assert.equal(allocateStock({ available: 0, shardSold: allShards(), quantity: 1, start: 0 }), null)
+  })
+
+  test('a lowered stock never goes below what was already sold', () => {
+    // shards sold 5 each (100 tickets), then the stock is lowered to 60
+    assert.equal(allocateStock({ available: 60, shardSold: allShards(5), quantity: 1, start: 0 }), null)
   })
 })
 

@@ -64,6 +64,15 @@ async function countOrdersOf(ticketTypeId) {
     .reduce((sum, item) => sum + item.quantity, 0)
 }
 
+// tickets counted against a type's stock: the shards plus the legacy counter
+async function soldOf(ticketTypeId) {
+  const [legacy, shards] = await Promise.all([
+    db.doc(`ticketSales/${ticketTypeId}`).get(),
+    db.collection(`ticketSales/${ticketTypeId}/shards`).get()
+  ])
+  return shards.docs.reduce((sum, d) => sum + (d.data().sold || 0), legacy.data()?.sold || 0)
+}
+
 after(() => fft.cleanup())
 
 beforeEach(async () => {
@@ -124,7 +133,7 @@ describe('createOrder', () => {
     assert.equal(first.status, 201)
     assert.equal(second.status, 200)
     assert.equal(second.id, first.id)
-    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
+    assert.equal(await soldOf('open'), 2)
 
     // another account cannot claim that order with the same requestId
     await assert.rejects(callCreate(payload, as('other@example.com')), { code: 'invalid-argument' })
@@ -188,7 +197,7 @@ describe('createOrder', () => {
       )
     )
     const succeeded = results.filter((r) => r.status === 'fulfilled').length
-    const sold = (await db.doc('ticketSales/small').get()).data()?.sold || 0
+    const sold = await soldOf('small')
     t.diagnostic(`${succeeded} of ${attempts} concurrent orders succeeded for 5 tickets`)
 
     const rejectionCodes = new Set(results.filter((r) => r.status === 'rejected').map((r) => r.reason?.code))
@@ -212,6 +221,40 @@ describe('createOrder', () => {
     assert.equal(await countOrdersOf('open'), succeeded)
   })
 
+  test('stock is counted in shards and recorded on the order (PARTY-28)', async () => {
+    const { id } = await callCreate(order([{ id: 'open', quantity: 3 }]), as('shard@example.com'))
+    const { stockShards } = (await db.doc(`orders/${id}`).get()).data()
+    const counted = Object.values(stockShards.open).reduce((a, b) => a + b, 0)
+
+    assert.equal(counted, 3)
+    assert.equal(await soldOf('open'), 3)
+    assert.equal((await db.doc('ticketSales/open').get()).exists, false, 'the legacy counter is not written')
+  })
+
+  test('tickets counted by the legacy counter are not sold again (PARTY-28)', async () => {
+    await db.doc('ticketSales/open').set({ sold: 98 }) // 98 of 100 sold before the shards
+    await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 2 }]), as('last@example.com')))
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('late@example.com')), { code: 'resource-exhausted' })
+    assert.equal(await soldOf('open'), 100)
+  })
+
+  test('many simultaneous buyers all get tickets while stock lasts (PARTY-28)', async (t) => {
+    await db.doc('settings/ticketTypes').set({
+      types: TICKET_TYPES.map((type) => (type.id === 'open' ? { ...type, totalTicketQuantity: 1000 } : type))
+    })
+    const buyers = 60
+    const results = await Promise.allSettled(
+      Array.from({ length: buyers }, (_, i) =>
+        callCreate(order([{ id: 'open', quantity: 2 }]), as(`crowd${i}@example.com`))
+      )
+    )
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length
+    t.diagnostic(`${succeeded} of ${buyers} simultaneous buyers succeeded`)
+
+    assert.equal(succeeded, buyers)
+    assert.equal(await soldOf('open'), buyers * 2)
+  })
+
   test('the per-person limit ignores email case', async () => {
     await callCreate(order([{ id: 'open', quantity: 4 }]), as('Case@Example.com'))
     await assert.rejects(
@@ -230,7 +273,7 @@ describe('releaseOrderStock', () => {
     await callRelease(snap, { params: { orderId: id }, eventId: 'e1' })
     await callRelease(snap, { params: { orderId: id }, eventId: 'e2' }) // duplicate delivery
 
-    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 0)
+    assert.equal(await soldOf('open'), 0)
 
     // the buyer can buy the full allowance again
     await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 4 }]), as('a@example.com')))
@@ -243,5 +286,14 @@ describe('releaseOrderStock', () => {
     const snap = await db.doc('orders/CKS202601010001').get()
     await callRelease(snap, { params: { orderId: 'CKS202601010001' }, eventId: 'e3' })
     assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
+  })
+
+  test('orders counted before the shards are refunded to the legacy counter (PARTY-28)', async () => {
+    await db.doc('ticketSales/open').set({ sold: 2 })
+    const legacy = { items: [{ id: 'open', quantity: 2 }], customerEmail: 'old@example.com', stockCounted: true }
+    await db.doc('orders/CKS202601010002').set(legacy)
+    const snap = await db.doc('orders/CKS202601010002').get()
+    await callRelease(snap, { params: { orderId: 'CKS202601010002' }, eventId: 'e4' })
+    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 0)
   })
 })

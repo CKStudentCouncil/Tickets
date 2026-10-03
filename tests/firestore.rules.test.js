@@ -144,6 +144,8 @@ describe('orders (PARTY-2)', () => {
   test('function-only counters are not readable or writable by anyone', async () => {
     await assertFails(getDoc(doc(as(staff.superAdmin), 'ticketSales', 'campus_ticket')))
     await assertFails(setDoc(doc(as(staff.superAdmin), 'ticketSales', 'campus_ticket'), { sold: 0 }))
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'ticketSales', 'campus_ticket', 'shards', '0')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'ticketSales', 'campus_ticket', 'shards', '0'), { sold: 0 }))
     await assertFails(setDoc(doc(anon(), 'buyerPurchases', 'x'), { quantities: {} }))
   })
 })
