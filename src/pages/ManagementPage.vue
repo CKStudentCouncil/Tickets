@@ -25,6 +25,7 @@
     class="admin-page"
   >
     <div class="page-heading">
+      <br />
       <p class="eyebrow">後台管理</p>
       <h1>票種管理</h1>
     </div>
