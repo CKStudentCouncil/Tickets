@@ -5,8 +5,10 @@ import {
   ORDER_ID_PATTERN,
   SHARD_COUNT,
   allocateStock,
+  getAvailable,
+  getCurrentCaps,
+  planShardCaps,
   planShards,
-  shardCapacity,
   generateOrderId,
   getStockLimit,
   isValidRequestId,
@@ -199,79 +201,177 @@ describe('checkTicketType', () => {
 })
 
 describe('stock shards (PARTY-28)', () => {
-  const allShards = (sold = 0) => Object.fromEntries(Array.from({ length: SHARD_COUNT }, (_, k) => [k, sold]))
-  const total = (allocation) => Object.values(allocation).reduce((sum, n) => sum + n, 0)
+  const each = (sold = 0) => Array(SHARD_COUNT).fill(sold)
+  const sum = (values) => values.reduce((a, b) => a + b, 0)
+  const total = (allocation) => sum(Object.values(allocation))
 
-  test('shard capacities add up to the stock, the remainder going to the first shards', () => {
+  // deterministic stand-in for randomInt
+  function seeded(seed) {
+    return (n) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      return seed % n
+    }
+  }
+
+  // createOrder's stock steps on one type, one order at a time: caps are
+  // planned again whenever the stored ones do not match the stock (as
+  // reserveStock and planStockShards do), unlimited sales drop them
+  function sale(random) {
+    const sold = each()
+    let stored = null
+    return {
+      sold,
+      setStock(stock) {
+        this.stock = stock
+      },
+      buy(quantity) {
+        if (this.stock === null) {
+          sold[random(SHARD_COUNT)] += quantity
+          stored = null
+          return true
+        }
+        const available = getAvailable(this.stock, 0)
+        let caps = getCurrentCaps(stored, available)
+        if (!caps) {
+          caps = planShardCaps(available, sold)
+          stored = { available, caps }
+        }
+        const shards = planShards({ caps, sold, quantity, random })
+        if (!shards) return false
+        const allocation = allocateStock({ caps, shards, sold: shards.map((k) => sold[k]), quantity })
+        Object.entries(allocation).forEach(([k, n]) => { sold[k] += n })
+        return true
+      },
+      sellOut() {
+        while (this.buy(1));
+        return sum(sold)
+      }
+    }
+  }
+
+  test('caps add up to the stock, spread evenly, the remainder going to the first shards', () => {
     for (const available of [0, 1, 5, 19, 20, 21, 100, 1234]) {
-      const caps = Array.from({ length: SHARD_COUNT }, (_, k) => shardCapacity(available, k))
-      assert.equal(caps.reduce((a, b) => a + b, 0), available)
+      const caps = planShardCaps(available, each())
+      assert.equal(sum(caps), available)
       assert.ok(Math.max(...caps) - Math.min(...caps) <= 1)
     }
-    assert.equal(shardCapacity(21, 0), 2)
-    assert.equal(shardCapacity(21, 1), 1)
+    assert.equal(planShardCaps(21, each())[0], 2)
+    assert.equal(planShardCaps(21, each())[1], 1)
   })
 
-  test('takes everything from the start shard when it has room', () => {
-    assert.deepEqual(allocateStock({ available: 100, shardSold: { 7: 0 }, quantity: 4, start: 7 }), { 7: 4 })
+  test('caps never go below what a shard sold and share out only what is left', () => {
+    const sold = [6, 0, 4, ...each(1).slice(3)] // 27 sold, unevenly
+    const caps = planShardCaps(60, sold)
+    assert.equal(sum(caps), 60)
+    caps.forEach((cap, k) => assert.ok(cap >= sold[k]))
+
+    // more sold than the stock now allows: nothing more to sell anywhere
+    assert.deepEqual(planShardCaps(20, sold), sold)
   })
 
-  test('returns null when only a full start shard was read', () => {
-    assert.equal(allocateStock({ available: 100, shardSold: { 7: 5 }, quantity: 1, start: 7 }), null)
+  test('stored caps are only used for the stock they were planned for', () => {
+    const caps = planShardCaps(100, each())
+    assert.equal(getCurrentCaps({ available: 100, caps }, 100), caps)
+    assert.equal(getCurrentCaps({ available: 100, caps }, 60), null)
+    assert.equal(getCurrentCaps({ available: 100, caps: caps.slice(1) }, 100), null)
+    assert.equal(getCurrentCaps(undefined, 100), null)
   })
 
-  test('spreads over the next shards, wrapping around, when the start one is short', () => {
-    const shardSold = { ...allShards(5), 19: 4, 0: 3 } // 100 tickets: 5 per shard
-    assert.deepEqual(allocateStock({ available: 100, shardSold, quantity: 3, start: 19 }), { 19: 1, 0: 2 })
+  test('the legacy counter takes its share off the stock', () => {
+    assert.equal(getAvailable(100, 98), 2)
+    assert.equal(getAvailable(100, 120), 0)
+    assert.equal(getAvailable(100, undefined), 100)
+  })
+
+  test('allocateStock takes from the locked shards in order, each up to its cap', () => {
+    const caps = planShardCaps(100, each()) // 5 per shard
+    assert.deepEqual(allocateStock({ caps, shards: [7], sold: [0], quantity: 4 }), { 7: 4 })
+    assert.deepEqual(allocateStock({ caps, shards: [19, 0], sold: [4, 3], quantity: 3 }), { 19: 1, 0: 2 })
+    assert.equal(allocateStock({ caps, shards: [7], sold: [5], quantity: 1 }), null)
+    assert.equal(allocateStock({ caps: planShardCaps(0, each()), shards: [0], sold: [0], quantity: 1 }), null)
   })
 
   test('sells exactly the stock and not one more', () => {
-    const shardSold = allShards(5)
-    shardSold[3] = 3 // 98 of 100 sold
-    assert.deepEqual(allocateStock({ available: 100, shardSold, quantity: 2, start: 10 }), { 3: 2 })
-    assert.equal(allocateStock({ available: 100, shardSold, quantity: 3, start: 10 }), null)
+    const sold = each(5)
+    sold[3] = 3 // 98 of 100 sold
+    const caps = planShardCaps(100, each())
+    const all = sold.map((_, k) => k)
+    assert.deepEqual(allocateStock({ caps, shards: all, sold, quantity: 2 }), { 3: 2 })
+    assert.equal(allocateStock({ caps, shards: all, sold, quantity: 3 }), null)
   })
 
   test('small stock: an order larger than one shard still fits across shards', () => {
-    const allocation = allocateStock({ available: 5, shardSold: allShards(), quantity: 4, start: 18 })
-    assert.equal(total(allocation), 4)
-    assert.equal(allocateStock({ available: 5, shardSold: allShards(), quantity: 6, start: 0 }), null)
-  })
-
-  test('nothing to sell when the stock is 0 (PARTY-18) or used up by legacy orders', () => {
-    assert.equal(allocateStock({ available: 0, shardSold: allShards(), quantity: 1, start: 0 }), null)
-  })
-
-  test('a lowered stock never goes below what was already sold', () => {
-    // shards sold 5 each (100 tickets), then the stock is lowered to 60
-    assert.equal(allocateStock({ available: 60, shardSold: allShards(5), quantity: 1, start: 0 }), null)
+    const caps = planShardCaps(5, each())
+    const shards = planShards({ caps, sold: each(), quantity: 4, random: () => 0 })
+    assert.equal(total(allocateStock({ caps, shards, sold: shards.map(() => 0), quantity: 4 })), 4)
+    assert.equal(planShards({ caps, sold: each(), quantity: 6, random: () => 0 }), null)
   })
 
   test('planShards: sold out per the unlocked look means no shard is locked', () => {
+    const caps = planShardCaps(100, each())
     const first = () => 0
-    assert.equal(planShards({ available: 100, peekSold: allShards(5), quantity: 1, random: first }), null)
-    assert.equal(planShards({ available: 0, peekSold: {}, quantity: 1, random: first }), null)
-    const twoLeft = { ...allShards(5), 4: 4, 9: 4 }
-    assert.equal(planShards({ available: 100, peekSold: twoLeft, quantity: 3, random: first }), null)
+    assert.equal(planShards({ caps, sold: each(5), quantity: 1, random: first }), null)
+    assert.equal(planShards({ caps: planShardCaps(0, each()), sold: each(), quantity: 1, random: first }), null)
+    const twoLeft = Object.assign(each(5), { 4: 4, 9: 4 })
+    assert.equal(planShards({ caps, sold: twoLeft, quantity: 3, random: first }), null)
   })
 
   test('planShards: locks one random shard that can hold the whole order', () => {
-    const peekSold = { ...allShards(5), 4: 4, 9: 2, 15: 0 } // 100 tickets: room in 4 (1), 9 (3), 15 (5)
-    assert.deepEqual(planShards({ available: 100, peekSold, quantity: 3, random: () => 0 }), [9])
-    assert.deepEqual(planShards({ available: 100, peekSold, quantity: 3, random: () => 1 }), [15])
+    const caps = planShardCaps(100, each())
+    const sold = Object.assign(each(5), { 4: 4, 9: 2, 15: 0 }) // room in 4 (1), 9 (3), 15 (5)
+    assert.deepEqual(planShards({ caps, sold, quantity: 3, random: () => 0 }), [9])
+    assert.deepEqual(planShards({ caps, sold, quantity: 3, random: () => 1 }), [15])
   })
 
   test('planShards: when no shard can hold the order, locks just enough shards with room', () => {
-    const peekSold = { ...allShards(5), 4: 4, 9: 4, 12: 3 } // room: 4 (1), 9 (1), 12 (2)
-    const shards = planShards({ available: 100, peekSold, quantity: 3, random: (n) => n - 1 })
+    const caps = planShardCaps(100, each())
+    const sold = Object.assign(each(5), { 4: 4, 9: 4, 12: 3 }) // room: 4 (1), 9 (1), 12 (2)
+    const shards = planShards({ caps, sold, quantity: 3, random: (n) => n - 1 })
     const room = { 4: 1, 9: 1, 12: 2 }
     assert.ok(shards.every((k) => k in room))
-    assert.ok(shards.reduce((sum, k) => sum + room[k], 0) >= 3)
+    assert.ok(sum(shards.map((k) => room[k])) >= 3)
     assert.equal(new Set(shards).size, shards.length)
   })
 
-  test('planShards: unread (new) shards count as empty', () => {
-    assert.deepEqual(planShards({ available: 40, peekSold: {}, quantity: 2, random: () => 3 }), [3])
+  test('planShards: spread locks every shard with room', () => {
+    const caps = planShardCaps(100, each())
+    const sold = Object.assign(each(5), { 4: 4, 9: 2, 15: 0 })
+    assert.deepEqual(planShards({ caps, sold, quantity: 1, random: () => 0, spread: true }), [4, 9, 15])
+  })
+
+  test('lowering the stock mid-sale never oversells (review of PR #9)', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const ticketSale = sale(seeded(seed))
+      ticketSale.setStock(100)
+      for (let i = 0; i < 40; i++) ticketSale.buy(1)
+      ticketSale.setStock(60)
+      assert.equal(ticketSale.sellOut(), 60)
+
+      // lowered to what was sold: nothing more sells
+      ticketSale.setStock(55)
+      assert.equal(ticketSale.sellOut(), 60)
+    }
+  })
+
+  test('limiting a type that sold unlimited never oversells (review of PR #9)', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const ticketSale = sale(seeded(seed))
+      ticketSale.setStock(null)
+      for (let i = 0; i < 50; i++) ticketSale.buy(1)
+      assert.ok(Math.max(...ticketSale.sold) > 5, 'unlimited sales land unevenly')
+      ticketSale.setStock(100)
+      assert.equal(ticketSale.sellOut(), 100)
+    }
+  })
+
+  test('limited, then unlimited, then the same stock again still re-plans', () => {
+    const ticketSale = sale(seeded(7))
+    ticketSale.setStock(100)
+    for (let i = 0; i < 10; i++) ticketSale.buy(1)
+    ticketSale.setStock(null)
+    for (let i = 0; i < 30; i++) ticketSale.buy(1)
+    ticketSale.setStock(100)
+    assert.equal(ticketSale.sellOut(), 100)
   })
 })
 

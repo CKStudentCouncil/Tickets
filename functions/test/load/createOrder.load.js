@@ -1,42 +1,14 @@
 // Load test for createOrder against the Firestore emulator (PARTY-28):
 // `yarn test:load` (needs Java). Many buyers check out at the same moment;
-// prints successes, latency and error codes per scenario. Not run in CI.
-// Each scenario gets a fresh emulator (`node createOrder.load.js <index>`):
-// after a large run the emulator stalls later scenarios in the same process.
+// prints successes, latency and error codes for one scenario
+// (`node createOrder.load.js <index>`; run.js gives each its own emulator).
 // The emulator locks more conservatively than production, so compare runs
 // with each other rather than reading the numbers as production capacity.
-import functionsTest from 'firebase-functions-test'
+import { HOUR, fft, functions, db, iso, soldOf } from '../emulator/setup.js'
+import { SCENARIOS } from './scenarios.js'
 
-const PROJECT_ID = 'demo-cksc-ticket'
-process.env.GCLOUD_PROJECT = PROJECT_ID
-process.env.FIREBASE_CONFIG = JSON.stringify({
-  projectId: PROJECT_ID,
-  storageBucket: `${PROJECT_ID}.appspot.com`
-})
-
-if (!process.env.FIRESTORE_EMULATOR_HOST) {
-  console.error('run through `yarn test:load`')
-  process.exit(1)
-}
-
-const fft = functionsTest({ projectId: PROJECT_ID })
-const { createOrder } = await import('../../index.js')
-const { db } = await import('../../lib/common.js')
-const callCreate = fft.wrap(createOrder)
-
-const HOUR = 60 * 60 * 1000
-const iso = (offsetMs) => new Date(Date.now() + offsetMs).toISOString()
-
-const SCENARIOS = [
-  { label: '300 buyers, plenty of stock', buyers: 300, stock: 10000 },
-  { label: '300 buyers, 100 tickets', buyers: 300, stock: 100 },
-  { label: '1000 buyers, plenty of stock', buyers: 1000, stock: 10000 }
-]
-
-async function soldOf(ticketTypeId) {
-  const shards = await db.collection(`ticketSales/${ticketTypeId}/shards`).get()
-  return shards.docs.reduce((sum, d) => sum + (d.data().sold || 0), 0)
-}
+const callCreate = fft.wrap(functions.createOrder)
+const callPlan = fft.wrap(functions.planStockShards)
 
 const percentile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]
 
@@ -49,6 +21,8 @@ async function run({ label, buyers, stock }) {
       salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: stock, purchaseLimitPerPerson: 4
     }]
   })
+  // as the trigger does in production when the ticket types are saved
+  await callPlan(fft.makeChange(null, await db.doc('settings/ticketTypes').get()), {})
 
   const latencies = []
   const startedAt = Date.now()

@@ -136,50 +136,67 @@ export function getPurchaseLimit(ticketType) {
 
 // Each ticket type's sales are counted in SHARD_COUNT documents
 // (ticketSales/{typeId}/shards/{k}) so simultaneous checkouts do not all
-// lock one counter (PARTY-28). Every shard may sell an equal share of the
-// stock. Never change this during a sale: the shares would no longer match
-// what each shard has already sold.
+// lock one counter (PARTY-28). Raising it is safe; never lower it once
+// tickets have been sold, even between sales: the dropped shards keep their
+// sales but are no longer read, so those tickets would be sold again.
 export const SHARD_COUNT = 20
 
-// How many of `available` tickets shard `k` may sell
-export function shardCapacity(available, k) {
-  const base = Math.floor(available / SHARD_COUNT)
-  return base + (k < available % SHARD_COUNT ? 1 : 0)
+// What a type's shards may sell: the stock minus the legacy counter
+export function getAvailable(stock, legacySold) {
+  return Math.max(0, stock - (Number(legacySold) || 0))
 }
 
-// Takes `quantity` tickets from shard `start`, moving on to the next shards
-// when it is full. `shardSold` holds { [k]: sold } for the shards read so far;
-// unread shards are skipped. Returns { [k]: n }, or null when the read shards
-// cannot hold them.
-export function allocateStock({ available, shardSold, quantity, start }) {
+// Shares `available` tickets out as one cap per shard, given what each shard
+// has sold (`sold`, SHARD_COUNT numbers). No cap is below its shard's sales
+// and the caps add up to `available` (or to the sales, when more were sold
+// than is available now). So as long as no shard sells past its cap, the type
+// cannot oversell, whatever the shards sold before: they may be uneven after
+// the stock was lowered or the type was unlimited. The room left is spread
+// evenly, the remainder going to the first shards.
+export function planShardCaps(available, sold) {
+  const room = Math.max(0, available - sold.reduce((sum, n) => sum + n, 0))
+  const base = Math.floor(room / SHARD_COUNT)
+  return sold.map((n, k) => n + base + (k < room % SHARD_COUNT ? 1 : 0))
+}
+
+// The caps stored in ticketSales/{typeId}.shardCaps ({ available, caps }), or
+// null when they were worked out for another stock and must be planned again.
+export function getCurrentCaps(shardCaps, available) {
+  const caps = shardCaps?.available === available ? shardCaps.caps : null
+  return Array.isArray(caps) && caps.length === SHARD_COUNT ? caps : null
+}
+
+// Takes `quantity` tickets from `shards` in order, each up to its cap.
+// `sold[i]` is what shards[i] has sold. Returns { [k]: n }, or null when
+// these shards cannot hold them.
+export function allocateStock({ caps, shards, sold, quantity }) {
   const allocation = {}
   let remaining = quantity
 
-  for (let i = 0; i < SHARD_COUNT && remaining > 0; i++) {
-    const k = (start + i) % SHARD_COUNT
-    if (!Object.hasOwn(shardSold, k)) continue
-
-    const take = Math.min(remaining, Math.max(0, shardCapacity(available, k) - shardSold[k]))
+  shards.forEach((k, i) => {
+    const take = Math.min(remaining, Math.max(0, caps[k] - sold[i]))
     if (take > 0) {
       allocation[k] = take
       remaining -= take
     }
-  }
+  })
 
   return remaining === 0 ? allocation : null
 }
 
-// Chooses the shards to lock from an unlocked look at all of them (`peekSold`,
+// Chooses the shards to lock from an unlocked look at all of them (`sold`,
 // read before the transaction). Returns null when they cannot hold `quantity`
-// (sold out), otherwise the shards to lock: one random shard that can hold the
-// whole order or, when none can, random shards with room until they add up.
+// (sold out), otherwise one random shard that can hold the whole order or,
+// when none can, random shards with room until they add up. With `spread`
+// (after losing races for the same shards) every shard with room is locked.
 // Shards only fill up (except when an order is deleted), so a shard seen full
 // stays full.
-export function planShards({ available, peekSold, quantity, random }) {
-  const free = (k) => shardCapacity(available, k) - (peekSold[k] || 0)
+export function planShards({ caps, sold, quantity, random, spread = false }) {
+  const free = (k) => caps[k] - sold[k]
   const open = Array.from({ length: SHARD_COUNT }, (_, k) => k).filter((k) => free(k) > 0)
 
   if (open.reduce((sum, k) => sum + free(k), 0) < quantity) return null
+  if (spread) return open
 
   const whole = open.filter((k) => free(k) >= quantity)
   if (whole.length > 0) return [whole[random(whole.length)]]
@@ -199,10 +216,10 @@ export function planShards({ available, peekSold, quantity, random }) {
   return shards
 }
 
-// Throws when this buyer may not buy `quantity` tickets of this type now.
-// `email` is the verified account email; `alreadyBought` comes from the
-// counter read in the transaction. Stock is checked by allocateStock.
-export function checkTicketType(ticketType, quantity, { now, school, email, alreadyBought }) {
+// Throws when this type is not on sale now or not for this buyer. `email` is
+// the verified account email. Also checked before the transaction, so a
+// buyer is told this rather than that the type is sold out.
+export function checkSaleOpen(ticketType, { now, school, email }) {
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -227,6 +244,13 @@ export function checkTicketType(ticketType, quantity, { now, school, email, alre
       throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
     }
   }
+}
+
+// Throws when this buyer may not buy `quantity` tickets of this type now.
+// `alreadyBought` comes from the counter read in the transaction. Stock is
+// checked by allocateStock.
+export function checkTicketType(ticketType, quantity, { now, school, email, alreadyBought }) {
+  checkSaleOpen(ticketType, { now, school, email })
 
   const limit = getPurchaseLimit(ticketType)
 
