@@ -50,6 +50,8 @@ const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 class OrderIdTaken extends Error {}
 // The shards chosen from the unlocked look filled up before they were locked
 class ShardsTaken extends Error {}
+// Firestore gave up on a transaction after repeated lock contention
+const isContention = (error) => error?.code === 10 || error?.code === 'aborted'
 
 const ALL_SHARDS = Array.from({ length: SHARD_COUNT }, (_, k) => k)
 const settingsRef = db.doc('settings/ticketTypes')
@@ -212,7 +214,7 @@ async function enforceAccountLimit(account) {
 // clearly instead of the generic "internal" error.
 function toHttpsError(error) {
   if (error instanceof HttpsError) return error
-  if (error instanceof ShardsTaken || error?.code === 10 || error?.code === 'aborted') {
+  if (error instanceof ShardsTaken || isContention(error)) {
     return new HttpsError('aborted', '目前購票人數眾多，請稍後再試一次')
   }
   console.error('[createOrder] unexpected error:', error)
@@ -348,6 +350,9 @@ export const createOrder = functions
           }, { maxAttempts: 10 })
         } catch (error) {
           if (error instanceof OrderIdTaken && idAttempt++ < ORDER_ID_ATTEMPTS) continue
+          // the last tickets are fought over until Firestore gives up; if they
+          // are gone by then, say sold out rather than "try again"
+          if (isContention(error)) await choose(false)
           if (!(error instanceof ShardsTaken) || stockAttempt++ >= STOCK_ATTEMPTS) throw error
           // others took those shards: back off a little, then look again
           await sleep(randomInt(20, 100) * stockAttempt)
