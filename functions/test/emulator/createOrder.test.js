@@ -1,28 +1,13 @@
-// Runs createOrder / releaseOrderStock against the Firestore emulator:
-// `yarn test:emulator` (needs Java). The emulator project is a demo-
-// project, so nothing ever reaches production.
+// Runs createOrder / releaseOrderStock / planStockShards against the
+// Firestore emulator: `yarn test:emulator` (needs Java).
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import functionsTest from 'firebase-functions-test'
 
-const PROJECT_ID = 'demo-cksc-ticket'
-process.env.GCLOUD_PROJECT = PROJECT_ID
-process.env.FIREBASE_CONFIG = JSON.stringify({
-  projectId: PROJECT_ID,
-  storageBucket: `${PROJECT_ID}.appspot.com`
-})
+import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf } from './setup.js'
 
-assert.ok(process.env.FIRESTORE_EMULATOR_HOST, 'run through `yarn test:emulator`')
-
-const fft = functionsTest({ projectId: PROJECT_ID })
-const { createOrder, releaseOrderStock } = await import('../../index.js')
-const { db } = await import('../../lib/common.js')
-
-const callCreate = fft.wrap(createOrder)
-const callRelease = fft.wrap(releaseOrderStock)
-
-const HOUR = 60 * 60 * 1000
-const iso = (offsetMs) => new Date(Date.now() + offsetMs).toISOString()
+const callCreate = fft.wrap(functions.createOrder)
+const callRelease = fft.wrap(functions.releaseOrderStock)
+const callPlan = fft.wrap(functions.planStockShards)
 
 const TICKET_TYPES = [
   { id: 'open', name: '一階票', price: 900, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 100, purchaseLimitPerPerson: 4 },
@@ -62,6 +47,23 @@ async function countOrdersOf(ticketTypeId) {
     .flatMap((d) => d.data().items)
     .filter((item) => item.id === ticketTypeId)
     .reduce((sum, item) => sum + item.quantity, 0)
+}
+
+const setTypes = (changes) =>
+  db.doc('settings/ticketTypes').set({
+    types: TICKET_TYPES.map((type) => (changes[type.id] ? { ...type, ...changes[type.id] } : type))
+  })
+
+// buys one ticket at a time, one buyer each, until the type is sold out
+async function sellOut(ticketTypeId, prefix) {
+  for (let i = 0; ; i++) {
+    try {
+      await callCreate(order([{ id: ticketTypeId, quantity: 1 }]), as(`${prefix}${i}@example.com`))
+    } catch (error) {
+      assert.equal(error.code, 'resource-exhausted')
+      return
+    }
+  }
 }
 
 after(() => fft.cleanup())
@@ -124,7 +126,7 @@ describe('createOrder', () => {
     assert.equal(first.status, 201)
     assert.equal(second.status, 200)
     assert.equal(second.id, first.id)
-    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
+    assert.equal(await soldOf('open'), 2)
 
     // another account cannot claim that order with the same requestId
     await assert.rejects(callCreate(payload, as('other@example.com')), { code: 'invalid-argument' })
@@ -188,7 +190,7 @@ describe('createOrder', () => {
       )
     )
     const succeeded = results.filter((r) => r.status === 'fulfilled').length
-    const sold = (await db.doc('ticketSales/small').get()).data()?.sold || 0
+    const sold = await soldOf('small')
     t.diagnostic(`${succeeded} of ${attempts} concurrent orders succeeded for 5 tickets`)
 
     const rejectionCodes = new Set(results.filter((r) => r.status === 'rejected').map((r) => r.reason?.code))
@@ -212,6 +214,88 @@ describe('createOrder', () => {
     assert.equal(await countOrdersOf('open'), succeeded)
   })
 
+  test('stock is counted in shards and recorded on the order (PARTY-28)', async () => {
+    const { id } = await callCreate(order([{ id: 'open', quantity: 3 }]), as('shard@example.com'))
+    const { stockShards } = (await db.doc(`orders/${id}`).get()).data()
+    const counted = Object.values(stockShards.open).reduce((a, b) => a + b, 0)
+
+    assert.equal(counted, 3)
+    assert.equal(await soldOf('open'), 3)
+    const legacy = (await db.doc('ticketSales/open').get()).data()
+    assert.equal(legacy.sold, undefined, 'the legacy counter is not written')
+    assert.equal(legacy.shardCaps.available, 100)
+  })
+
+  test('lowering the stock mid-sale never oversells (PARTY-28)', async () => {
+    for (let i = 0; i < 40; i++) {
+      await callCreate(order([{ id: 'open', quantity: 1 }]), as(`early${i}@example.com`))
+    }
+    await setTypes({ open: { totalTicketQuantity: 60 } })
+    await sellOut('open', 'late')
+    assert.equal(await soldOf('open'), 60)
+
+    // lowered to what was sold, nothing more sells
+    await setTypes({ open: { totalTicketQuantity: 50 } })
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('after@example.com')), { code: 'resource-exhausted' })
+    assert.equal(await soldOf('open'), 60)
+  })
+
+  test('limiting a type that sold unlimited never oversells (PARTY-28)', async () => {
+    await setTypes({ open: { unlimitedStock: true, purchaseLimitPerPerson: null } })
+    for (let i = 0; i < 30; i++) {
+      await callCreate(order([{ id: 'open', quantity: 1 }]), as(`free${i}@example.com`))
+    }
+    await setTypes({ open: { totalTicketQuantity: 50 } })
+    await sellOut('open', 'capped')
+    assert.equal(await soldOf('open'), 50)
+  })
+
+  test('saving the ticket types plans the shard caps ahead of the first order (PARTY-28)', async () => {
+    await db.doc('ticketSales/open').set({ sold: 10 })
+    await callPlan(fft.makeChange(null, await db.doc('settings/ticketTypes').get()), {})
+
+    const { shardCaps } = (await db.doc('ticketSales/open').get()).data()
+    assert.equal(shardCaps.available, 90)
+    assert.equal(shardCaps.caps.reduce((a, b) => a + b, 0), 90)
+    assert.equal((await db.doc('ticketSales/campus').get()).exists, false, 'unlimited types get no caps')
+  })
+
+  test('a retried checkout returns its order even once the type sold out (PARTY-28)', async () => {
+    await setTypes({ open: { totalTicketQuantity: 2 } })
+    const payload = { ...order([{ id: 'open', quantity: 2 }]), requestId: 'req-soldout-0123456789' }
+    const first = await callCreate(payload, as('retry@example.com'))
+    const second = await callCreate(payload, as('retry@example.com'))
+    assert.equal(second.id, first.id)
+  })
+
+  test('tickets counted by the legacy counter are not sold again (PARTY-28)', async () => {
+    await db.doc('ticketSales/open').set({ sold: 98 }) // 98 of 100 sold before the shards
+    await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 2 }]), as('last@example.com')))
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('late@example.com')), { code: 'resource-exhausted' })
+    assert.equal(await soldOf('open'), 100)
+  })
+
+  test('many simultaneous buyers all get tickets while stock lasts (PARTY-28)', async (t) => {
+    await db.doc('settings/ticketTypes').set({
+      types: TICKET_TYPES.map((type) => (type.id === 'open' ? { ...type, totalTicketQuantity: 1000 } : type))
+    })
+    const buyers = 60
+    const results = await Promise.allSettled(
+      Array.from({ length: buyers }, (_, i) =>
+        callCreate(order([{ id: 'open', quantity: 2 }]), as(`crowd${i}@example.com`))
+      )
+    )
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length
+    const rejectionCodes = new Set(results.filter((r) => r.status === 'rejected').map((r) => r.reason?.code))
+    t.diagnostic(`${succeeded} of ${buyers} simultaneous buyers succeeded`)
+
+    // the emulator locks more conservatively than production, so a few may
+    // be asked to try again; nobody is told it is sold out
+    assert.ok(succeeded > 0)
+    assert.deepEqual([...rejectionCodes].filter((code) => code !== 'aborted'), [])
+    assert.equal(await soldOf('open'), succeeded * 2)
+  })
+
   test('the per-person limit ignores email case', async () => {
     await callCreate(order([{ id: 'open', quantity: 4 }]), as('Case@Example.com'))
     await assert.rejects(
@@ -230,7 +314,7 @@ describe('releaseOrderStock', () => {
     await callRelease(snap, { params: { orderId: id }, eventId: 'e1' })
     await callRelease(snap, { params: { orderId: id }, eventId: 'e2' }) // duplicate delivery
 
-    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 0)
+    assert.equal(await soldOf('open'), 0)
 
     // the buyer can buy the full allowance again
     await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 4 }]), as('a@example.com')))
@@ -243,5 +327,14 @@ describe('releaseOrderStock', () => {
     const snap = await db.doc('orders/CKS202601010001').get()
     await callRelease(snap, { params: { orderId: 'CKS202601010001' }, eventId: 'e3' })
     assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
+  })
+
+  test('orders counted before the shards are refunded to the legacy counter (PARTY-28)', async () => {
+    await db.doc('ticketSales/open').set({ sold: 2 })
+    const legacy = { items: [{ id: 'open', quantity: 2 }], customerEmail: 'old@example.com', stockCounted: true }
+    await db.doc('orders/CKS202601010002').set(legacy)
+    const snap = await db.doc('orders/CKS202601010002').get()
+    await callRelease(snap, { params: { orderId: 'CKS202601010002' }, eventId: 'e4' })
+    assert.equal((await db.doc('ticketSales/open').get()).data().sold, 0)
   })
 })
