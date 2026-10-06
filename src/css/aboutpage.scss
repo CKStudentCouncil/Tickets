@@ -6,13 +6,25 @@
   --line: rgba(242, 240, 233, 0.14);
   --line-soft: rgba(242, 240, 233, 0.08);
 
-  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  width: 100%;
   background: var(--void);
-  padding: 140px 24px 110px;
+  padding: calc(140px + env(safe-area-inset-top, 0px))
+    max(20px, env(safe-area-inset-right, 0px))
+    calc(110px + env(safe-area-inset-bottom, 0px))
+    max(20px, env(safe-area-inset-left, 0px));
   font-family: 'Manrope', 'Noto Sans TC', sans-serif;
   color: var(--off-white);
 
   a, button { color: inherit; }
+}
+
+/* Keep the document canvas dark when the page is pulled past the footer. */
+:global(html),
+:global(body),
+:global(#q-app) {
+  background: #050608;
 }
 
 .content-card {
@@ -161,6 +173,9 @@ h2 {
 .secondary-button:hover { border-color: var(--ember); }
 
 @media (max-width: 640px) {
-  .static-page { padding: 120px 20px 90px; }
+  .static-page {
+    padding-top: calc(120px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  }
   .actions { gap: 12px; }
 }
