@@ -30,7 +30,7 @@
         <ellipse cx="1220" cy="140" rx="30" ry="9" fill="#301c0e" opacity="0.65" />
       </svg>
 
-      <svg class="rover-astronaut" viewBox="0 0 160 120" fill="none" aria-hidden="true">
+      <!--<svg class="rover-astronaut" viewBox="0 0 160 120" fill="none" aria-hidden="true">
         <g opacity="0.9">
           <circle cx="38" cy="34" r="12" fill="#0a0c10" stroke="#3a4048" stroke-width="1.2" />
           <path d="M38 46 L38 68 M38 52 L24 60 M38 52 L52 60 M38 68 L28 84 M38 68 L48 84" stroke="#3a4048" stroke-width="2.4" stroke-linecap="round" />
@@ -43,7 +43,7 @@
           <rect x="14" y="-2" width="3" height="14" fill="#3a4048" />
           <rect x="4" y="-6" width="20" height="6" rx="1" fill="#12151a" stroke="#3a4048" stroke-width="1" />
         </g>
-      </svg>
+      </svg>-->
 
       <div class="hero-content">
         <div class="title-lockup">
@@ -86,13 +86,14 @@
         >
           <div class="product-image">
             <img
-              :src="getTicketImage(ticketType)"
+              src="../../public/poster.jpg"
               :alt="ticketType.name"
               loading="lazy"
               :class="{ 'is-muted-img': statusOf(ticketType).state !== 'selling' }"
               @error="handleImageError"
+              style="width: 100%; height: auto; object-fit: cover; border-radius: 8px;"
             >
-            <span class="status-chip" :class="`status-${statusOf(ticketType).className}`">
+            <span class="status-chip" :class="`status-${statusOf(ticketType).className}`" style="margin-top: 2.5ch">
               <span class="status-dot" />
               <span>{{ statusOf(ticketType).label }}</span>
             </span>
@@ -164,11 +165,6 @@ async function loadTicketTypes() {
   } finally {
     loadingTicketTypes.value = false
   }
-}
-
-// Optional artwork in public/images/; hidden when the file does not exist
-function getTicketImage(ticketType) {
-  return `/images/ticket-${ticketType.id}.png`
 }
 
 function handleImageError(event) {

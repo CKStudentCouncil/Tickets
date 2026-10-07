@@ -1,8 +1,12 @@
 <template>
   <div class="product-page">
-    <router-link to="/" class="back-button" aria-label="回到票種列表">
-      <q-icon name="arrow_back" size="18px" />
-    </router-link>
+    <router-link 
+      to="/"
+      class="back-button"
+      aria-label="回到票種列表"
+      style="margin-top: 4ch">
+        <q-icon name="arrow_back" size="18px" />
+    </router-link><br />
 
     <div v-if="loading" class="ticket-state">
       <p><span class="loading-dot" />載入中…</p>
@@ -23,9 +27,12 @@
     </div>
 
     <div v-else class="product-detail">
-      <section class="purchase-card">
+      <section class="purchase-card" style="min-width: 100%;">
         <p class="eyebrow">CK PARTY NIGHT</p>
+        <div style="margin-bottom: 2ch;"></div>
         <h1>{{ ticketType.name }} {{ ticketType.price ? ` - NT$ ${ticketType.price.toLocaleString()}` : '' }}</h1>
+        <div style="margin-bottom: 2ch;"></div>
+        
 
         <p
           v-if="purchaseLimit"
