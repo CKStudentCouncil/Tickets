@@ -247,6 +247,7 @@ This project is maintained by the **Taipei Municipal Chien Kuo High School Stude
 
 - 80-1 Student Council Executive Department CIO
 - 80-2 Student Council Executive Department IT Associate
+- 81-1 Student Council Executive Department IT Associate
 
 
 ### Dong Chen
@@ -256,3 +257,4 @@ This project is maintained by the **Taipei Municipal Chien Kuo High School Stude
 
 **CK Party Night Tickets**  
 Taipei Municipal Chien Kuo High School Student Council
+© 2026 CK Tickets. All rights reserved.
