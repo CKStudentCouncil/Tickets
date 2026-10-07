@@ -32,7 +32,7 @@
         <div style="margin-bottom: 2ch;"></div>
         <h1>{{ ticketType.name }} {{ ticketType.price ? ` - NT$ ${ticketType.price.toLocaleString()}` : '' }}</h1>
         <div style="margin-bottom: 2ch;"></div>
-        
+
 
         <p
           v-if="purchaseLimit"
@@ -128,7 +128,7 @@
             </label>
 
             <p class="account-row">
-              確認信寄送至
+              確認信將寄送至：
               <span class="account-email">{{ auth.email }}</span>
             </p>
           </div>

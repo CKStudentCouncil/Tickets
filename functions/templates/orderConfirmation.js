@@ -193,12 +193,12 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
       </tr>
       <tr>
         <td style="padding:32px 0 0;">
-          ${card(head + qr + buyer + tickets + cardNote('入場時須持紙本票券方可入場，敬請妥善保存。') + cardFooter())}
+          ${card(head + qr + buyer + tickets + cardNote('入場時須持紙本票券方可入場，敬請妥善保存') + cardFooter())}
         </td>
       </tr>
       <tr>
         <td style="padding:40px 0 0;">
-          ${actions(buttons, '為了讓我們持續改進購票體驗，誠摯邀請您填寫意見反饋表單。')}
+          ${actions(buttons, '為了讓我們持續改進購票體驗，誠摯邀請您填寫意見表單')}
         </td>
       </tr>
     </table>`;

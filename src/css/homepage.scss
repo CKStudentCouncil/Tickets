@@ -153,12 +153,13 @@
   color: var(--lunar);
   white-space: nowrap;
   text-shadow: 0 3px 20px rgba(0, 0, 0, 0.45);
+  margin-bottom: 0.5ch;
 }
 .title-lockup-brand {
   margin: 0;
   font-family: 'Manrope', sans-serif;
   font-size: clamp(2rem, 6vw, 4.5rem);
-  font-weight: 400;
+  font-weight: 450;
   letter-spacing: 0.5em;
   text-indent: 0.5em;
   line-height: 1;
@@ -171,6 +172,7 @@
   font-size: 13px;
   color: rgba(242, 240, 233, 0.62);
   letter-spacing: 0.05em;
+  margin-bottom: 0.5ch;
 }
 .primary-link {
   display: inline-flex;
