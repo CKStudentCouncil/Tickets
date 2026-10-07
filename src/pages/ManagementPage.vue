@@ -358,7 +358,7 @@
           v-if="!ticketTypeForm.length"
           class="empty"
         >
-          尚無票種，請點選「新增票種」以建立。
+          尚無票種，請點選「新增票種」以建立
         </p>
       </template>
     </div>

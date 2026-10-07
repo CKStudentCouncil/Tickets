@@ -45,7 +45,7 @@
           </h1>
 
           <p class="page-description">
-            管理前台「社團與藝人介紹」頁面所顯示的演出單位與藝人資料。
+            管理前台「社團與藝人介紹」頁面所顯示的演出單位與藝人資料
           </p>
 
         </div>
@@ -161,7 +161,7 @@
         <p>
           尚未建立任何
           {{ activeTab === 'club' ? '社團' : '藝人' }}
-          介紹。
+          介紹
         </p>
 
         <button
@@ -282,7 +282,7 @@
           </h2>
 
           <p class="panel-copy">
-            此內容將依照設定的公開時間自動顯示於前台。
+            此內容將依照設定的公開時間自動顯示於前台
           </p>
 
         </div>
@@ -517,7 +517,7 @@
 
 
           <small class="field-hint">
-            建議使用橫式圖片，最大 7 MB。
+            建議使用橫式圖片，最大 7 MB
           </small>
 
         </div>
@@ -542,7 +542,7 @@
           />
 
           <small class="field-hint">
-            每一個換行都會在前台呈現為新的段落。
+            每一個換行都會在前台呈現為新的段落
           </small>
 
         </label>
@@ -708,7 +708,7 @@
               v-if="previewParagraphs.length === 0"
               class="preview-placeholder"
             >
-              介紹內容會顯示於此。
+              介紹內容會顯示於此
             </p>
 
           </div>

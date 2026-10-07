@@ -190,7 +190,7 @@
           </h2>
 
           <p class="panel-copy">
-            設定介紹內容及自動公開時間。
+            設定介紹內容及自動公開時間
           </p>
         </div>
 
@@ -255,7 +255,7 @@
           ></textarea>
 
           <small class="field-hint">
-            建議使用換行區分不同段落。
+            建議使用換行區分不同段落
           </small>
         </div>
 
@@ -277,6 +277,7 @@
 
                   <input
                     type="date"
+                    aria-label="公開日期"
                     :value="getPart(storyForm.publishAt, 'date')"
                     @input="
                       setPart(
@@ -291,6 +292,7 @@
 
                   <input
                     type="time"
+                    aria-label="公開時間"
                     :value="getPart(storyForm.publishAt, 'time')"
                     @input="
                       setPart(
@@ -365,7 +367,7 @@
             >
 
             <small class="field-hint">
-              數字越小越前面。
+              數字越小越前面
             </small>
           </div>
 
@@ -383,7 +385,7 @@
             <strong>啟用此介紹</strong>
 
             <small>
-              停用後，即使已經到公開時間，前台也不會顯示。
+              停用後，即使已經到公開時間，前台也不會顯示
             </small>
           </span>
 
@@ -604,7 +606,7 @@ function getStoryStatus(story) {
 /* ---------- formatting ---------- */
 
 function getPreviewText(content) {
-  return content ? excerpt(content) : '尚未輸入故事內容。'
+  return content ? excerpt(content) : '尚未輸入故事內容'
 }
 
 /* ---------- load ---------- */
@@ -776,7 +778,7 @@ async function saveStory() {
 async function deleteStory(story) {
   const confirmed =
     window.confirm(
-      `確定要刪除「${story.title || '未命名故事'}」嗎？\n\n此操作無法復原。`
+      `確定要刪除「${story.title || '未命名故事'}」嗎？\n\n此操作無法復原`
     )
 
   if (!confirmed) {

@@ -114,7 +114,6 @@
             </router-link>
 
             <template v-else>
-              <p class="nav-account">{{ auth.email }}</p>
 
               <button type="button" @click="handleSignOut">
                 登出

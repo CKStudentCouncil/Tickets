@@ -1,126 +1,117 @@
 <template>
   <div class="storefront">
-    <section class="hero">
-      <div class="starfield" aria-hidden="true" />
-
-      <!--<div class="hole-wrap" aria-hidden="true">
-        <div class="hole-halo" />
-        <div class="hole-ring" />
-        <div class="hole-grain" />
+    <section class="hero" aria-label="COSMOS 建中舞會">
+      <div class="hero-art" aria-hidden="true">
+        <img src="/homepageposter.png" alt="" width="1076" height="1522" fetchpriority="high" />
       </div>
-      <div class="light-spill" aria-hidden="true" />
-      <div class="dust" aria-hidden="true" />-->
-
-      <svg class="terrain" viewBox="0 0 1440 260" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <linearGradient id="terrainLit" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#05060a" />
-            <stop offset="55%" stop-color="#0a0a0d" />
-            <stop offset="82%" stop-color="#2a1a0e" />
-            <stop offset="100%" stop-color="#5c3618" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M0,180 L60,168 L140,176 L220,150 L300,168 L380,140 L470,162 L560,130 L650,158 L740,120 L830,150 L920,110 L1010,145 L1100,118 L1190,150 L1280,128 L1360,155 L1440,140 L1440,260 L0,260 Z"
-          fill="url(#terrainLit)"
-        />
-        <ellipse cx="180" cy="172" rx="22" ry="7" fill="#0a0c11" opacity="0.7" />
-        <ellipse cx="520" cy="150" rx="34" ry="9" fill="#0a0c11" opacity="0.6" />
-        <ellipse cx="900" cy="128" rx="26" ry="8" fill="#201408" opacity="0.6" />
-        <ellipse cx="1220" cy="140" rx="30" ry="9" fill="#301c0e" opacity="0.65" />
-      </svg>
-
-      <!--<svg class="rover-astronaut" viewBox="0 0 160 120" fill="none" aria-hidden="true">
-        <g opacity="0.9">
-          <circle cx="38" cy="34" r="12" fill="#0a0c10" stroke="#3a4048" stroke-width="1.2" />
-          <path d="M38 46 L38 68 M38 52 L24 60 M38 52 L52 60 M38 68 L28 84 M38 68 L48 84" stroke="#3a4048" stroke-width="2.4" stroke-linecap="round" />
-          <rect x="30" y="44" width="16" height="16" rx="3" fill="#12151a" stroke="#3a4048" stroke-width="1" />
-        </g>
-        <g opacity="0.85" transform="translate(70,58)">
-          <rect x="0" y="10" width="58" height="18" rx="3" fill="#0a0c10" stroke="#3a4048" stroke-width="1.2" />
-          <circle cx="10" cy="34" r="9" fill="#0a0c10" stroke="#3a4048" stroke-width="1.2" />
-          <circle cx="48" cy="34" r="9" fill="#0a0c10" stroke="#3a4048" stroke-width="1.2" />
-          <rect x="14" y="-2" width="3" height="14" fill="#3a4048" />
-          <rect x="4" y="-6" width="20" height="6" rx="1" fill="#12151a" stroke="#3a4048" stroke-width="1" />
-        </g>
-      </svg>-->
-
       <div class="hero-content">
-        <div class="title-lockup">
-          <p class="title-lockup-sub">2026 · CK PARTY NIGHT</p>
-          <h1 class="title-lockup-brand">COSMOS</h1>
+        <p class="hero-eyebrow" style="letter-spacing: 6px;">2026 · CK PARTY NIGHT</p><div style="margin-bottom: 2.5ch; " />
+        <h1 id="cosmos-title" class="hero-title" aria-label="COSMOS" style="margin-bottom: 0ch;">
+          <svg class="hero-wordmark" viewBox="124 1232 818 80" aria-hidden="true" focusable="false">
+            <defs>
+              <!-- Isolate the original cream lettering from the dark poster artwork. -->
+              <filter id="cosmos-lettering" color-interpolation-filters="sRGB">
+                <feColorMatrix type="matrix" values="
+                  1 0 0 0 0
+                  0 1 0 0 0
+                  0 0 1 0 0
+                  .2126 .7152 .0722 0 0
+                " />
+                <feComponentTransfer>
+                  <feFuncA type="linear" slope="8" intercept="-5.6" />
+                </feComponentTransfer>
+              </filter>
+            </defs>
+            <image href="/poster.jpg" width="1076" height="1522" filter="url(#cosmos-lettering)" />
+          </svg>
+        </h1>
+        <!--<p class="hero-tagline">穿越星海，在此相遇。</p>
+        <p class="hero-copy">讓音樂與光，成為我們共同的宇宙。</p>-->
+        <div class="hero-actions">
+          <a href="#collection" class="secondary-link" @click.prevent="scrollToCollection">
+            開始購票
+            <q-icon name="south_east" />
+          </a>
+          <router-link to="/performer" class="secondary-link">
+            演出陣容
+            <q-icon name="south_east" />
+          </router-link>
         </div>
-        <p class="hero-meta">{{ EVENT_DATE }} · {{ EVENT_VENUE }}</p>
-        <a href="#collection" class="primary-link" @click.prevent="scrollToCollection">
-          開始購票
-          <q-icon name="south_east" />
-        </a>
+      </div>
+      <div class="hero-details">
+        <dl class="event-details">
+          <div class="event-detail">
+            <dt>DATE <span>日期</span></dt>
+            <dd style="font-size: large; "><time :datetime="EVENT_DATE.replaceAll('/', '-')">{{ EVENT_DATE.replaceAll('/', '.') }}</time></dd>
+          </div>
+            <div class="event-detail" style="margin-left: -5ch; ">
+              <dt>LOCATION <span>地點</span></dt>
+              <dd>{{ EVENT_VENUE }}</dd>
+            </div>
+        </dl>
       </div>
     </section>
 
-    <section id="collection" ref="collectionSection" class="collection">
+    <section id="collection" ref="collectionSection" class="collection" aria-labelledby="tickets-title">
       <div class="section-heading">
-        <p class="eyebrow">Tickets</p>
-        <h2>購買舞會門票</h2>
+        <div>
+          <h2 id="tickets-title" class="eyebrow" style="margin-bottom: 0px">GET YOUR TICKETS</h2>
+        </div>
       </div>
 
-      <div v-if="loadingTicketTypes" class="ticket-state">
-        <p><span class="loading-dot" />票種載入中…</p>
-      </div>
+      <div class="collection-layout">
+        <div class="ticket-selection" aria-live="polite" :aria-busy="loadingTicketTypes">
+          <div class="ticket-selection-heading">
+            <p>選擇票種</p>
+            <span>ADMISSION / 2026</span>
+          </div>
 
-      <div v-else-if="ticketTypesError" class="ticket-state">
-        <h3>票種資訊載入失敗</h3>
-        <p>請重新整理頁面後再試。</p>
-        <button type="button" class="btn" @click="loadTicketTypes">
-          重新載入
-        </button>
-      </div>
+          <div v-if="loadingTicketTypes" class="ticket-state">
+            <p><span class="loading-dot" />票種載入中…</p>
+          </div>
 
-      <div v-else-if="availableTicketTypes.length" class="product-grid">
-        <router-link
-          v-for="ticketType in availableTicketTypes"
-          :key="ticketType.id"
-          :to="`/product/${ticketType.id}`"
-          class="product-card"
-          :class="{ 'is-muted': statusOf(ticketType).state !== 'selling' }"
-        >
-          <div class="product-image">
-            <img
-              src="../../public/poster.jpg"
-              :alt="ticketType.name"
-              loading="lazy"
-              :class="{ 'is-muted-img': statusOf(ticketType).state !== 'selling' }"
-              @error="handleImageError"
-              style="width: 100%; height: auto; object-fit: cover; border-radius: 8px;"
+          <div v-else-if="ticketTypesError" class="ticket-state">
+            <h3>票種資訊載入失敗</h3>
+            <p>請重新整理頁面後再試</p>
+            <button type="button" class="btn" @click="loadTicketTypes">重新載入</button>
+          </div>
+
+          <div v-else-if="availableTicketTypes.length" class="product-grid">
+            <router-link
+              v-for="(ticketType, index) in availableTicketTypes"
+              :key="ticketType.id"
+              :to="`/product/${ticketType.id}`"
+              class="product-card"
+              :class="{ 'is-muted': statusOf(ticketType).state !== 'selling' }"
             >
-            <span class="status-chip" :class="`status-${statusOf(ticketType).className}`" style="margin-top: 2.5ch">
-              <span class="status-dot" />
-              <span>{{ statusOf(ticketType).label }}</span>
-            </span>
+              <div class="ticket-card-heading">
+                <span class="ticket-number">{{ String(index + 1).padStart(2, '0') }} / ENTRY PASS</span>
+                <span class="status-chip" :class="`status-${statusOf(ticketType).className}`">
+                  <span class="status-dot" />
+                  {{ statusOf(ticketType).label }}
+                </span>
+              </div>
+              <div class="product-meta">
+                <div class="ticket-name">
+                  <h3>{{ ticketType.name }}</h3>
+                  <p v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson" class="ticket-limit">
+                    每人限購 {{ ticketType.purchaseLimitPerPerson }} 張
+                  </p>
+                </div>
+                <div class="ticket-price" v-if="ticketType.price != null">
+                  <span>NT$</span>
+                  <strong>{{ ticketType.price.toLocaleString() }}</strong>
+                </div>
+                <span class="ticket-arrow" aria-hidden="true"><q-icon name="north_east" /></span>
+              </div>
+            </router-link>
           </div>
 
-          <div class="product-meta">
-            <div>
-              <p class="product-category">CK PARTY NIGHT</p>
-              <h3>{{ ticketType.name }} {{ ticketType.price ? ` - NT$ ${ticketType.price.toLocaleString()}` : '' }}</h3>
-            </div>
-
-            <q-icon name="arrow_forward" />
-            
+          <div v-else class="ticket-state">
+            <h3>目前尚無開放購買的票種</h3>
+            <p>票券資訊將於開放販售後顯示。</p>
           </div>
-          
-          <p
-            v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson"
-            class="ticket-limit"
-          >
-            每人限購 {{ ticketType.purchaseLimitPerPerson }} 張
-          </p>
-        </router-link>
-      </div>
-
-      <div v-else class="ticket-state">
-        <h3>目前尚無開放購買的票種</h3>
-        <p>票券資訊將於開放販售後顯示。</p>
+        </div>
       </div>
     </section>
   </div>
@@ -149,7 +140,8 @@ const availableTicketTypes = computed(() =>
 )
 
 function scrollToCollection() {
-  collectionSection.value?.scrollIntoView({ behavior: 'smooth' })
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  collectionSection.value?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
 }
 
 async function loadTicketTypes() {
@@ -167,13 +159,9 @@ async function loadTicketTypes() {
   }
 }
 
-function handleImageError(event) {
-  event.target.style.display = 'none'
-}
-
 onMounted(loadTicketTypes)
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 @import 'src/css/homepage.scss';
 </style>

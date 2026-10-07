@@ -2,8 +2,8 @@
   <div class="static-page">
     <article class="content-card">
       <p class="eyebrow">關於建中舞會購票系統</p>
-      <h1>CK Party Night Ticketing System</h1>
-      <p>此系統由建中班聯會團隊維運，提供建中舞會門票的線上購票服務</p>
+      <h1>About CK Party Night Ticketing System</h1>
+      <p>此系統由建中班聯會維運，提供建中舞會門票的線上購票服務</p>
       <p>若有任何問題或改進建議，歡迎提供回饋，協助我們持續優化購票體驗</p>
       <p>如有友校有意願使用此系統，歡迎與開發者聯繫</p>
 
