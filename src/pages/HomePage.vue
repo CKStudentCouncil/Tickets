@@ -25,8 +25,6 @@
             <image href="/poster.jpg" width="1076" height="1522" filter="url(#cosmos-lettering)" />
           </svg>
         </h1>
-        <!--<p class="hero-tagline">穿越星海，在此相遇。</p>
-        <p class="hero-copy">讓音樂與光，成為我們共同的宇宙。</p>-->
         <div class="hero-actions">
           <a href="#collection" class="secondary-link" @click.prevent="scrollToCollection">
             開始購票
