@@ -284,11 +284,11 @@ service cloud.firestore {
       return scores[key] is int && scores[key] >= 1 && scores[key] <= 5;
     }
 
-    // every rating question q4..q25 answered with an integer 1-5
+    // every rating question q4..q29 answered with an integer 1-5
     function isValidScores(scores) {
       return scores is map
-        && scores.keys().hasOnly(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25'])
-        && scores.keys().hasAll(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25'])
+        && scores.keys().hasOnly(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25', 'q26', 'q27', 'q28', 'q29'])
+        && scores.keys().hasAll(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25', 'q26', 'q27', 'q28', 'q29'])
         && isScore(scores, 'q4')
         && isScore(scores, 'q5')
         && isScore(scores, 'q6')
@@ -310,7 +310,11 @@ service cloud.firestore {
         && isScore(scores, 'q22')
         && isScore(scores, 'q23')
         && isScore(scores, 'q24')
-        && isScore(scores, 'q25');
+        && isScore(scores, 'q25')
+        && isScore(scores, 'q26')
+        && isScore(scores, 'q27')
+        && isScore(scores, 'q28')
+        && isScore(scores, 'q29');
     }
 
     match /surveyResponses/{responseId} {
