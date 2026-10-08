@@ -4,6 +4,7 @@ import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf } from './setup.js'
+import { getBuyerKey, SHARD_COUNT } from '../../lib/orderValidation.js'
 
 const callCreate = fft.wrap(functions.createOrder)
 const callRelease = fft.wrap(functions.releaseOrderStock)
@@ -268,6 +269,96 @@ describe('createOrder', () => {
     assert.equal(second.id, first.id)
   })
 
+  test('a committed checkout can be recovered after the shop is closed', async () => {
+    const payload = { ...order([{ id: 'open', quantity: 1 }]), requestId: 'req-closed-0123456789' }
+    const first = await callCreate(payload, as('recover@example.com'))
+    await db.doc('settings/shop').set({ openAt: new Date(Date.now() + HOUR) })
+    await setTypes({ open: { salesEndTime: iso(-1) } })
+
+    const recovered = await callCreate(payload, as('recover@example.com'))
+    assert.equal(recovered.status, 200)
+    assert.equal(recovered.id, first.id)
+    assert.equal(await soldOf('open'), 1)
+    assert.equal((await callCreate({ requestId: payload.requestId }, as('recover@example.com'))).id, first.id)
+    await assert.rejects(callCreate(payload, as('other@example.com')), { code: 'invalid-argument' })
+  })
+
+  test('an authoritative rejected request fences late retries even after stock returns', async () => {
+    await setTypes({ open: { totalTicketQuantity: 1 } })
+    await callCreate(order([{ id: 'open', quantity: 1 }]), as('first@example.com'))
+    const payload = { ...order([{ id: 'open', quantity: 1 }]), requestId: 'req-rejected-0123456789' }
+    await assert.rejects(callCreate(payload, as('pending@example.com')), (error) => {
+      assert.equal(error.code, 'resource-exhausted')
+      assert.equal(error.details.checkoutRejected, true)
+      return true
+    })
+    const marker = (await db.doc(`orderRequests/${payload.requestId}`).get()).data()
+    assert.equal(marker.status, 'rejected')
+    assert.equal(marker.userId, as('pending@example.com').auth.uid)
+
+    await setTypes({ open: { totalTicketQuantity: 2 } })
+    await assert.rejects(callCreate(payload, as('pending@example.com')), (error) => {
+      assert.equal(error.code, 'resource-exhausted')
+      assert.equal(error.details.checkoutRejected, true)
+      return true
+    })
+    await assert.rejects(callCreate(payload, as('other@example.com')), (error) => {
+      assert.equal(error.code, 'invalid-argument')
+      assert.equal(error.details?.checkoutRejected, undefined)
+      return true
+    })
+    assert.equal(await soldOf('open'), 1)
+    assert.deepEqual((await db.doc(`orderRequests/${payload.requestId}`).get()).data(), marker)
+  })
+
+  test('a rejection racing an in-flight checkout resolves one terminal outcome', async () => {
+    const requestId = 'req-racing-0123456789'
+    const account = as('race-resolution@example.com')
+    const results = await Promise.allSettled([
+      callCreate({ ...order([{ id: 'open', quantity: 1 }]), requestId }, account),
+      callCreate({ ...order([{ id: 'unknown', quantity: 1 }]), requestId }, account)
+    ])
+    const marker = (await db.doc(`orderRequests/${requestId}`).get()).data()
+    const orders = await db.collection('orders').get()
+    if (marker.status === 'rejected') {
+      assert.equal(orders.size, 0)
+      assert.ok(results.every((result) => result.status === 'rejected' && result.reason.details.checkoutRejected === true))
+      assert.equal(await soldOf('open'), 0)
+    } else {
+      assert.equal(orders.size, 1)
+      assert.ok(results.every((result) => result.status === 'fulfilled' && result.value.id === marker.orderId))
+      assert.equal(await soldOf('open'), 1)
+    }
+    assert.equal(marker.userId, account.auth.uid)
+  })
+
+  test('replaying a cancelled checkout cannot recreate the deleted order', async () => {
+    const account = as('cancelled-retry@example.com')
+    const payload = { ...order([{ id: 'open', quantity: 1 }]), requestId: 'req-cancelled-0123456789' }
+    const first = await callCreate(payload, account)
+    const snap = await db.doc(`orders/${first.id}`).get()
+    await snap.ref.delete()
+    await callRelease(snap, { params: { orderId: first.id }, eventId: 'cancelled-checkout' })
+
+    await assert.rejects(callCreate(payload, account), (error) => {
+      assert.equal(error.code, 'not-found')
+      assert.equal(error.details.checkoutRejected, true)
+      return true
+    })
+    await assert.rejects(callCreate(payload, as('other@example.com')), (error) => {
+      assert.equal(error.code, 'invalid-argument')
+      assert.equal(error.details?.checkoutRejected, undefined)
+      return true
+    })
+    assert.equal((await db.collection('orders').get()).size, 0)
+    assert.equal(await soldOf('open'), 0)
+    assert.equal((await db.doc(`orderRequests/${payload.requestId}`).get()).data().orderId, first.id)
+    const fresh = await callCreate({ ...payload, requestId: 'req-new-intent-0123456789' }, account)
+    assert.equal(fresh.status, 201)
+    assert.notEqual(fresh.id, first.id)
+    assert.equal(await soldOf('open'), 1)
+  })
+
   test('tickets counted by the legacy counter are not sold again (PARTY-28)', async () => {
     await db.doc('ticketSales/open').set({ sold: 98 }) // 98 of 100 sold before the shards
     await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 2 }]), as('last@example.com')))
@@ -306,6 +397,52 @@ describe('createOrder', () => {
 })
 
 describe('releaseOrderStock', () => {
+  test('released tickets cannot be resold above stock reduced below existing sales', async () => {
+    // Seed evenly distributed counted sales to exercise caps planned above a
+    // reduced limit without placing sixty unrelated orders in this regression.
+    const batch = db.batch()
+    for (let k = 0; k < SHARD_COUNT; k++) {
+      batch.set(db.doc(`ticketSales/open/shards/${k}`), { sold: 3 })
+    }
+    const ref = db.doc('orders/CKS202601010101')
+    batch.set(ref, {
+      stockCounted: true,
+      stockShards: { open: { 0: 1 } },
+      items: [{ id: 'open', quantity: 1 }],
+      customerEmail: 'cancel@example.com'
+    })
+    batch.set(db.doc(`buyerPurchases/${getBuyerKey('cancel@example.com')}`), { quantities: { open: 1 } })
+    await batch.commit()
+    await setTypes({ open: { totalTicketQuantity: 50 } })
+    await callPlan(fft.makeChange(null, await db.doc('settings/ticketTypes').get()), {})
+    assert.equal(await soldOf('open'), 60)
+
+    const snap = await ref.get()
+    await ref.delete()
+    await callRelease(snap, { params: { orderId: ref.id }, eventId: 'lowered-delete' })
+    assert.equal(await soldOf('open'), 59)
+    assert.equal((await db.doc('ticketSales/open').get()).data().shardCaps, undefined)
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('after-cancel@example.com')), { code: 'resource-exhausted' })
+
+    // Once enough tickets have been released, only the actual available room
+    // may be sold; refunds never resurrect the former sixty-ticket cap.
+    const remainingRef = db.doc('orders/CKS202601010102')
+    await db.doc(`buyerPurchases/${getBuyerKey('cancel2@example.com')}`).set({ quantities: { open: 10 } })
+    await remainingRef.set({
+      stockCounted: true,
+      stockShards: { open: { 1: 3, 2: 3, 3: 3, 4: 1 } },
+      items: [{ id: 'open', quantity: 10 }],
+      customerEmail: 'cancel2@example.com'
+    })
+    const remaining = await remainingRef.get()
+    await remainingRef.delete()
+    await callRelease(remaining, { params: { orderId: remainingRef.id }, eventId: 'lowered-delete2' })
+    assert.equal(await soldOf('open'), 49)
+    await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 1 }]), as('actual-room@example.com')))
+    assert.equal(await soldOf('open'), 50)
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('no-more@example.com')), { code: 'resource-exhausted' })
+  })
+
   test('deleting an order returns stock and the buyer allowance exactly once (PARTY-5)', async () => {
     const { id } = await callCreate(order([{ id: 'open', quantity: 3 }]), as('a@example.com'))
     const snap = await db.doc(`orders/${id}`).get()

@@ -1,4 +1,5 @@
-.admin-page {
+.admin-page,
+.notify-modal {
   --void: #050608;
   --surface: #0d1015;
   --surface-soft: #11151b;
@@ -8,7 +9,9 @@
   --line: rgba(242, 240, 233, 0.14);
   --line-soft: rgba(242, 240, 233, 0.08);
   --danger: #c97878;
+}
 
+.admin-page {
   min-height: 100vh;
   padding: 120px clamp(20px, 5vw, 64px) 100px;
 
@@ -1515,3 +1518,18 @@ textarea::placeholder {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+.notify-modal {
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  max-width: min(680px, calc(100vw - 32px));
+}
+
+.order-page-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.stats-row { flex-wrap: wrap; gap: 24px; }

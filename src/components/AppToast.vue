@@ -1,8 +1,12 @@
 <template>
+  <div class="toast-announcer" role="status" aria-live="polite" aria-atomic="true">
+    {{ toast.visible ? toast.message : '' }}
+  </div>
   <transition name="toast">
     <div
       v-if="toast.visible"
       class="app-toast"
+      aria-hidden="true"
     >
       <span class="toast-message">{{ toast.message }}</span>
       <span
@@ -20,6 +24,17 @@ const toast = useToastStore()
 </script>
 
 <style scoped>
+.toast-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /*
   排版與視覺統一原則（與其他頁面共用同一套邏輯）：
   1. 字體堆疊涵蓋中英文，避免中文落回系統預設字體造成字重不一致。

@@ -1,8 +1,14 @@
 <template>
   <div class="detail-page">
-    <div v-if="loading" class="state-screen">
+    <div v-if="loading && !order" class="state-screen" role="status">
       <span class="eyebrow">CK PARTY NIGHT</span>
       <p>載入訂單中...</p>
+    </div>
+
+    <div v-else-if="loadError && !order" class="state-screen" role="alert">
+      <h1>目前無法載入訂單</h1>
+      <p>請檢查連線後重試。</p>
+      <button type="button" class="primary-button" @click="loadOrder">重新載入</button>
     </div>
 
     <div v-else-if="!order" class="state-screen">
@@ -20,7 +26,11 @@
       </button>
     </div>
 
-    <main v-else class="detail-content">
+    <main v-else class="detail-content" :aria-busy="loading">
+      <div v-if="loadError" class="qr-check danger" role="alert">
+        無法更新訂單，目前顯示上次載入的資料。
+        <button type="button" :disabled="loading" @click="loadOrder">重新載入</button>
+      </div>
       <header class="page-header">
         <div>
           <span class="eyebrow">CK PARTY NIGHT</span>
@@ -46,8 +56,13 @@
           ⚠ QR 驗證碼不符，可能是偽造的 QR Code。請核對購票人姓名與證件後再處理。
         </p>
         <p v-else-if="qrCheck === 'none'" class="qr-check warn">
-          此頁不是由票券 QR Code 開啟，領票前請核對購票人身分。
+          請掃描購票人的票券 QR Code 後領票。管理員可核對身分並填寫原因後手動處理。
         </p>
+        <label v-if="auth.isAdmin" class="manual-reason">
+          手動領票或重設的原因
+          <input v-model="overrideReason" maxlength="500" placeholder="核對身分的方式或重設原因">
+        </label>
+        <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
         <div class="toggle-group">
           <span class="toggle-label">
             領票狀態
@@ -57,6 +72,7 @@
             <button
               type="button"
               :class="{ active: !order.delivered }"
+              :disabled="changingStatus || !order.delivered || !auth.isAdmin || !overrideReason.trim() || loading || loadError"
               @click="setDelivered(false)"
             >
               未領票
@@ -65,12 +81,30 @@
             <button
               type="button"
               :class="{ active: order.delivered }"
+              :disabled="changingStatus || order.delivered || !canCollect || loading || loadError"
               @click="setDelivered(true)"
             >
               已領票
             </button>
           </div>
         </div>
+        <p v-if="changingStatus" role="status">正在確認並更新訂單…</p>
+        <div v-if="auth.isAdmin" class="toggle-group">
+          <span class="toggle-label">付款狀態</span>
+          <div class="toggle-switch">
+            <button type="button" :class="{ active: !order.paid }"
+              :disabled="changingStatus || !order.paid || loading || loadError" @click="setPaid(false)">
+              未付款
+            </button>
+            <button type="button" :class="{ active: order.paid }"
+              :disabled="changingStatus || order.paid || loading || loadError" @click="setPaid(true)">
+              已付款
+            </button>
+          </div>
+        </div>
+        <p v-if="order.deliveryUpdatedByName">
+          最後領票更新：{{ order.deliveryUpdatedByName }} · {{ formatDateTime(order.deliveryUpdatedAt) }}
+        </p>
       </section>
 
       <article class="receipt">
@@ -97,6 +131,9 @@
             <i />
             {{ order.delivered ? '已領票' : '未領票' }}
           </span>
+          <span class="status-pill" :class="{ on: order.paid }">
+            <i />{{ order.paid ? '已付款' : '未付款' }}
+          </span>
         </div>
 
         <section class="receipt-section order-qr-section">
@@ -112,10 +149,16 @@
                 class="order-qr"
                 width="220"
                 height="220"
+                role="img"
+                :aria-label="`訂單 ${order.id} 的領票 QR Code`"
               />
             </div>
 
             <p>領票時請出示此 QR Code 給工作人員掃描 </p>
+            <p v-if="qrError" role="alert">{{ qrError }}</p>
+            <button v-if="qrError" type="button" class="primary-button" @click="renderQr">
+              重新產生 QR Code
+            </button>
           </div>
         </section>
 
@@ -303,10 +346,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
-import { fetchOrder, updateOrderDelivery } from 'src/services/orderService'
+import { fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
@@ -322,6 +365,12 @@ const toast = useToastStore()
 const loading = ref(true)
 const order = ref(null)
 const qrCanvas = ref(null)
+const loadError = ref(false)
+const qrError = ref('')
+const changingStatus = ref(false)
+const statusError = ref('')
+const overrideReason = ref('')
+let loadSequence = 0
 
 const orderId = computed(() => String(route.params.id || ''))
 
@@ -330,62 +379,97 @@ const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.i
 
 // Code from the scanned ticket QR (?c=...), compared with the order's secret
 // ticketCode so a QR generated from a guessed order id is flagged (PARTY-19)
-const scannedCode = String(route.query.c || '')
+const scannedCode = computed(() => String(route.query.c || ''))
 
 const qrCheck = computed(() => {
   if (!isAdminView.value || !order.value?.ticketCode) return null
-  if (!scannedCode) return 'none'
-  return scannedCode === order.value.ticketCode ? 'ok' : 'mismatch'
+  if (!scannedCode.value) return 'none'
+  return scannedCode.value === order.value.ticketCode ? 'ok' : 'mismatch'
 })
+const canCollect = computed(() => qrCheck.value === 'ok' || (auth.isAdmin && !!overrideReason.value.trim()))
 
 async function loadOrder() {
+  const sequence = ++loadSequence
+  const id = orderId.value
   loading.value = true
+  loadError.value = false
 
   try {
     // staff can read any order, a buyer only their own (firestore.rules)
-    const result = await fetchOrder(orderId.value)
+    const result = await fetchOrder(id)
+    if (sequence !== loadSequence) return
 
     order.value = result ? { ...result, delivered: Boolean(result.delivered) } : null
   } catch (error) {
     console.error('Failed to load order:', error)
-    toast.show('載入訂單失敗')
-    order.value = null
+    if (sequence !== loadSequence) return
+    loadError.value = true
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 
-  if (!order.value) return
+  if (sequence === loadSequence && order.value) await renderQr()
+}
 
+async function renderQr() {
+  qrError.value = ''
+  if (!order.value) return
   await nextTick()
 
   try {
     if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value)
   } catch (error) {
     console.error(`QR Code 產生失敗：${order.value.id}`, error)
-    toast.show('QR Code 產生失敗')
+    qrError.value = '目前無法產生 QR Code，請重新產生。'
   }
 }
 
 async function setDelivered(delivered) {
-  if (!isAdminView.value || !order.value || order.value.delivered === delivered) {
+  if (!isAdminView.value || !order.value || changingStatus.value || loading.value || loadError.value || order.value.delivered === delivered) {
     return
   }
 
-  if (
-    delivered &&
-    qrCheck.value === 'mismatch' &&
-    !window.confirm('QR 驗證碼不符，確定已核對身分並要標記為已領票嗎？')
-  ) {
-    return
-  }
+  if (delivered ? !canCollect.value : (!auth.isAdmin || !overrideReason.value.trim())) return
 
+  changingStatus.value = true
+  statusError.value = ''
+  const id = order.value.id
   try {
-    const patch = await updateOrderDelivery(order.value.id, delivered, auth.displayName)
+    const patch = await updateOrderDelivery(id, delivered, {
+      ticketCode: scannedCode.value,
+      expectedDelivered: order.value.delivered,
+      overrideReason: auth.isAdmin ? overrideReason.value.trim() : ''
+    })
+    if (orderId.value !== id) return
     order.value = { ...order.value, ...patch }
+    overrideReason.value = ''
     toast.show(delivered ? '已標記為已領票' : '已標記為未領票')
   } catch (error) {
     console.error(error)
-    toast.show('更新領票狀態失敗')
+    if (orderId.value !== id) return
+    statusError.value = error.message || '更新失敗，請重新確認訂單狀態。'
+    await loadOrder()
+  } finally {
+    if (orderId.value === id) changingStatus.value = false
+  }
+}
+
+async function setPaid(paid) {
+  if (!auth.isAdmin || !order.value || changingStatus.value || loading.value || loadError.value || Boolean(order.value.paid) === paid) return
+  changingStatus.value = true
+  statusError.value = ''
+  const id = order.value.id
+  try {
+    const patch = await updateOrderPayment(id, paid, Boolean(order.value.paid))
+    if (orderId.value !== id) return
+    order.value = { ...order.value, ...patch }
+    toast.show(paid ? '已確認付款' : '已重設為未付款')
+  } catch (error) {
+    if (orderId.value !== id) return
+    statusError.value = error.message || '更新失敗，請重新確認付款狀態。'
+    await loadOrder()
+  } finally {
+    if (orderId.value === id) changingStatus.value = false
   }
 }
 
@@ -800,7 +884,13 @@ function goBack() {
   router.push(isAdminView.value ? { name: 'admin' } : '/')
 }
 
-onMounted(loadOrder)
+watch(orderId, () => {
+  order.value = null
+  statusError.value = ''
+  overrideReason.value = ''
+  changingStatus.value = false
+  loadOrder()
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -847,5 +937,24 @@ onMounted(loadOrder)
   display: block;
   width: 220px !important;
   height: 220px !important;
+}
+
+.manual-reason {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.manual-reason input {
+  padding: 10px;
+  border: 1px solid #9aa3ac;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
+.toggle-switch button:disabled {
+  cursor: not-allowed;
+  opacity: .6;
 }
 </style>

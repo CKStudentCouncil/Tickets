@@ -296,6 +296,22 @@ h1 {
   color: #e46868;
 }
 
+.field-error {
+  color: #f28b8b;
+  font-size: 12.5px;
+  margin: 0 0 12px;
+}
+
+.checkout-recovery {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid var(--ember);
+  background: rgba(228, 164, 104, .08);
+
+  p { font-size: 13.5px; line-height: 1.7; }
+  a { display: inline-block; margin-top: 12px; color: var(--ember); }
+}
+
 /* ---------- loading / error / empty states ---------- */
 .ticket-state {
   padding: clamp(60px, 10vh, 110px) 0;

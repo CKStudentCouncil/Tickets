@@ -47,6 +47,16 @@
 
         <div class="divider" />
 
+        <aside v-if="pendingCheckout" class="checkout-recovery" role="status">
+          <strong>上次訂單尚未取得確認</strong>
+          <p>請先確認或重試原訂單，避免重複購票。重新整理頁面後仍可繼續。</p>
+          <button type="button" class="primary-button" :disabled="submitting" @click="retryPendingOrder">
+            {{ submitting ? '確認中…' : '確認或重試原訂單' }}
+          </button>
+          <router-link to="/orders">查看我的訂單</router-link>
+          <p v-if="!showOrderForm && orderError" class="order-error" role="alert">{{ orderError }}</p>
+        </aside>
+
         <p v-if="status.state === 'upcoming'" class="ticket-limit">
           {{ formatDateTime(ticketType.salesStartTime) }} 開賣・倒數 {{ formatCountdown(ticketType.salesStartTime, now) }}
         </p>
@@ -77,54 +87,66 @@
             v-else
             type="button"
             class="primary-button"
+            :disabled="!!pendingCheckout"
             @click="openOrderForm"
           >
             購買 {{ ticketType.name }}
           </button>
         </template>
 
-        <div v-if="showOrderForm" class="order-panel">
+        <form v-if="showOrderForm" ref="orderForm" class="order-panel" novalidate @submit.prevent="submitDirectOrder">
           <p class="eyebrow">填寫訂購資訊</p>
 
           <div class="order-form">
             <label>
               數量
-              <input type="number" v-model.number="quantity" min="1" :max="maxQuantity">
+              <input type="number" v-model.number="quantity" min="1" :max="maxQuantity"
+                :aria-invalid="validationAttempted && !!fieldErrors.quantity" aria-describedby="quantity-error" required>
+              <span id="quantity-error" v-if="validationAttempted && fieldErrors.quantity" class="field-error">{{ fieldErrors.quantity }}</span>
             </label>
 
             <label>
               學校 / 身分
-              <select v-model="buyer.school">
+              <select v-model="buyer.school" :aria-invalid="validationAttempted && !!fieldErrors.school" aria-describedby="school-error" required>
                 <option disabled value="">請選擇</option>
                 <option v-for="s in schoolOptions" :key="s" :value="s">{{ s }}</option>
               </select>
+              <span id="school-error" v-if="validationAttempted && fieldErrors.school" class="field-error">{{ fieldErrors.school }}</span>
             </label>
 
             <template v-if="needsClass">
               <label>
                 班級
-                <input v-model="buyer.class" placeholder="例：329/三數">
+                <input v-model="buyer.class" placeholder="例：329/三數" maxlength="30"
+                  :aria-invalid="validationAttempted && !!fieldErrors.class" aria-describedby="class-error" required>
+                <span id="class-error" v-if="validationAttempted && fieldErrors.class" class="field-error">{{ fieldErrors.class }}</span>
               </label>
 
               <label>
                 座號
-                <input v-model="buyer.number" placeholder="例：01">
+                <input v-model="buyer.number" placeholder="例：01" maxlength="20"
+                  :aria-invalid="validationAttempted && !!fieldErrors.number" aria-describedby="number-error" required>
+                <span id="number-error" v-if="validationAttempted && fieldErrors.number" class="field-error">{{ fieldErrors.number }}</span>
               </label>
             </template>
 
             <label v-if="buyer.school === '建中老師'">
               辦公室
-              <input v-model="buyer.office" placeholder="例：莊三">
+              <input v-model="buyer.office" placeholder="例：莊三" maxlength="100">
             </label>
 
             <label>
               姓名
-              <input v-model="buyer.customerName">
+              <input v-model="buyer.customerName" autocomplete="name" maxlength="100"
+                :aria-invalid="validationAttempted && !!fieldErrors.customerName" aria-describedby="name-error" required>
+              <span id="name-error" v-if="validationAttempted && fieldErrors.customerName" class="field-error">{{ fieldErrors.customerName }}</span>
             </label>
 
             <label>
               電話
-              <input v-model="buyer.customerPhone" type="tel" autocomplete="tel">
+              <input v-model="buyer.customerPhone" type="tel" autocomplete="tel" maxlength="30"
+                :aria-invalid="validationAttempted && !!fieldErrors.customerPhone" aria-describedby="phone-error" required>
+              <span id="phone-error" v-if="validationAttempted && fieldErrors.customerPhone" class="field-error">{{ fieldErrors.customerPhone }}</span>
             </label>
 
             <p class="account-row">
@@ -139,7 +161,7 @@
           </p>
 
           <label class="terms-consent">
-            <input v-model="acceptedTerms" type="checkbox">
+            <input v-model="acceptedTerms" type="checkbox" :aria-invalid="validationAttempted && !!fieldErrors.terms" aria-describedby="terms-error" required>
             <span>
               我已閱讀並同意
               <router-link to="/policy" target="_blank">銷售條款</router-link>
@@ -147,8 +169,9 @@
               <router-link to="/terms" target="_blank">使用者條款</router-link>
             </span>
           </label>
+          <p id="terms-error" v-if="validationAttempted && fieldErrors.terms" class="field-error">{{ fieldErrors.terms }}</p>
 
-          <p v-if="orderError" class="order-error">{{ orderError }}</p>
+          <p v-if="orderError" class="order-error" role="alert">{{ orderError }}</p>
 
           <div class="order-panel-actions">
             <button
@@ -161,25 +184,24 @@
             </button>
 
             <button
-              type="button"
+              type="submit"
               class="primary-button"
-              :disabled="!canSubmitOrder || submitting"
-              @click="submitDirectOrder"
+              :disabled="submitting || !!pendingCheckout || !auth.isLoggedIn || needsOtherAccount"
             >
               {{ submitting ? '送出中…' : '確認送出訂單' }}
             </button>
           </div>
-        </div>
+        </form>
       </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from 'src/stores/toast'
-import { submitOrder } from 'src/services/orderService'
+import { getPendingCheckout, submitOrder } from 'src/services/orderService'
 import {
   ELIGIBLE_IDENTITIES,
   fetchTicketTypes,
@@ -232,13 +254,19 @@ async function loadTicketTypes() {
   }
 }
 
-onMounted(loadTicketTypes)
+onMounted(() => {
+  refreshPendingCheckout()
+  loadTicketTypes()
+})
 
 /* ---------- inline order form ---------- */
 
 const showOrderForm = ref(false)
 const submitting = ref(false)
 const orderError = ref('')
+const orderForm = ref(null)
+const validationAttempted = ref(false)
+const pendingCheckout = ref(null)
 const quantity = ref(1)
 const acceptedTerms = ref(false)
 const buyer = ref({
@@ -278,26 +306,40 @@ const maxQuantity = computed(() =>
   Math.min(purchaseLimit.value || MAX_TICKETS_PER_ORDER, MAX_TICKETS_PER_ORDER)
 )
 
-const canSubmitOrder = computed(() =>
-  auth.isLoggedIn &&
-  !needsOtherAccount.value &&
-  acceptedTerms.value &&
-  !!buyer.value.school &&
-  !!buyer.value.customerName.trim() &&
-  !!buyer.value.customerPhone.trim() &&
-  (!needsClass.value || (!!buyer.value.class.trim() && !!buyer.value.number.trim())) &&
-  Number.isInteger(quantity.value) &&
-  quantity.value > 0 &&
-  quantity.value <= maxQuantity.value
-)
+const fieldErrors = computed(() => {
+  const errors = {}
+  if (!Number.isInteger(quantity.value) || quantity.value < 1 || quantity.value > maxQuantity.value) {
+    errors.quantity = `請輸入 1 至 ${maxQuantity.value} 張的整數數量`
+  }
+  if (!schoolOptions.value.includes(buyer.value.school)) errors.school = '請選擇學校或身分'
+  if (needsClass.value && !buyer.value.class.trim()) errors.class = '請填寫班級'
+  if (needsClass.value && !buyer.value.number.trim()) errors.number = '請填寫座號'
+  if (!buyer.value.customerName.trim()) errors.customerName = '請填寫購票人姓名'
+  if (!buyer.value.customerPhone.trim()) errors.customerPhone = '請填寫聯絡電話'
+  if (!acceptedTerms.value) errors.terms = '請閱讀並同意銷售與使用者條款'
+  return errors
+})
+
+function refreshPendingCheckout() {
+  try {
+    pendingCheckout.value = auth.user?.uid ? getPendingCheckout(auth.user.uid) : null
+  } catch (error) {
+    orderError.value = error.message || '無法確認上次訂單，請重新整理後再試。'
+  }
+}
+
+watch(() => auth.user?.uid, refreshPendingCheckout)
 
 function openOrderForm() {
   if (!ticketType.value || status.value.state !== 'selling') return
   if (!auth.isLoggedIn) return goToLogin()
   if (needsOtherAccount.value) return
+  refreshPendingCheckout()
+  if (pendingCheckout.value) return
 
   quantity.value = 1
   orderError.value = ''
+  validationAttempted.value = false
   if (!schoolOptions.value.includes(buyer.value.school)) {
     buyer.value.school = schoolOptions.value.length === 1 ? schoolOptions.value[0] : ''
   }
@@ -310,36 +352,55 @@ function closeOrderForm() {
 }
 
 async function submitDirectOrder() {
-  if (!ticketType.value || !canSubmitOrder.value || submitting.value) return
-
-  submitting.value = true
-  orderError.value = ''
+  if (!ticketType.value || !auth.isLoggedIn || needsOtherAccount.value || submitting.value) return
+  validationAttempted.value = true
+  if (Object.keys(fieldErrors.value).length) {
+    orderError.value = '請完成以下欄位後再送出訂單。'
+    await nextTick()
+    orderForm.value?.querySelector('[aria-invalid="true"]')?.focus()
+    return
+  }
 
   const { school, customerName, customerPhone } = buyer.value
 
+  await sendOrder({
+    school,
+    customerName: customerName.trim(),
+    customerPhone: customerPhone.trim(),
+    class: needsClass.value ? buyer.value.class.trim() : '',
+    number: needsClass.value ? buyer.value.number.trim() : '',
+    office: school === '建中老師' ? buyer.value.office.trim() : '',
+    items: [{ id: ticketType.value.id, quantity: quantity.value }]
+  })
+}
+
+async function retryPendingOrder() {
+  if (submitting.value) return
+  refreshPendingCheckout()
+  if (pendingCheckout.value) await sendOrder(pendingCheckout.value.payload)
+}
+
+async function sendOrder(payload) {
+  const uid = auth.user?.uid
+  if (!uid || submitting.value) return
+  submitting.value = true
+  orderError.value = ''
   try {
-    // The price is decided by the server from the ticket settings, the email
-    // from the signed-in account
-    const result = await submitOrder({
-      school,
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      class: needsClass.value ? buyer.value.class.trim() : '',
-      number: needsClass.value ? buyer.value.number.trim() : '',
-      office: school === '建中老師' ? buyer.value.office.trim() : '',
-      items: [{ id: ticketType.value.id, quantity: quantity.value }]
-    })
+    const result = await submitOrder(payload, { uid })
+    if (auth.user?.uid !== uid) return
 
     showOrderForm.value = false
     toast.show(`訂單 #${result.id} 已送出。`)
     router.push({ name: 'order-success', query: { id: result.id } })
   } catch (error) {
+    if (auth.user?.uid !== uid) return
     console.error('Submit order error:', error)
     // HttpsError messages from createOrder are already user-facing Chinese
     orderError.value = error?.message && error.code !== 'functions/internal'
       ? error.message
       : '訂單送出失敗，請稍後再試。'
   } finally {
+    refreshPendingCheckout()
     submitting.value = false
   }
 }

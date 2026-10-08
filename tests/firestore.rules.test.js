@@ -117,9 +117,9 @@ describe('orders (PARTY-2)', () => {
     await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'orders')))
   })
 
-  test('managers can only change the pickup status', async () => {
+  test('managers cannot bypass atomic pickup actions with direct updates', async () => {
     const db = as(staff.manager)
-    await assertSucceeds(updateDoc(doc(db, 'orders', ORDER_ID), {
+    await assertFails(updateDoc(doc(db, 'orders', ORDER_ID), {
       delivered: true,
       deliveryUpdatedAt: serverTimestamp(),
       deliveryUpdatedByName: 'M'
@@ -130,15 +130,52 @@ describe('orders (PARTY-2)', () => {
     await assertFails(deleteDoc(doc(db, 'orders', ORDER_ID)))
   })
 
-  test('admins can change payment status and delete, but not prices', async () => {
+  test('admins cannot directly change payment status but retain order deletion', async () => {
     const db = as(staff.admin)
-    await assertSucceeds(updateDoc(doc(db, 'orders', ORDER_ID), {
+    await assertFails(updateDoc(doc(db, 'orders', ORDER_ID), {
       paid: true,
       paymentUpdatedAt: serverTimestamp(),
       paymentUpdatedByName: 'A'
     }))
     await assertFails(updateDoc(doc(db, 'orders', ORDER_ID), { finalTotal: 0 }))
     await assertSucceeds(deleteDoc(doc(db, 'orders', ORDER_ID)))
+  })
+
+  test('all staff roles are denied direct status, identity and metadata rewrites', async () => {
+    for (const who of Object.values(staff)) {
+      const target = doc(as(who), 'orders', ORDER_ID)
+      for (const patch of [
+        { delivered: true },
+        { paid: true },
+        { deliveryUpdatedByUid: who.uid, deliveryUpdatedByName: 'Forged', deliveryUpdatedAt: serverTimestamp() },
+        { paymentUpdatedByUid: 'someone-else', paymentUpdatedAt: Timestamp.fromDate(new Date('2000-01-01')) },
+        { userId: who.uid, ticketCode: 'replacement', finalTotal: 0 },
+        { delivered: true, extraData: 'x'.repeat(10000) }
+      ]) {
+        await assertFails(updateDoc(target, patch))
+      }
+    }
+  })
+
+  test('history is staff-readable and immutable to every client, including after deletion', async () => {
+    const event = { action: 'delivery', previousValue: false, value: true, actorUid: staff.manager.uid, actorName: 'Manager', occurredAt: Timestamp.now() }
+    await env.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), 'orders', ORDER_ID, 'history', 'event1'), event))
+    for (const who of Object.values(staff)) {
+      const db = as(who)
+      await assertSucceeds(getDoc(doc(db, 'orders', ORDER_ID, 'history', 'event1')))
+      await assertSucceeds(getDocs(collection(db, 'orders', ORDER_ID, 'history')))
+      await assertFails(setDoc(doc(db, 'orders', ORDER_ID, 'history', 'forged'), event))
+      await assertFails(updateDoc(doc(db, 'orders', ORDER_ID, 'history', 'event1'), { actorUid: who.uid }))
+      await assertFails(deleteDoc(doc(db, 'orders', ORDER_ID, 'history', 'event1')))
+    }
+    await assertFails(getDoc(doc(anon(), 'orders', ORDER_ID, 'history', 'event1')))
+    await assertFails(getDoc(doc(as(buyer), 'orders', ORDER_ID, 'history', 'event1')))
+    await assertFails(getDocs(collection(as(buyer), 'orders', ORDER_ID, 'history')))
+    await assertFails(setDoc(doc(as(buyer), 'orders', ORDER_ID, 'history', 'forged'), event))
+
+    await assertSucceeds(deleteDoc(doc(as(staff.admin), 'orders', ORDER_ID)))
+    await assertSucceeds(getDoc(doc(as(staff.manager), 'orders', ORDER_ID, 'history', 'event1')))
+    await assertFails(getDoc(doc(as(buyer), 'orders', ORDER_ID, 'history', 'event1')))
   })
 
   test('function-only counters are not readable or writable by anyone', async () => {

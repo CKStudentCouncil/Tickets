@@ -1,10 +1,9 @@
 import * as functions from 'firebase-functions/v1'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes, randomInt } from 'node:crypto'
-import QRCode from 'qrcode'
 
 import { db, HttpsError, assertRole, getRoleRank } from './common.js'
-import { REGION, SCHOOL_CODES, SHOP_OPEN_AT, getAdminOrderUrl, getBuyerOrderUrl } from './constants.js'
+import { REGION, SCHOOL_CODES, SHOP_OPEN_AT } from './constants.js'
 import { getTaiwanDateKey, parseTaipeiDateTime } from './time.js'
 import {
   ORDER_ID_PATTERN,
@@ -23,10 +22,8 @@ import {
   planShards,
   sanitizeOrderInput
 } from './orderValidation.js'
-import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
 import { CREATE_ORDER_MIN_INSTANCES, ENFORCE_APP_CHECK, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
-import { generateEmailHTML } from '../templates/orderConfirmation.js'
-import { heroAttachment } from '../templates/shared.js'
+import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
 
 const ORDER_ID_ATTEMPTS = 3
 // Fresh looks at the shards before giving up when the locked ones were full
@@ -34,8 +31,7 @@ const STOCK_ATTEMPTS = 6
 // After this many, lock every shard with room rather than one random shard
 const SPREAD_AFTER = 2
 const RATE_WINDOW_MS = 10 * 60 * 1000
-// Stop retrying a failed confirmation email after this long; staff can resend
-const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
+const DEFINITE_ORDER_ERRORS = new Set(['invalid-argument', 'failed-precondition', 'permission-denied', 'resource-exhausted'])
 
 // Documents written only by these functions (denied to clients by the rules):
 //   ticketSales/{ticketTypeId}/shards/{k}  { sold } — stock counters, see SHARD_COUNT
@@ -43,13 +39,61 @@ const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 //                                   placed before the shards (still counts against
 //                                   stock) and how many each shard may sell
 //   buyerPurchases/{sha256(email)}  { quantities: { [ticketTypeId]: n } }, per account email
-//   orderRequests/{requestId}       { orderId } — makes retried checkouts idempotent
+//   orderRequests/{requestId}       { userId, orderId } or owned rejection — checkout recovery
 //   rateLimits/{uid}_{slot}         { count }  — only when ORDER_LIMIT_PER_ACCOUNT > 0
 //   stockReleases/{orderId}         marks a deleted order as already released
 
 class OrderIdTaken extends Error {}
 // The shards chosen from the unlocked look filled up before they were locked
 class ShardsTaken extends Error {}
+
+function rejectedRequestError(request, account) {
+  if (request.userId !== account.uid) {
+    return new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
+  }
+  const code = DEFINITE_ORDER_ERRORS.has(request.errorCode) ? request.errorCode : 'failed-precondition'
+  return new HttpsError(code, request.errorMessage || '這次訂單未成立，請重新送出', { checkoutRejected: true })
+}
+
+function missingRequestOrderError(request, account) {
+  return request.userId === account.uid
+    ? new HttpsError('not-found', '原訂單已取消，請重新建立訂單', { checkoutRejected: true })
+    : new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
+}
+
+// A final logical rejection must also fence any in-flight checkout with this
+// request ID. Resolve a committed order first; otherwise the tombstone and the
+// checkout compete on the same transaction read, so only one can commit.
+async function finishRejectedRequest(requestRef, account, error) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(requestRef)
+    const request = snap.data() || {}
+    if (request.status === 'rejected') return { error: rejectedRequestError(request, account) }
+    if (request.userId && request.userId !== account.uid) {
+      return { error: new HttpsError('invalid-argument', '訂單請求無效，請重新送出') }
+    }
+    if (request.orderId) {
+      const previous = await tx.get(db.doc(`orders/${request.orderId}`))
+      if (previous.exists) {
+        return previous.data().userId === account.uid
+          ? { result: { status: 200, id: previous.id } }
+          : { error: new HttpsError('invalid-argument', '訂單請求無效，請重新送出') }
+      }
+      // A deleted order resolves this checkout as cancelled. Keep its marker
+      // so an old retry cannot resurrect it, even after stock is available.
+      return { error: missingRequestOrderError(request, account) }
+    }
+    const rejected = {
+      userId: account.uid,
+      status: 'rejected',
+      errorCode: error.code,
+      errorMessage: error.message,
+      createdAt: FieldValue.serverTimestamp()
+    }
+    tx.set(requestRef, rejected)
+    return { error: rejectedRequestError(rejected, account) }
+  })
+}
 // Firestore gave up on a transaction after repeated lock contention
 const isContention = (error) => error?.code === 10 || error?.code === 'aborted'
 
@@ -83,8 +127,8 @@ function currentCapsOf(legacySnap, stock) {
 
 // Unlocked look before the transaction, so a sold-out type turns buyers away
 // without opening one and the transaction locks only shards with room.
-// Returns null when this requestId was already placed (the transaction
-// returns that order), otherwise { [ticketTypeId]: shards to lock } for the
+// Returns null when this requestId was already resolved (the transaction
+// returns the order or rejection), otherwise { [ticketTypeId]: shards to lock } for the
 // limited types. Throws the errors the transaction would for unknown types,
 // types not on sale or not for this buyer, and sold-out types.
 async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, spread }) {
@@ -233,8 +277,31 @@ export const createOrder = functions
     assertAppCheck(context)
     const account = getBuyerAccount(context)
 
-    const { order, quantities } = sanitizeOrderInput(data?.orderPayload, account.email)
     const requestId = isValidRequestId(data?.requestId) ? data.requestId : null
+    const requestRef = requestId ? db.doc(`orderRequests/${requestId}`) : null
+
+    // A committed checkout remains recoverable even if the shop is later
+    // closed or throttling starts. The transaction below also checks this
+    // marker, protecting simultaneous calls before either has committed.
+    if (requestId) {
+      const request = await requestRef.get()
+      if (request.exists) {
+        if (request.data().status === 'rejected') throw rejectedRequestError(request.data(), account)
+        if (request.data().userId && request.data().userId !== account.uid) {
+          throw new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
+        }
+        const previous = await db.doc(`orders/${request.data().orderId}`).get()
+        if (previous.exists) {
+          if (previous.data().userId !== account.uid) {
+            throw new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
+          }
+          return { status: 200, id: previous.id }
+        }
+        throw missingRequestOrderError(request.data(), account)
+      }
+    }
+
+    const { order, quantities } = sanitizeOrderInput(data?.orderPayload, account.email)
 
     const dateKey = getTaiwanDateKey()
     const schoolCode = SCHOOL_CODES[order.school]
@@ -242,7 +309,6 @@ export const createOrder = functions
 
     const buyerRef = db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`)
     const legacyRefs = ticketTypeIds.map(legacyRef)
-    const requestRef = requestId ? db.doc(`orderRequests/${requestId}`) : null
     const choose = (spread) => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, spread })
     let idAttempt = 1
     let stockAttempt = 1
@@ -270,6 +336,11 @@ export const createOrder = functions
 
             // the same checkout was already committed (e.g. the response was lost)
             if (requestSnap?.exists) {
+              const request = requestSnap.data()
+              if (request.status === 'rejected') throw rejectedRequestError(request, account)
+              if (request.userId && request.userId !== account.uid) {
+                throw new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
+              }
               const previous = await tx.get(db.doc(`orders/${requestSnap.data().orderId}`))
               if (previous.exists && previous.data().userId === account.uid) {
                 return { status: 200, id: previous.id }
@@ -277,6 +348,7 @@ export const createOrder = functions
               if (previous.exists) {
                 throw new HttpsError('invalid-argument', '訂單請求無效，請重新送出')
               }
+              throw missingRequestOrderError(request, account)
             }
 
             if (orderSnap.exists) throw new OrderIdTaken()
@@ -305,7 +377,7 @@ export const createOrder = functions
               }
             })
 
-            // a retried checkout whose order was deleted is planned in the transaction
+            // Stock and buyer allowance commit together with the new order.
             const stockShards = await reserveStock(tx, items, ticketTypes, legacySnaps, chosen || {})
 
             Object.entries(stockShards).forEach(([id, allocation]) => {
@@ -343,7 +415,7 @@ export const createOrder = functions
             })
 
             if (requestRef) {
-              tx.set(requestRef, { orderId: orderRef.id, createdAt: FieldValue.serverTimestamp() })
+              tx.set(requestRef, { userId: account.uid, orderId: orderRef.id, createdAt: FieldValue.serverTimestamp() })
             }
 
             return { status: 201, id: orderRef.id }
@@ -360,6 +432,16 @@ export const createOrder = functions
         }
       }
     } catch (error) {
+      if (requestRef && error instanceof HttpsError && DEFINITE_ORDER_ERRORS.has(error.code)) {
+        let outcome
+        try {
+          outcome = await finishRejectedRequest(requestRef, account, error)
+        } catch (markerError) {
+          console.error('[createOrder] could not resolve rejected checkout:', markerError)
+        }
+        if (outcome?.result) return outcome.result
+        if (outcome?.error) throw outcome.error
+      }
       throw toHttpsError(error)
     }
   })
@@ -401,6 +483,10 @@ export const releaseOrderStock = functions
               tx.set(shardRef(id, k), { sold: FieldValue.increment(-n) }, { merge: true })
             }
           })
+          // Caps can exceed the configured stock when it was lowered below
+          // existing sales. Reusing a refunded cap would then sell tickets
+          // above that limit; recalculate against the remaining sales first.
+          tx.set(legacyRef(id), { shardCaps: FieldValue.delete() }, { merge: true })
         })
       } else {
         // this changes the stock left for the shards, so their caps are planned again
@@ -453,49 +539,13 @@ export const planStockShards = functions
     })
   })
 
-/* ---------- confirmation email ---------- */
+/* ---------- confirmation email queue ---------- */
 
-export async function sendConfirmationEmail(orderId, order, transporter = createTransporter()) {
-  const qrPngBuffer = await QRCode.toBuffer(getAdminOrderUrl(orderId, order.ticketCode), {
-    width: 300,
-    margin: 2,
-    color: { dark: '#1d1d1f', light: '#ffffff' },
-    errorCorrectionLevel: 'H',
-    type: 'png'
-  })
-
-  await transporter.sendMail({
-    from: SENDER,
-    to: order.customerEmail,
-    subject: `建中舞會購票系統購票成功 - 票券編號：${orderId}`,
-    html: generateEmailHTML(orderId, order, getBuyerOrderUrl(orderId)),
-    attachments: [
-      {
-        filename: 'ticket-qrcode.png',
-        content: qrPngBuffer,
-        contentType: 'image/png',
-        cid: 'qrcode',
-        contentDisposition: 'inline'
-      },
-      heroAttachment()
-    ]
-  })
-}
-
-function markEmail(ref, status, error) {
-  return ref.update({
-    emailStatus: status,
-    emailError: error ? String(error.message || error).slice(0, 500) : FieldValue.delete(),
-    emailUpdatedAt: FieldValue.serverTimestamp()
-  })
-}
-
-// Records the result on the order (emailStatus: pending / sent / failed /
-// skipped). Failures are retried for an hour (e.g. when SES throttles at
-// the sale opening); after that staff can resend from the admin page.
+// The deterministic queue ID makes duplicate trigger deliveries harmless.
+// Provider sends and retry / uncertain outcomes are handled by the mail worker.
 export const sendOrderQRCode = functions
   .region(REGION)
-  .runWith({ secrets: MAIL_SECRETS, failurePolicy: true })
+  .runWith({ failurePolicy: true })
   .firestore.document('orders/{orderId}')
   .onCreate(async (snap, context) => {
     const orderId = context.params.orderId
@@ -503,29 +553,12 @@ export const sendOrderQRCode = functions
 
     if (!current.exists || current.data().emailStatus === 'sent') return
 
-    const order = current.data()
-
-    if (!order.customerEmail) {
-      await markEmail(snap.ref, 'skipped')
-      return
-    }
-
-    try {
-      await sendConfirmationEmail(orderId, order)
-      await markEmail(snap.ref, 'sent')
-    } catch (error) {
-      console.error(`[sendOrderQRCode] failed for order ${orderId}:`, error)
-      await markEmail(snap.ref, 'failed', error)
-
-      const age = Date.now() - new Date(context.timestamp).getTime()
-      if (age < EMAIL_RETRY_WINDOW_MS) throw error // let Cloud Functions retry
-    }
+    await enqueueOrderConfirmation(orderId, current.data())
   })
 
 // Staff can resend the confirmation from the admin order list
 export const resendOrderEmail = functions
   .region(REGION)
-  .runWith({ secrets: MAIL_SECRETS })
   .https.onCall(async (data, context) => {
     await assertRole(context, 'admin')
 
@@ -540,13 +573,5 @@ export const resendOrderEmail = functions
     if (!snap.exists) throw new HttpsError('not-found', '找不到訂單')
     if (!snap.data().customerEmail) throw new HttpsError('failed-precondition', '訂單沒有 Email')
 
-    try {
-      await sendConfirmationEmail(orderId, snap.data())
-      await markEmail(ref, 'sent')
-      return { emailStatus: 'sent' }
-    } catch (error) {
-      console.error(`[resendOrderEmail] failed for order ${orderId}:`, error)
-      await markEmail(ref, 'failed', error)
-      throw new HttpsError('unavailable', `寄送失敗：${error.message || error}`)
-    }
+    return enqueueManualOrderResend(orderId, snap.data(), context.auth.uid, { requestId: data?.requestId })
   })

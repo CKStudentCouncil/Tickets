@@ -3,14 +3,25 @@
     <header class="page-header">
       <p class="eyebrow">{{ auth.email }}</p>
       <h1>購票紀錄</h1>
+      <button type="button" class="primary-button" :disabled="loading" @click="loadOrders">
+        {{ loading ? '更新中…' : '重新整理訂單' }}
+      </button>
     </header>
 
-    <div v-if="loading" class="empty-state">
+    <div v-if="loadError" class="empty-state" role="alert">
+      <h2>目前無法載入訂單</h2>
+      <p>連線可能暫時中斷，請重試。已載入的票券會保留在下方。</p>
+      <button type="button" class="primary-button" :disabled="loading" @click="loadOrders">
+        {{ loading ? '重試中…' : '重新載入' }}
+      </button>
+    </div>
+
+    <div v-if="loading && orders.length === 0" class="empty-state" role="status">
       正在尋找你的訂單
     </div>
 
     <div
-      v-else-if="orders.length === 0"
+      v-else-if="!loadError && orders.length === 0"
       class="empty-state"
     >
       <h2>No Tickets Found</h2>
@@ -25,7 +36,7 @@
       </router-link>
     </div>
 
-    <div v-else class="order-list">
+    <div v-if="orders.length > 0" class="order-list" :aria-busy="loading">
       <article
         v-for="(order, index) in orders"
         :key="order.id"
@@ -104,6 +115,7 @@
         <button
           type="button"
           class="ticket-stub"
+          :aria-label="`開啟訂單 ${order.id} 的領票 QR Code`"
           @click="openQr(order)"
         >
           <canvas
@@ -111,6 +123,7 @@
             class="qr-thumb"
             width="88"
             height="88"
+            aria-hidden="true"
           />
         </button>
       </article>
@@ -152,7 +165,14 @@
           class="qr-modal-canvas"
           width="220"
           height="220"
+          role="img"
+          :aria-label="`訂單 ${activeOrder?.id || ''} 的領票 QR Code`"
         />
+
+        <p v-if="qrError" role="alert">{{ qrError }}</p>
+        <button v-if="qrError" type="button" class="primary-button" @click="openQr(activeOrder)">
+          重新產生 QR Code
+        </button>
 
         <p class="qr-modal-hint">
           入場或領票時請出示此 QR Code
@@ -164,17 +184,17 @@
 
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
-import { useToastStore } from 'src/stores/toast'
 import { fetchMyOrders } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { formatDateTime as formatDate } from 'src/utils/datetime'
 import { renderOrderQr } from 'src/utils/qrcode'
 
 const auth = useAuthStore()
-const toast = useToastStore()
 
 const orders = ref([])
 const loading = ref(true)
+const loadError = ref(false)
+const qrError = ref('')
 
 const qrRefs = new Map()
 
@@ -184,6 +204,7 @@ const modalQrCanvas = ref(null)
 
 function setQrRef(id, el) {
   if (el) qrRefs.set(id, el)
+  else qrRefs.delete(id)
 }
 
 async function renderQrs() {
@@ -202,14 +223,15 @@ async function renderQrs() {
 }
 
 async function loadOrders() {
+  if (loading.value && orders.value.length > 0) return
   loading.value = true
+  loadError.value = false
 
   try {
     orders.value = await fetchMyOrders(auth.user.uid)
   } catch (error) {
     console.error(error)
-    orders.value = []
-    toast.show('目前無法載入訂單，請稍後再試。')
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -220,6 +242,8 @@ async function loadOrders() {
 onMounted(loadOrders)
 
 async function openQr(order) {
+  if (!order) return
+  qrError.value = ''
   activeOrder.value = order
   showQr.value = true
 
@@ -230,7 +254,7 @@ async function openQr(order) {
     await renderOrderQr(modalQrCanvas.value, order)
   } catch (error) {
     console.error('QR Code 產生失敗', error)
-    toast.show('QR Code 產生失敗')
+    qrError.value = '目前無法產生 QR Code，請重新產生或開啟訂單明細。'
   }
 }
 

@@ -8,10 +8,12 @@
   "type": "module",
   "scripts": {
     "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
-    "test": "cd functions && yarn test",
+    "test": "yarn test:client && yarn --cwd functions test",
+    "test:client": "node --test tests/checkoutRecovery.test.js tests/notificationProgress.test.js",
+    "test:checkout": "node --test tests/checkoutRecovery.test.js",
     "dev": "quasar dev",
     "build": "quasar build",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-cksc-ticket \"node --test tests/*.test.js\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-cksc-ticket \"node --test tests/firestore.rules.test.js\""
   },
   "dependencies": {
     "@quasar/extras": "^1.16.4",

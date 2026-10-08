@@ -10,7 +10,9 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Server-side order validation in a Cloud Function transaction, so tickets cannot be oversold
 - Confirmation email with a QR code that door staff scan into the admin order view
 - Role-based administration for managers, admins, and super admins
-- Bulk payment / pickup notification emails through AWS SES
+- Atomic QR collection and payment updates with staff audit history
+- Shared queued AWS SES delivery for confirmation and payment / pickup emails
+- Live, paginated admin orders with separate order-value and collected-payment totals
 - Party introduction, lineup pages and a user survey managed from the admin UI
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 
@@ -101,9 +103,9 @@ dist/spa
 ## Tests
 
 ```bash
-cd functions && yarn test             # order validation, time handling, SES mailer (no emulator needed)
+yarn test                            # checkout/campaign recovery and backend units (no emulator needed)
 yarn test:rules                        # Firestore rules, needs Java for the emulator
-cd functions && yarn test:emulator    # createOrder transaction / oversell test, needs Java
+yarn --cwd functions test:emulator    # checkout, atomic staff actions and mail queue, needs Java
 cd functions && yarn test:load        # load test: hundreds of simultaneous checkouts, needs Java
 ```
 
@@ -140,7 +142,7 @@ firebase use <your-project>
 
 ## Cloud Functions & Email
 
-See [functions/README.md](functions/README.md) for the function list and the AWS SES secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`) they need. Ordering does not work without the functions deployed.
+See [functions/README.md](functions/README.md) for the function list, queued-mail outcomes, release order, and AWS SES secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`). Ordering and staff status changes need the functions deployed; queued mail also needs the scheduled worker running.
 
 ## Ticket Eligibility and Purchase Limits
 
@@ -196,7 +198,7 @@ dist/spa
 The frontend is hosted on GitHub Pages; deploy only the rules and functions:
 
 ```bash
-firebase deploy -P cksc-ticket --only firestore:rules,functions
+firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,functions
 ```
 
 ## Main Routes

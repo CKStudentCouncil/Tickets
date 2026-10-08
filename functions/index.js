@@ -1,3 +1,5 @@
 export { createOrder, planStockShards, releaseOrderStock, resendOrderEmail, sendOrderQRCode } from './lib/orders.js'
-export { prepareOrderNotification, sendOrderNotification } from './lib/notifications.js'
+export { prepareOrderNotification, sendOrderNotification, getOrderNotificationStatus } from './lib/notifications.js'
 export { uploadLineupImage, deleteLineupImage } from './lib/lineup.js'
+export { processMailQueue } from './lib/mailQueue.js'
+export { updateOrderDelivery, updateOrderPayment } from './lib/orderActions.js'

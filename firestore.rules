@@ -1,5 +1,16 @@
 rules_version = '2';
 
+// Assumed order model: orders/{id} is created by trusted Cloud Functions with
+// immutable buyer userId, ticketCode, items and totals. delivered / paid are
+// booleans; their UpdatedAt (timestamp), UpdatedByUid and UpdatedByName are
+// written only by atomic staff callables. Admin clients retain deletion access.
+// orders/{id}/history/{eventId} records action, previousValue/value (bool),
+// actorUid/name, occurredAt (timestamp), and optional codeVerification /
+// overrideReason. Trusted functions append it atomically with status changes;
+// clients cannot create, update or delete audit records. Staff may read retained
+// history after an order is deleted. Existing public content and staff flows
+// outside orders keep their established access rules.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -136,21 +147,16 @@ service cloud.firestore {
       allow list: if isAdmin() || isOrderOwner();
       allow create: if false;
 
-      allow update: if (
-        isManager()
-        && onlyChanges(['delivered', 'deliveryUpdatedAt', 'deliveryUpdatedByName'])
-        && request.resource.data.delivered is bool
-      ) || (
-        isAdmin()
-        && onlyChanges([
-          'delivered', 'deliveryUpdatedAt', 'deliveryUpdatedByName',
-          'paid', 'paymentUpdatedAt', 'paymentUpdatedByName'
-        ])
-        && request.resource.data.get('delivered', false) is bool
-        && request.resource.data.get('paid', false) is bool
-      );
+      // Status transitions and attribution require the atomic callables. Even
+      // administrators cannot bypass their stale-state / QR checks directly.
+      allow update: if false;
 
       allow delete: if isAdmin();
+
+      match /history/{eventId} {
+        allow read: if isManager();
+        allow create, update, delete: if false;
+      }
     }
 
     // Buyers never update or delete orders. ticketSales, buyerPurchases,

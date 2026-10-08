@@ -1,13 +1,11 @@
-import { ref, computed, watch } from 'vue'
-import { saveAs } from 'file-saver'
-import ExcelJS from 'exceljs'
+import { ref, computed, watch, onScopeDispose } from 'vue'
 import { SCHOOLS } from 'src/data/schools'
 import { debounce } from 'src/utils/debounce'
 import { formatDateTime } from 'src/utils/datetime'
-import { useAuthStore } from 'src/stores/auth'
 import {
   fetchAllOrders,
-  updateOrderDelivery,
+  subscribeOrderPage,
+  fetchOrderSummary,
   updateOrderPayment,
   deleteOrder as deleteOrderDoc
 } from 'src/services/orderService'
@@ -19,17 +17,21 @@ function itemSubtotal(item) {
 function calculateStatistics(ordersList) {
   const productCounts = {}
   const productCosts = {}
-  let totalRevenue = 0
+  let bookedAmount = 0
+  let paidAmount = 0
+  let ticketCount = 0
 
   ordersList.forEach((order) => {
     ;(order.items || []).forEach((item) => {
       productCounts[item.name] = (productCounts[item.name] || 0) + Number(item.quantity || 0)
       productCosts[item.name] = (productCosts[item.name] || 0) + itemSubtotal(item)
+      ticketCount += Number(item.quantity || 0)
     })
-    totalRevenue += Number(order.finalTotal || 0)
+    bookedAmount += Number(order.finalTotal || 0)
+    if (order.paid) paidAmount += Number(order.finalTotal || 0)
   })
 
-  return { productCounts, productCosts, totalRevenue }
+  return { productCounts, productCosts, bookedAmount, paidAmount, ticketCount }
 }
 
 function calculateDeliveryStats(ordersList) {
@@ -155,158 +157,226 @@ function buildSchoolSheets(exportOrders) {
 }
 
 export function useAdminOrders({ showToast }) {
-  const authStore = useAuthStore()
   const orders = ref([])
   const loading = ref(true)
+  const loadError = ref('')
+  const fromCache = ref(false)
   const activeTab = ref('all')
   const selectedSchool = ref('all')
   const customerSearchInput = ref('')
-  const emailFilter = ref('all') // all / failed / pending confirmation emails
+  const emailFilter = ref('all')
   const debouncedCustomerSearch = ref('')
+  const pageNumber = ref(1)
+  const hasNext = ref(false)
+  const pendingPaymentIds = ref(new Set())
+  const exporting = ref(false)
+  const summary = ref(null)
+  const summaryError = ref('')
+  const summaryLoading = ref(false)
+  const summaryUpdatedAt = ref(null)
+  let unsubscribe = null
+  let displayedQueryKey = ''
+  let pageCursor = null
+  let cursors = [null]
+  let started = false
+  let pageSequence = 0
+  let summarySequence = 0
+  let summaryTimer
+
+  const filters = computed(() => ({
+    school: selectedSchool.value,
+    emailStatus: emailFilter.value,
+    ...(activeTab.value === 'delivered' ? { delivered: true } : {})
+  }))
 
   const applyDebouncedSearch = debounce((val) => {
     debouncedCustomerSearch.value = val.trim().toLowerCase()
   }, 300)
-
   watch(customerSearchInput, (val) => applyDebouncedSearch(val))
 
-  const deliveredOrders = computed(() => orders.value.filter((order) => order.delivered))
-
-  function filterOrders(ordersList) {
+  const currentOrders = computed(() => {
     const q = debouncedCustomerSearch.value
-
-    return ordersList.filter((order) => {
-      if (selectedSchool.value !== 'all' && order.school !== selectedSchool.value) return false
-      if (emailFilter.value !== 'all' && order.emailStatus !== emailFilter.value) return false
-      if (!q) return true
-      return (
-        (order.customerName || '').toLowerCase().includes(q) ||
-        (order.customerEmail || '').toLowerCase().includes(q) ||
-        (order.customerPhone || '').includes(q)
-      )
-    })
-  }
-
-  const currentOrders = computed(() =>
-    filterOrders(activeTab.value === 'delivered' ? deliveredOrders.value : orders.value)
-  )
-
-  const deliveredTabCount = computed(() => filterOrders(deliveredOrders.value).length)
-
+    if (!q) return orders.value
+    return orders.value.filter((order) =>
+      (order.customerName || '').toLowerCase().includes(q) ||
+      (order.customerEmail || '').toLowerCase().includes(q) ||
+      (order.customerPhone || '').includes(q)
+    )
+  })
   const currentStats = computed(() => calculateStatistics(currentOrders.value))
 
-  function setActiveTab(tab) {
-    activeTab.value = tab
+  async function refreshSummary() {
+    const sequence = ++summarySequence
+    summaryLoading.value = true
+    summaryError.value = ''
+    try {
+      const result = await fetchOrderSummary(filters.value)
+      if (sequence === summarySequence) {
+        summary.value = result
+        summaryUpdatedAt.value = new Date()
+      }
+    } catch (error) {
+      if (sequence === summarySequence) {
+        summaryError.value = '總覽載入失敗，請重試。'
+        console.error(error)
+      }
+    } finally {
+      if (sequence === summarySequence) summaryLoading.value = false
+    }
+  }
+
+  function scheduleSummary() {
+    clearTimeout(summaryTimer)
+    summaryTimer = setTimeout(refreshSummary, 400)
+  }
+
+  function fetchOrders({ reset = false } = {}) {
+    started = true
+    if (reset) {
+      pageNumber.value = 1
+      cursors = [null]
+      summary.value = null
+      summaryUpdatedAt.value = null
+      ++summarySequence
+    }
+    unsubscribe?.()
+    const sequence = ++pageSequence
+    const queryKey = JSON.stringify({ filters: filters.value, page: pageNumber.value })
+    if (displayedQueryKey && displayedQueryKey !== queryKey) orders.value = []
+    loading.value = true
+    loadError.value = ''
+    hasNext.value = false
+    unsubscribe = subscribeOrderPage({
+      filters: filters.value,
+      cursor: cursors[pageNumber.value - 1],
+      onData: (result) => {
+        if (sequence !== pageSequence) return
+        if (!result.fromCache || result.orders.length || displayedQueryKey !== queryKey) {
+          orders.value = result.orders
+          displayedQueryKey = queryKey
+        }
+        pageCursor = result.cursor
+        hasNext.value = result.hasNext
+        fromCache.value = result.fromCache
+        loading.value = false
+        loadError.value = ''
+        if (!result.fromCache) scheduleSummary()
+      },
+      onError: (error) => {
+        if (sequence !== pageSequence) return
+        loading.value = false
+        loadError.value = '訂單載入失敗，請重試。'
+        console.error(error)
+      }
+    })
+    refreshSummary()
+  }
+
+  watch(filters, () => { if (started) fetchOrders({ reset: true }) })
+  onScopeDispose(() => {
+    unsubscribe?.()
+    clearTimeout(summaryTimer)
+    ++pageSequence
+    ++summarySequence
+  })
+
+  function nextPage() {
+    if (loading.value || !hasNext.value || !pageCursor) return
+    cursors[pageNumber.value] = pageCursor
+    pageNumber.value += 1
+    fetchOrders()
+  }
+
+  function previousPage() {
+    if (loading.value || pageNumber.value === 1) return
+    pageNumber.value -= 1
+    fetchOrders()
   }
 
   function patchOrder(orderId, patch) {
-    orders.value = orders.value.map((order) =>
-      order.id === orderId ? { ...order, ...patch } : order
-    )
-  }
-
-  async function fetchOrders() {
-    try {
-      loading.value = true
-      orders.value = await fetchAllOrders()
-    } catch (err) {
-      console.error(err)
-      showToast('獲取訂單失敗')
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function updateDeliveryStatus(orderId, delivered) {
-    try {
-      patchOrder(orderId, await updateOrderDelivery(orderId, delivered, authStore.displayName))
-      showToast(delivered ? '已標記為已領票' : '已標記為未領票')
-    } catch (err) {
-      showToast('更新失敗：' + err.message)
-    }
+    orders.value = orders.value.map((order) => order.id === orderId ? { ...order, ...patch } : order)
   }
 
   async function updatePaymentStatus(orderId, paid) {
+    const order = orders.value.find((item) => item.id === orderId)
+    if (!order || pendingPaymentIds.value.has(orderId) || Boolean(order.paid) === paid) return
+    if (!window.confirm(`確定將訂單 ${orderId} 標記為${paid ? '已付款' : '未付款'}嗎？`)) return
+    pendingPaymentIds.value = new Set([...pendingPaymentIds.value, orderId])
     try {
-      patchOrder(orderId, await updateOrderPayment(orderId, paid, authStore.displayName))
+      patchOrder(orderId, await updateOrderPayment(orderId, paid, Boolean(order.paid)))
       showToast(paid ? '已標記為已付款' : '已標記為未付款')
-    } catch (err) {
-      showToast('更新失敗：' + err.message)
+      refreshSummary()
+    } catch (error) {
+      if (typeof error?.details?.paid === 'boolean') patchOrder(orderId, error.details)
+      showToast(error?.message || '付款狀態更新失敗，請重試。')
+    } finally {
+      pendingPaymentIds.value = new Set([...pendingPaymentIds.value].filter((id) => id !== orderId))
     }
   }
 
   async function deleteOrder(orderId) {
     await deleteOrderDoc(orderId)
     orders.value = orders.value.filter((order) => order.id !== orderId)
+    refreshSummary()
     showToast('訂單已刪除')
   }
 
-  async function exportToExcel(onlyDelivered = false) {
-    const exportOrders = filterOrders(onlyDelivered ? deliveredOrders.value : orders.value)
-    const stats = calculateStatistics(exportOrders)
-
-    const summaryRows = Object.entries(stats.productCounts).map(([name, total]) => ({
-      項目名稱: name,
-      總數量: total,
-      總金額: stats.productCosts[name] || 0
-    }))
-
-    summaryRows.push({}, { 項目名稱: '總營收', 總數量: '-', 總金額: stats.totalRevenue })
-
-    const deliveryStats = onlyDelivered ? calculateDeliveryStats(exportOrders) : {}
-    if (Object.keys(deliveryStats).length > 0) {
-      summaryRows.push({}, { 項目名稱: '=== 領票人員統計 ===' })
-      Object.entries(deliveryStats).forEach(([updater, { count, totalAmount }]) => {
-        summaryRows.push({
-          項目名稱: `${updater} (工作人員)`,
-          總數量: `${count} 筆訂單`,
-          總金額: `NT$ ${totalAmount}`
+  async function exportToExcel() {
+    if (exporting.value) return
+    exporting.value = true
+    // Freeze the filters before awaiting imports/reads. Local name search only
+    // searches a visible page and is intentionally excluded from full export.
+    const exportFilters = { ...filters.value }
+    const onlyDelivered = exportFilters.delivered === true
+    try {
+      const [exportOrders, excelModule, saverModule] = await Promise.all([
+        fetchAllOrders(exportFilters), import('exceljs'), import('file-saver')
+      ])
+      const ExcelJS = excelModule.default
+      const saveAs = saverModule.saveAs || saverModule.default.saveAs || saverModule.default
+      const stats = calculateStatistics(exportOrders)
+      const summaryRows = Object.entries(stats.productCounts).map(([name, total]) => ({
+        項目名稱: name, 總數量: total, 訂單金額: stats.productCosts[name] || 0
+      }))
+      summaryRows.push({},
+        { 項目名稱: '訂單應收金額', 訂單金額: stats.bookedAmount },
+        { 項目名稱: '已收款金額', 訂單金額: stats.paidAmount })
+      const deliveryStats = onlyDelivered ? calculateDeliveryStats(exportOrders) : {}
+      if (Object.keys(deliveryStats).length) {
+        summaryRows.push({}, { 項目名稱: '領票人員統計' })
+        Object.entries(deliveryStats).forEach(([updater, { count, totalAmount }]) => {
+          summaryRows.push({ 項目名稱: updater, 總數量: `${count} 筆訂單`, 訂單金額: totalAmount })
         })
+      }
+      const sheetPrefix = onlyDelivered ? '已領票' : '全部'
+      const { rows, merges } = buildOrderRows(exportOrders)
+      const workbook = new ExcelJS.Workbook()
+      appendJsonWorksheet(workbook, `${sheetPrefix}票券統計`, summaryRows)
+      appendJsonWorksheet(workbook, `${sheetPrefix}訂單明細`, rows, merges)
+      buildSchoolSheets(exportOrders).forEach(({ name, rows: schoolRows }) => {
+        appendJsonWorksheet(workbook, name, schoolRows)
       })
+      const schoolPrefix = exportFilters.school !== 'all' ? `${exportFilters.school}_` : ''
+      const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date())
+      const filename = `${schoolPrefix}${onlyDelivered ? '已領票' : ''}訂單統計_${date}.xlsx`
+      const excelBuffer = await workbook.xlsx.writeBuffer()
+      saveAs(new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename)
+      showToast('Excel 已匯出')
+    } catch (error) {
+      console.error(error)
+      showToast('匯出失敗，請重試。')
+    } finally {
+      exporting.value = false
     }
-
-    const sheetPrefix = onlyDelivered ? '已領票' : '全部'
-    const { rows, merges } = buildOrderRows(exportOrders)
-    const workbook = new ExcelJS.Workbook()
-
-    appendJsonWorksheet(workbook, `${sheetPrefix}票券統計`, summaryRows)
-    appendJsonWorksheet(workbook, `${sheetPrefix}訂單明細`, rows, merges)
-    buildSchoolSheets(exportOrders).forEach(({ name, rows: schoolRows }) => {
-      appendJsonWorksheet(workbook, name, schoolRows)
-    })
-
-    const schoolPrefix = selectedSchool.value !== 'all' ? `${selectedSchool.value}_` : ''
-    const filename = `${schoolPrefix}${onlyDelivered ? '已領票' : ''}訂單統計_${new Date().toISOString().slice(0, 10)}.xlsx`
-    const excelBuffer = await workbook.xlsx.writeBuffer()
-
-    saveAs(
-      new Blob([excelBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      }),
-      filename
-    )
-    showToast('Excel 已匯出')
   }
 
   return {
-    schools: SCHOOLS,
-    orders,
-    loading,
-    activeTab,
-    selectedSchool,
-    customerSearchInput,
-    emailFilter,
-    patchOrder,
-    currentOrders,
-    deliveredTabCount,
-    currentStats,
-    setActiveTab,
-    fetchOrders,
-    updateDeliveryStatus,
-    updatePaymentStatus,
-    deleteOrder,
-    exportToExcel,
-    calculateDeliveryStats,
+    schools: SCHOOLS, orders, loading, loadError, fromCache, activeTab,
+    selectedSchool, customerSearchInput, emailFilter, patchOrder, currentOrders,
+    currentStats, summary, summaryError, summaryLoading, summaryUpdatedAt, pageNumber, hasNext,
+    pendingPaymentIds, exporting, nextPage, previousPage, refreshSummary,
+    setActiveTab: (tab) => { activeTab.value = tab }, fetchOrders,
+    updatePaymentStatus, deleteOrder, exportToExcel, calculateDeliveryStats,
     formatDate: formatDateTime
   }
 }

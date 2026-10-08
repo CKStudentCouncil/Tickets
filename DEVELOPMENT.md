@@ -119,10 +119,10 @@ For a new development project, bootstrap the first super admin by adding `users/
 ### Checkout
 
 1. `ProductPage.vue` loads ticket settings and collects buyer details and consent.
-2. `src/services/orderService.js` calls `createOrder` with the payload and a generated `requestId`. Its retry loop reuses that ID.
+2. `src/services/orderService.js` persists the payload and `requestId` per account before calling `createOrder`. Automatic retries, manual retries and reloads reuse it until success or an authoritative rejection.
 3. `functions/lib/orders.js` takes the UID and verified email from authentication, validates the shop opening and ticket configuration, and reserves stock and buyer allowance in a Firestore transaction.
 4. The function saves the order and returns `{ id }`. A repeated request with the same ID returns the already-created order.
-5. The order-created trigger sends the confirmation email and records its delivery status. The email's QR code opens `/admin/orders/{id}?c={ticketCode}`.
+5. The order-created trigger enqueues a deterministic confirmation job. The shared scheduled worker records SES acceptance or a failed/uncertain outcome. The email's QR code opens `/admin/orders/{id}?c={ticketCode}`.
 
 Keep price, eligibility, sale windows, stock limits, and purchase limits authoritative on the server. Changes to validation belong in [functions/lib/orderValidation.js](functions/lib/orderValidation.js) and its tests, with matching frontend feedback where needed. Preserve the same request ID when retrying an uncertain checkout result.
 
@@ -135,13 +135,16 @@ Campus-only tickets require both the school `建國中學` and an account at `@g
 | `settings/ticketTypes` | Ticket prices, stock, sale windows, eligibility, and purchase limits; shared by frontend and backend |
 | `settings/shop` | Public `openAt` timestamp, written by super admins |
 | `orders/{id}` | Buyer ownership, purchased items, payment/delivery state, ticket code, and email status |
+| `orders/{id}/history/{eventId}` | Function-only append-only staff action history; staff may read it |
 | `users/{uid}`, `pendingUsers/{email}` | Active staff profiles and invitations |
 | `partyStories`, `partyLineup` | Scheduled public content |
 | `surveyResponses` | Public survey submissions, subject to rules validation |
 | `ticketSales/{typeId}/shards/{shardId}` | Backend stock counters, with caps on the parent ticket-sales document |
-| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs` | Backend-only allowance, retry, rate-limit, stock-release, and email-job bookkeeping |
+| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl` | Backend-only allowance, recovery, rate-limit, stock-release, campaign and mail-worker bookkeeping |
 
-Create orders through `createOrder`; clients cannot create them directly. Order deletion triggers stock and allowance release. Client writes to backend bookkeeping collections are denied.
+Create orders through `createOrder`; clients cannot create or update them directly. Staff collection and payment use the expected-state callables in `orderActions.js`, with trusted attribution and atomic audit writes. Order deletion triggers stock and allowance release and invalidates shard caps. Client writes to backend bookkeeping collections are denied.
+
+Admin reads use bounded live pages and filter-specific server aggregates. Name/email/phone search applies to the visible page; exact order ID lookup covers any order. Full Excel export explicitly paginates the selected filters and loads ExcelJS only when requested. Order value and collected payment are distinct in both UI and export.
 
 In ticket configuration, `unlimitedStock` controls total stock, while `unlimited` controls the per-person allowance. Keep those flags distinct when changing the management form or validation. A type with missing or zero stock sells nothing unless `unlimitedStock` is true.
 
@@ -179,13 +182,13 @@ The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-eas
 | `ENFORCE_APP_CHECK` | `false` | Require App Check for `createOrder` |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Keep checkout instances warm |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Limit orders per account per ten minutes; zero disables the limit |
-| `SES_RECIPIENTS_PER_SECOND` | `14` | Pace bulk notification recipients |
+| `SES_RECIPIENTS_PER_SECOND` | `14` | Share pacing across confirmations, resends and notification recipients |
 
 These are code defaults; the project's deployed values may differ. Changes require redeploying functions.
 
 AWS SES email credentials use Secret Manager secrets named `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION`. Keep credentials out of `functions/.env`. The sender is configured in [functions/lib/mailer.js](functions/lib/mailer.js). See [functions/README.md](functions/README.md) for secret setup and function-specific details.
 
-Bulk notifications have a prepare step that records recipients, followed by a send step with leasing and progress tracking. Use unit tests to verify mail changes without sending live email. For manual sends, use a development project and intended test recipients.
+Bulk notifications prepare a frozen audience, then enqueue deterministic batches. `getOrderNotificationStatus` polls progress while a scheduled shared worker sends independently of the browser. `accepted` means SES acceptance, not inbox delivery; `uncertain` stops automatic resend and requires outcome review. See `functions/README.md` for leases, pacing and rollout requirements. Use injected-transport emulator tests to verify delivery changes without sending live email.
 
 ## Validation
 
@@ -193,9 +196,9 @@ Run the checks relevant to your change from the repository root:
 
 | Command | Checks | Requirements |
 | --- | --- | --- |
-| `yarn test` | Backend unit tests, including validation, mailer behavior, notifications, and shared-value consistency | Root and functions dependencies; no emulator |
+| `yarn test` | Browser checkout/campaign recovery and backend units, including validation, mailer, notifications and shared-value consistency | Root and functions dependencies; no emulator |
 | `yarn test:rules` | Firestore permissions, ownership, role boundaries, and survey validation | Root dependencies, Firebase CLI, Java |
-| `yarn --cwd functions test:emulator` | Checkout transactions, retries, stock release, and concurrent stock limits | Functions dependencies, Firebase CLI, Java |
+| `yarn --cwd functions test:emulator` | Checkout/recovery, concurrent stock limits, atomic staff actions and shared mail queue | Functions dependencies, Firebase CLI, Java |
 | `yarn --cwd functions test:load` | Concurrent checkout load scenarios; each gets a fresh emulator | Functions dependencies, Firebase CLI, Java; run when changing stock/concurrency behavior |
 | `yarn build` | Production frontend compilation into `dist/spa` | Root dependencies |
 
