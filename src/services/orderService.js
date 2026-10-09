@@ -20,6 +20,7 @@ import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from 'src/boot/firebase'
 import { createCheckoutRecovery, submitRecoveredCheckout } from 'src/utils/checkoutRecovery'
 import { parseDate } from 'src/utils/datetime'
+import { scanOrderSearchPage } from 'src/utils/orderSearch'
 
 const createOrderCallable = httpsCallable(functions, 'createOrder')
 const resendOrderEmailCallable = httpsCallable(functions, 'resendOrderEmail')
@@ -129,8 +130,22 @@ export function subscribeOrderPage({ filters, cursor, onData, onError }) {
     }, onError)
 }
 
-// Whole-dataset reads are reserved for a deliberate export and remain bounded
-// per request. The dashboard uses server aggregates instead of these reads.
+// Search every filtered order, scanning bounded batches until a full page of
+// matches (plus one lookahead) is found. Existing orders need no backfill.
+export function fetchOrderSearchPage({ filters = {}, searchText, cursor = null, signal }) {
+  return scanOrderSearchPage({
+    searchText, cursor, signal, pageSize: ORDER_PAGE_SIZE,
+    fetchBatch: async (batchCursor, batchSize) => {
+      const snapshot = await getDocsFromServer(pagedOrderQuery(filters, batchCursor, batchSize))
+      return snapshot.docs.map((item) => ({
+        order: { id: item.id, ...item.data() }, cursor: item
+      }))
+    }
+  })
+}
+
+// Export materializes the full filtered dataset in bounded requests. The
+// dashboard uses server aggregates; search retains only one page of matches.
 export async function fetchAllOrders(filters = {}) {
   const orders = []
   let cursor = null

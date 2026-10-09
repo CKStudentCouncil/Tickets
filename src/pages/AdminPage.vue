@@ -51,13 +51,15 @@
       v-if="canManageOrders"
       class="filter-block"
     >
-      <label for="admin-search">搜尋本頁訂購者：</label>
+      <label for="admin-search">搜尋訂單：</label>
       <input
         id="admin-search"
         v-model="customerSearchInput"
-        type="text"
-        placeholder="僅搜尋目前這 50 筆：姓名、Email 或電話"
+        type="search"
+        placeholder="姓名、電話、Email、訂單編號或其他資訊"
+        aria-describedby="admin-search-help"
       >
+      <button v-if="customerSearchInput" type="button" class="btn-outline" @click="customerSearchInput = ''">清除搜尋</button>
     </div>
 
     <div
@@ -95,15 +97,7 @@
         已領票
       </button>
     </div>
-
-    <form v-if="canManageOrders" class="filter-block" @submit.prevent="lookupExactOrder">
-      <label for="admin-order-id">查找完整訂單編號（所有訂單）：</label>
-      <input id="admin-order-id" v-model="exactOrderId" placeholder="輸入完整訂單編號" required>
-      <button class="btn" type="submit" :disabled="lookingUpOrder">{{ lookingUpOrder ? '查找中…' : '開啟訂單' }}</button>
-      <p v-if="lookupError" role="alert">{{ lookupError }}</p>
-    </form>
-
-    <div class="panel notify-panel">
+    <div class="panel" style="border-top: none; margin-top: 3.0rem; padding-top: 1.0rem;">
       <div class="notify-header">
         <h2>自動寄送通知</h2>
         <button type="button" class="btn" @click="openNotifyModal">
@@ -275,11 +269,6 @@
     >
       <div>
         <h2>所選篩選條件的完整總覽</h2>
-        <p>依學校、確認信與領票分頁統計；不包含本頁姓名搜尋。</p>
-        <p v-if="summaryUpdatedAt">總覽更新於 {{ formatDate(summaryUpdatedAt) }}</p>
-        <button type="button" class="btn-outline" :disabled="summaryLoading" @click="refreshSummary">更新總覽</button>
-        <p v-if="summaryLoading" role="status">更新總覽中…</p>
-        <p v-if="summaryError" role="alert">{{ summaryError }} <button type="button" class="btn-outline" @click="refreshSummary">重試</button></p>
         <div v-if="summary" class="stats-row">
           <div class="stat"><div>訂單數</div><div class="num">{{ summary.orderCount }}</div></div>
           <div class="stat"><div>訂單應收金額</div><div class="num">NT$ {{ summary.bookedAmount.toLocaleString() }}</div></div>
@@ -335,13 +324,15 @@
       class="orders-section"
     >
       <h2>{{ activeTab === 'delivered' ? '已領票訂單' : '所有訂單' }}</h2>
-      <p v-if="loading" role="status">載入第 {{ pageNumber }} 頁中…</p>
+      <p v-if="loading" role="status">{{ isSearching ? '正在搜尋所有訂單…' : `載入第 ${pageNumber} 頁中…` }}</p>
       <p v-if="loadError" role="alert">{{ loadError }} <button type="button" class="btn" @click="fetchOrders()">重試</button></p>
       <p v-else-if="fromCache" role="status">目前顯示快取資料，連線恢復後會更新。</p>
+      <p v-if="isSearching && !loading && !loadError" role="status">搜尋「{{ searchQuery }}」・本頁 {{ currentOrders.length }} 筆</p>
       <div class="order-page-actions">
         <button type="button" class="btn-outline" :disabled="loading || pageNumber === 1" @click="previousPage">上一頁</button>
         <span>第 {{ pageNumber }} 頁・每頁最多 50 筆</span>
         <button type="button" class="btn-outline" :disabled="loading || !hasNext" @click="nextPage">下一頁</button>
+        <button v-if="isSearching" type="button" class="btn-outline" :disabled="loading" @click="fetchOrders({ reset: true })">更新搜尋結果</button>
       </div>
       <div
         v-for="order in currentOrders"
@@ -480,6 +471,8 @@ const {
   activeTab,
   selectedSchool,
   customerSearchInput,
+  searchQuery,
+  isSearching,
   emailFilter,
   patchOrder,
   currentOrders,

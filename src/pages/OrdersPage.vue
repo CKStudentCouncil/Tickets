@@ -3,9 +3,6 @@
     <header class="page-header">
       <p class="eyebrow">{{ auth.email }}</p>
       <h1>購票紀錄</h1>
-      <button type="button" class="primary-button" :disabled="loading" @click="loadOrders">
-        {{ loading ? '更新中…' : '重新整理訂單' }}
-      </button>
     </header>
 
     <div v-if="loadError" class="empty-state" role="alert">

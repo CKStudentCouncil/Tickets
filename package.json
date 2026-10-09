@@ -9,7 +9,7 @@
   "scripts": {
     "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
     "test": "yarn test:client && yarn --cwd functions test",
-    "test:client": "node --test tests/checkoutRecovery.test.js tests/notificationProgress.test.js",
+    "test:client": "node --test tests/checkoutRecovery.test.js tests/notificationProgress.test.js tests/orderSearch.test.js",
     "test:checkout": "node --test tests/checkoutRecovery.test.js",
     "dev": "quasar dev",
     "build": "quasar build",

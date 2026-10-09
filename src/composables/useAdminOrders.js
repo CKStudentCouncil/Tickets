@@ -1,9 +1,9 @@
 import { ref, computed, watch, onScopeDispose } from 'vue'
 import { SCHOOLS } from 'src/data/schools'
-import { debounce } from 'src/utils/debounce'
 import { formatDateTime } from 'src/utils/datetime'
 import {
   fetchAllOrders,
+  fetchOrderSearchPage,
   subscribeOrderPage,
   fetchOrderSummary,
   updateOrderPayment,
@@ -181,7 +181,10 @@ export function useAdminOrders({ showToast }) {
   let started = false
   let pageSequence = 0
   let summarySequence = 0
+  let summaryFilterKey = ''
   let summaryTimer
+  let searchTimer
+  let searchController = null
 
   const filters = computed(() => ({
     school: selectedSchool.value,
@@ -189,20 +192,16 @@ export function useAdminOrders({ showToast }) {
     ...(activeTab.value === 'delivered' ? { delivered: true } : {})
   }))
 
-  const applyDebouncedSearch = debounce((val) => {
-    debouncedCustomerSearch.value = val.trim().toLowerCase()
-  }, 300)
-  watch(customerSearchInput, (val) => applyDebouncedSearch(val))
-
-  const currentOrders = computed(() => {
-    const q = debouncedCustomerSearch.value
-    if (!q) return orders.value
-    return orders.value.filter((order) =>
-      (order.customerName || '').toLowerCase().includes(q) ||
-      (order.customerEmail || '').toLowerCase().includes(q) ||
-      (order.customerPhone || '').includes(q)
-    )
+  watch(customerSearchInput, (val) => {
+    clearTimeout(searchTimer)
+    // Clearing search immediately returns to the live list.
+    if (!val.trim()) debouncedCustomerSearch.value = ''
+    else searchTimer = setTimeout(() => {
+      debouncedCustomerSearch.value = val.normalize('NFKC').trim().toLowerCase()
+    }, 400)
   })
+  const isSearching = computed(() => Boolean(debouncedCustomerSearch.value))
+  const currentOrders = computed(() => orders.value)
   const currentStats = computed(() => calculateStatistics(currentOrders.value))
 
   async function refreshSummary() {
@@ -232,20 +231,56 @@ export function useAdminOrders({ showToast }) {
 
   function fetchOrders({ reset = false } = {}) {
     started = true
-    if (reset) {
-      pageNumber.value = 1
-      cursors = [null]
+    const filterKey = JSON.stringify(filters.value)
+    const summaryFiltersChanged = summaryFilterKey !== filterKey
+    if (summaryFiltersChanged) {
+      summaryFilterKey = filterKey
       summary.value = null
       summaryUpdatedAt.value = null
       ++summarySequence
+      clearTimeout(summaryTimer)
+    }
+    if (reset) {
+      pageNumber.value = 1
+      cursors = [null]
     }
     unsubscribe?.()
+    unsubscribe = null
+    searchController?.abort()
+    searchController = null
     const sequence = ++pageSequence
-    const queryKey = JSON.stringify({ filters: filters.value, page: pageNumber.value })
+    const queryKey = JSON.stringify({
+      filters: filters.value, search: debouncedCustomerSearch.value, page: pageNumber.value
+    })
     if (displayedQueryKey && displayedQueryKey !== queryKey) orders.value = []
     loading.value = true
     loadError.value = ''
     hasNext.value = false
+    if (isSearching.value) {
+      const controller = new AbortController()
+      searchController = controller
+      fromCache.value = false
+      fetchOrderSearchPage({
+        filters: filters.value,
+        searchText: debouncedCustomerSearch.value,
+        cursor: cursors[pageNumber.value - 1],
+        signal: controller.signal
+      }).then((result) => {
+        if (sequence !== pageSequence) return
+        orders.value = result.orders
+        displayedQueryKey = queryKey
+        pageCursor = result.cursor
+        hasNext.value = result.hasNext
+      }).catch((error) => {
+        if (sequence !== pageSequence || controller.signal.aborted) return
+        loadError.value = '訂單搜尋失敗，請重試。'
+        console.error(error)
+      }).finally(() => {
+        if (sequence === pageSequence) loading.value = false
+      })
+      if (summaryFiltersChanged) refreshSummary()
+      return
+    }
     unsubscribe = subscribeOrderPage({
       filters: filters.value,
       cursor: cursors[pageNumber.value - 1],
@@ -272,9 +307,11 @@ export function useAdminOrders({ showToast }) {
     refreshSummary()
   }
 
-  watch(filters, () => { if (started) fetchOrders({ reset: true }) })
+  watch([filters, debouncedCustomerSearch], () => { if (started) fetchOrders({ reset: true }) })
   onScopeDispose(() => {
     unsubscribe?.()
+    searchController?.abort()
+    clearTimeout(searchTimer)
     clearTimeout(summaryTimer)
     ++pageSequence
     ++summarySequence
@@ -324,8 +361,8 @@ export function useAdminOrders({ showToast }) {
   async function exportToExcel() {
     if (exporting.value) return
     exporting.value = true
-    // Freeze the filters before awaiting imports/reads. Local name search only
-    // searches a visible page and is intentionally excluded from full export.
+    // Freeze filters before awaiting imports/reads. The export and dashboard
+    // summary cover these filters; the search keyword only narrows the list.
     const exportFilters = { ...filters.value }
     const onlyDelivered = exportFilters.delivered === true
     try {
@@ -372,7 +409,8 @@ export function useAdminOrders({ showToast }) {
 
   return {
     schools: SCHOOLS, orders, loading, loadError, fromCache, activeTab,
-    selectedSchool, customerSearchInput, emailFilter, patchOrder, currentOrders,
+    selectedSchool, customerSearchInput, searchQuery: debouncedCustomerSearch,
+    isSearching, emailFilter, patchOrder, currentOrders,
     currentStats, summary, summaryError, summaryLoading, summaryUpdatedAt, pageNumber, hasNext,
     pendingPaymentIds, exporting, nextPage, previousPage, refreshSummary,
     setActiveTab: (tab) => { activeTab.value = tab }, fetchOrders,

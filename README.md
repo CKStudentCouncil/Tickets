@@ -13,6 +13,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Atomic QR collection and payment updates with staff audit history
 - Shared queued AWS SES delivery for confirmation and payment / pickup emails
 - Live, paginated admin orders with separate order-value and collected-payment totals
+- Search all admin orders by name, phone, email, order ID, school/class details, office, or ticket name
 - Party introduction, lineup pages and a user survey managed from the admin UI
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 
