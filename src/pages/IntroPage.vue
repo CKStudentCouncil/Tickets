@@ -8,10 +8,10 @@
 
         <h1>關於建中舞會</h1>
 
-        <p class="intro">
+        <!--<p class="intro">
             Cosmos, the universe, the infinite space, and the endless possibilities. <br>
           <br>
-        </p>
+        </p>-->
       </header>
 
       <!-- Loading -->
