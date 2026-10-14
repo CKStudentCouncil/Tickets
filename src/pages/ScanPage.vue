@@ -3,7 +3,18 @@
     <main class="scan-content">
       <header class="page-heading">
         <p class="eyebrow">領票</p>
-        <h1>掃描票券</h1>
+        <div class="title-row">
+          <h1>掃描票券</h1>
+          <button
+            type="button"
+            class="help-button"
+            aria-label="使用教學"
+            title="使用教學"
+            @click="openGuide"
+          >
+            ?
+          </button>
+        </div>
         <p class="lead">將購票人的票券 QR Code 對準框內，讀到後會自動開啟訂單。</p>
       </header>
 
@@ -17,6 +28,7 @@
         />
         <div v-if="state === 'scanning'" class="frame" aria-hidden="true" />
         <p v-if="state === 'starting'" class="overlay">正在開啟相機…</p>
+        <p v-else-if="state === 'guide'" class="overlay">看完使用教學後會開啟相機</p>
         <div v-else-if="state === 'error'" class="overlay">
           <p role="alert">{{ errorMessage }}</p>
           <button type="button" class="primary-button" @click="start">重新開啟相機</button>
@@ -44,6 +56,26 @@
         <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。</p>
       </form>
     </main>
+
+    <q-dialog v-model="guideOpen" @hide="onGuideHide">
+      <div class="guide" aria-labelledby="guide-title">
+        <p class="guide-count">使用教學 · {{ step + 1 }} / {{ GUIDE_STEPS.length }}</p>
+        <h2 id="guide-title">{{ GUIDE_STEPS[step].title }}</h2>
+        <ul class="guide-body">
+          <li v-for="line in GUIDE_STEPS[step].lines" :key="line">{{ line }}</li>
+        </ul>
+        <div class="guide-dots" aria-hidden="true">
+          <span v-for="(item, index) in GUIDE_STEPS" :key="item.title" :class="{ active: index === step }" />
+        </div>
+        <div class="guide-actions">
+          <button v-if="step > 0" type="button" class="secondary-button" @click="step--">上一步</button>
+          <button v-else type="button" class="secondary-button" @click="guideOpen = false">略過</button>
+          <button type="button" class="primary-button" @click="nextStep">
+            {{ step === GUIDE_STEPS.length - 1 ? '開始掃描' : '下一步' }}
+          </button>
+        </div>
+      </div>
+    </q-dialog>
   </div>
 </template>
 
@@ -56,13 +88,68 @@ import { ORDER_ID_PATTERN, parseTicketQr } from 'src/utils/ticketQr'
 
 const router = useRouter()
 
+const GUIDE_STEPS = [
+  {
+    title: '允許使用相機',
+    lines: [
+      '關閉教學後，瀏覽器會詢問是否允許使用相機，請按「允許」。',
+      '若不小心拒絕了，請到瀏覽器的網站設定開啟相機權限，再按「重新開啟相機」。'
+    ]
+  },
+  {
+    title: '對準票券 QR Code',
+    lines: [
+      '請購票人打開確認信，或網站「已購門票」裡的 QR Code。',
+      '將 QR Code 放進畫面中的框內，距離約 15–25 公分，讀到後會自動開啟訂單。',
+      '讀不到時，請購票人調高螢幕亮度。'
+    ]
+  },
+  {
+    title: '核對並領票',
+    lines: [
+      '確認畫面顯示「✓ QR 驗證碼相符」，並核對購票人姓名與票種。',
+      '按「已領票」後，交付紙本票券。',
+      '若顯示驗證碼不符，請勿發票，交由管理員核對身分處理。'
+    ]
+  },
+  {
+    title: '繼續下一位',
+    lines: [
+      '按訂單頁的「掃描下一張」或返回，就會回到掃描畫面。',
+      '無法掃描時，可在下方輸入訂單編號手動開啟，但需由管理員核對身分後才能領票。',
+      '之後可隨時按標題旁的「?」再看一次教學。'
+    ]
+  }
+]
+
+// Shown automatically on this device's first visit only
+const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen'
+
+function guideSeen() {
+  try {
+    return localStorage.getItem(GUIDE_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markGuideSeen() {
+  try {
+    localStorage.setItem(GUIDE_SEEN_KEY, '1')
+  } catch {
+    // private mode: the guide shows again next time
+  }
+}
+
 // Ticket QR codes point at the production site; also accept this origin so
 // QR codes made by a development frontend work there
 const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 
 const video = ref(null)
-// starting | scanning | paused (page hidden) | error
+// guide (first visit, camera waits) | starting | scanning | paused (page hidden) | error
 const state = ref('starting')
+const guideOpen = ref(false)
+const step = ref(0)
 const errorMessage = ref('')
 const notice = ref('')
 const manualId = ref('')
@@ -119,7 +206,25 @@ function openOrder(orderId, ticketCode = '') {
   })
 }
 
+function openGuide() {
+  step.value = 0
+  guideOpen.value = true
+}
+
+function nextStep() {
+  if (step.value < GUIDE_STEPS.length - 1) step.value++
+  else guideOpen.value = false
+}
+
+function onGuideHide() {
+  markGuideSeen()
+  // first visit: ask for the camera only after the guide explained it
+  if (state.value === 'guide') start()
+}
+
 function handleCode(text) {
+  // don't leave the page while staff are reading the guide
+  if (guideOpen.value) return
   const ticket = parseTicketQr(text, origins)
   if (!ticket) {
     // the same wrong code stays in view for many frames; say it once
@@ -157,7 +262,12 @@ function onVisibilityChange() {
 
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
-  start()
+  if (guideSeen()) {
+    start()
+  } else {
+    state.value = 'guide'
+    guideOpen.value = true
+  }
 })
 
 onBeforeUnmount(() => {
@@ -215,6 +325,33 @@ onBeforeUnmount(() => {
   font-size: clamp(2rem, 8vw, 2.6rem);
   font-weight: 800;
   line-height: 1.3;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.help-button {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--off-white);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.help-button:hover {
+  border-color: var(--ember);
+  color: var(--ember);
 }
 
 .lead {
@@ -349,5 +486,73 @@ onBeforeUnmount(() => {
   background: var(--ember);
   color: #111;
   font-weight: 700;
+}
+
+.guide {
+  --surface: #0d1015;
+  --surface-soft: #11151b;
+  --lunar: #9aa3ac;
+  --off-white: #f2f0e9;
+  --ember: #e4a468;
+  --line: rgba(242, 240, 233, .14);
+
+  width: min(100vw - 32px, 440px);
+  padding: 28px 24px 24px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+}
+
+.guide-count {
+  margin: 0 0 10px;
+  color: var(--ember);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .2em;
+}
+
+.guide h2 {
+  margin: 0 0 14px;
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.guide-body {
+  min-height: 132px;
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--lunar);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.guide-body li + li {
+  margin-top: 6px;
+}
+
+.guide-dots {
+  display: flex;
+  gap: 6px;
+  margin: 20px 0;
+}
+
+.guide-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.guide-dots span.active {
+  background: var(--ember);
+}
+
+.guide-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
 }
 </style>
