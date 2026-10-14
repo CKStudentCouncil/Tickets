@@ -25,6 +25,17 @@
           Lineup
         </router-link>
 
+        <button
+          v-if="!route.meta.isAdminSection"
+          class="help-toggle"
+          type="button"
+          aria-label="購票教學"
+          title="購票教學"
+          @click="buyGuideOpen = true"
+        >
+          ?
+        </button>
+
         <div class="menu-wrapper">
           <button
             class="menu-toggle"
@@ -182,6 +193,14 @@
         <span>© <span class="num">{{ currentYear }}</span> CK Tickets. All rights reserved.</span>
       </div>
     </footer>
+
+    <GuideDialog
+      v-model="buyGuideOpen"
+      :steps="BUY_GUIDE_STEPS"
+      label="購票教學"
+      finish-label="我知道了"
+      @hide="markGuideSeen(BUY_GUIDE_SEEN_KEY)"
+    />
   </div>
 </template>
 
@@ -191,6 +210,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
+import GuideDialog from 'src/components/GuideDialog.vue'
+import { BUY_GUIDE_STEPS } from 'src/data/buyGuide'
+import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
 
 const route = useRoute()
 const router = useRouter()
@@ -210,6 +232,17 @@ watch(
 )
 
 const menuOpen = ref(false)
+
+// 購票教學 opens by itself on a device's first visit to the shop side
+const BUY_GUIDE_SEEN_KEY = 'cksc.buyGuideSeen'
+const buyGuideOpen = ref(false)
+watch(
+  () => !auth.loading && !!route.name && !route.meta.isAdminSection,
+  (ready) => {
+    if (ready && !isGuideSeen(BUY_GUIDE_SEEN_KEY)) buyGuideOpen.value = true
+  },
+  { immediate: true }
+)
 const currentYear = computed(() => new Date().getFullYear())
 
 function closeMenu() {

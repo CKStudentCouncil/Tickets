@@ -9,6 +9,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Ticket types (price, sale window, eligibility, stock, per-person limit) configured in the admin UI
 - Server-side order validation in a Cloud Function transaction, so tickets cannot be oversold
 - Confirmation email with a QR code that door staff scan into the admin order view, with the phone's camera app or the in-page scanner on `/admin/scan`
+- A 購票教學 (buying guide) that opens on a visitor's first visit and from the ? in the header afterwards (steps in `src/data/buyGuide.js`)
 - Role-based administration for managers, admins, and super admins
 - Atomic QR collection and payment updates with staff audit history
 - Shared queued AWS SES delivery for confirmation and payment / pickup emails

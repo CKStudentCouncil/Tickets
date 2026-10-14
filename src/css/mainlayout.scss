@@ -129,6 +129,29 @@
 /* ---------- unified menu (single toggle → single dropdown/panel) ---------- */
 .menu-wrapper { position: relative; }
 
+.help-toggle {
+  flex: none;
+  width: 26px; height: 26px;
+  padding: 0;
+  border: 1px solid rgba(242, 240, 233, 0.4);
+  border-radius: 50%;
+  background: none;
+  color: rgba(242, 240, 233, 0.85);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .3s ease, border-color .3s ease;
+
+  &:hover { color: var(--ember); border-color: var(--ember); }
+}
+
+/* phones: make room for the ? button; About stays in the menu (關於我們) */
+@media (max-width: 480px) {
+  .header-actions { gap: 12px; }
+  .about-link { display: none; }
+}
+
 .menu-toggle {
   background: none;
   border: none;

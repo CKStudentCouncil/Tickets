@@ -57,32 +57,21 @@
       </form>
     </main>
 
-    <q-dialog v-model="guideOpen" @hide="onGuideHide">
-      <div class="guide" aria-labelledby="guide-title">
-        <p class="guide-count">使用教學 · {{ step + 1 }} / {{ GUIDE_STEPS.length }}</p>
-        <h2 id="guide-title">{{ GUIDE_STEPS[step].title }}</h2>
-        <ul class="guide-body">
-          <li v-for="line in GUIDE_STEPS[step].lines" :key="line">{{ line }}</li>
-        </ul>
-        <div class="guide-dots" aria-hidden="true">
-          <span v-for="(item, index) in GUIDE_STEPS" :key="item.title" :class="{ active: index === step }" />
-        </div>
-        <div class="guide-actions">
-          <button v-if="step > 0" type="button" class="secondary-button" @click="step--">上一步</button>
-          <button v-else type="button" class="secondary-button" @click="guideOpen = false">略過</button>
-          <button type="button" class="primary-button" @click="nextStep">
-            {{ step === GUIDE_STEPS.length - 1 ? '開始掃描' : '下一步' }}
-          </button>
-        </div>
-      </div>
-    </q-dialog>
+    <GuideDialog
+      v-model="guideOpen"
+      :steps="GUIDE_STEPS"
+      finish-label="開始掃描"
+      @hide="onGuideHide"
+    />
   </div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import GuideDialog from 'src/components/GuideDialog.vue'
 import { SITE_URL } from 'src/config/app'
+import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
 import { cameraErrorMessage, startQrScanner } from 'src/utils/qrScanner'
 import { ORDER_ID_PATTERN, parseTicketQr } from 'src/utils/ticketQr'
 
@@ -125,31 +114,10 @@ const GUIDE_STEPS = [
 // Shown automatically on this device's first visit only
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen'
 
-function guideSeen() {
-  try {
-    return localStorage.getItem(GUIDE_SEEN_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function markGuideSeen() {
-  try {
-    localStorage.setItem(GUIDE_SEEN_KEY, '1')
-  } catch {
-    // private mode: the guide shows again next time
-  }
-}
-
-// Ticket QR codes point at the production site; also accept this origin so
-// QR codes made by a development frontend work there
-const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
-
 const video = ref(null)
 // guide (first visit, camera waits) | starting | scanning | paused (page hidden) | error
 const state = ref('starting')
 const guideOpen = ref(false)
-const step = ref(0)
 const errorMessage = ref('')
 const notice = ref('')
 const manualId = ref('')
@@ -207,17 +175,11 @@ function openOrder(orderId, ticketCode = '') {
 }
 
 function openGuide() {
-  step.value = 0
   guideOpen.value = true
 }
 
-function nextStep() {
-  if (step.value < GUIDE_STEPS.length - 1) step.value++
-  else guideOpen.value = false
-}
-
 function onGuideHide() {
-  markGuideSeen()
+  markGuideSeen(GUIDE_SEEN_KEY)
   // first visit: ask for the camera only after the guide explained it
   if (state.value === 'guide') start()
 }
@@ -262,7 +224,7 @@ function onVisibilityChange() {
 
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
-  if (guideSeen()) {
+  if (isGuideSeen(GUIDE_SEEN_KEY)) {
     start()
   } else {
     state.value = 'guide'
@@ -486,73 +448,5 @@ onBeforeUnmount(() => {
   background: var(--ember);
   color: #111;
   font-weight: 700;
-}
-
-.guide {
-  --surface: #0d1015;
-  --surface-soft: #11151b;
-  --lunar: #9aa3ac;
-  --off-white: #f2f0e9;
-  --ember: #e4a468;
-  --line: rgba(242, 240, 233, .14);
-
-  width: min(100vw - 32px, 440px);
-  padding: 28px 24px 24px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--off-white);
-  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
-}
-
-.guide-count {
-  margin: 0 0 10px;
-  color: var(--ember);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: .2em;
-}
-
-.guide h2 {
-  margin: 0 0 14px;
-  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
-.guide-body {
-  min-height: 132px;
-  margin: 0;
-  padding-left: 1.2em;
-  color: var(--lunar);
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-.guide-body li + li {
-  margin-top: 6px;
-}
-
-.guide-dots {
-  display: flex;
-  gap: 6px;
-  margin: 20px 0;
-}
-
-.guide-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--line);
-}
-
-.guide-dots span.active {
-  background: var(--ember);
-}
-
-.guide-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
 }
 </style>
