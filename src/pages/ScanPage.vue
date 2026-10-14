@@ -31,11 +31,19 @@
         <p v-else-if="state === 'guide'" class="overlay">看完使用教學後會開啟相機</p>
         <div v-else-if="state === 'error'" class="overlay">
           <p role="alert">{{ errorMessage }}</p>
-          <button type="button" class="primary-button" @click="start">重新開啟相機</button>
+          <button type="button" class="primary-button" @click="start()">重新開啟相機</button>
         </div>
       </div>
 
       <p class="scan-notice" role="status" aria-live="polite">{{ notice }}</p>
+
+      <div v-if="state === 'scanning'" class="camera-row">
+        <p class="camera-hint">畫面模糊時，把手機拿遠一點（約 20–30 公分）讓鏡頭對焦。</p>
+        <button v-if="cameras.length > 1" type="button" class="secondary-button" @click="switchCamera">
+          切換鏡頭
+        </button>
+      </div>
+      <p v-if="state === 'scanning' && cameraInfo" class="camera-info">{{ cameraInfo }}</p>
 
       <form class="manual" @submit.prevent="openManual">
         <label for="manual-order-id">無法掃描時，輸入訂單編號</label>
@@ -72,7 +80,7 @@ import { useRouter } from 'vue-router'
 import GuideDialog from 'src/components/GuideDialog.vue'
 import { SITE_URL } from 'src/config/app'
 import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
-import { cameraErrorMessage, startQrScanner } from 'src/utils/qrScanner'
+import { cameraErrorMessage, listCameras, startQrScanner } from 'src/utils/qrScanner'
 import { ORDER_ID_PATTERN, parseTicketQr } from 'src/utils/ticketQr'
 
 const router = useRouter()
@@ -89,8 +97,9 @@ const GUIDE_STEPS = [
     title: '對準票券 QR Code',
     lines: [
       '請購票人打開確認信，或網站「已購門票」裡的 QR Code。',
-      '將 QR Code 放進畫面中的框內，距離約 15–25 公分，讀到後會自動開啟訂單。',
-      '讀不到時，請購票人調高螢幕亮度。'
+      '將 QR Code 放進畫面中的框內，讀到後會自動開啟訂單。',
+      '手機鏡頭太近會對不到焦：畫面模糊時，把手機拿遠一點（約 20–30 公分）。',
+      '還是讀不到時，請購票人調高螢幕亮度，或按「切換鏡頭」換一顆鏡頭試試。'
     ]
   },
   {
@@ -113,6 +122,28 @@ const GUIDE_STEPS = [
 
 // Shown automatically on this device's first visit only
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen'
+// The camera picked with 切換鏡頭, reused on this device's next visits
+const CAMERA_KEY = 'cksc.scanCamera'
+
+function savedCamera() {
+  try {
+    return localStorage.getItem(CAMERA_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function saveCamera(deviceId) {
+  try {
+    localStorage.setItem(CAMERA_KEY, deviceId)
+  } catch {
+    // ignore
+  }
+}
+
+// Ticket QR codes point at the production site; also accept this origin so
+// QR codes made by a development frontend work there
+const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 
 const video = ref(null)
 // guide (first visit, camera waits) | starting | scanning | paused (page hidden) | error
@@ -122,26 +153,46 @@ const errorMessage = ref('')
 const notice = ref('')
 const manualId = ref('')
 const manualError = ref('')
+const cameras = ref([])
+const cameraInfo = ref('')
 
 let stopScanner = null
+let currentCamera = ''
+let infoTimer = 0
 let startSequence = 0
 let lastInvalid = ''
 let noticeTimer = 0
 
-async function start() {
+async function start(deviceId = savedCamera()) {
   const sequence = ++startSequence
   stopScanner?.()
   stopScanner = null
+  clearInterval(infoTimer)
   state.value = 'starting'
 
   try {
-    const stop = await startQrScanner(video.value, handleCode)
+    let scanner
+    try {
+      scanner = await startQrScanner(video.value, handleCode, { deviceId })
+    } catch (error) {
+      // the saved camera is gone (other phone, unplugged): use the default
+      if (!deviceId || sequence !== startSequence) throw error
+      saveCamera('')
+      scanner = await startQrScanner(video.value, handleCode)
+    }
     if (sequence !== startSequence) {
-      stop()
+      scanner.stop()
       return
     }
-    stopScanner = stop
+    stopScanner = scanner.stop
+    currentCamera = scanner.deviceId
     state.value = 'scanning'
+    cameraInfo.value = scanner.info()
+    // the size is known once frames arrive, and the decoder can change
+    infoTimer = setInterval(() => { cameraInfo.value = scanner.info() }, 1000)
+    listCameras().then((list) => {
+      if (sequence === startSequence) cameras.value = list
+    }).catch(() => {})
   } catch (error) {
     if (sequence !== startSequence) return
     console.error('Camera failed to start', error)
@@ -154,6 +205,16 @@ function stop() {
   startSequence++
   stopScanner?.()
   stopScanner = null
+  clearInterval(infoTimer)
+}
+
+function switchCamera() {
+  const list = cameras.value
+  const index = list.findIndex((camera) => camera.deviceId === currentCamera)
+  const next = list[(index + 1) % list.length]
+  if (!next) return
+  saveCamera(next.deviceId)
+  start(next.deviceId)
 }
 
 function showNotice(text) {
@@ -218,7 +279,7 @@ function onVisibilityChange() {
       state.value = 'paused'
     }
   } else if (state.value === 'paused') {
-    start()
+    start(currentCamera)
   }
 }
 
@@ -372,6 +433,27 @@ onBeforeUnmount(() => {
   margin: 12px 0 0;
   color: var(--danger);
   font-size: 14px;
+}
+
+.camera-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.camera-hint {
+  flex: 1;
+  margin: 0;
+  color: var(--lunar);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.camera-info {
+  margin: 8px 0 0;
+  color: rgba(242, 240, 233, .35);
+  font-size: 11px;
+  word-break: break-word;
 }
 
 .manual {
