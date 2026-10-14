@@ -169,6 +169,17 @@ reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug
 
 A debug token lets any request pass App Check, so keep it out of the repository.
 
+## Bot Protection (Turnstile)
+
+App Check tells this site apart from scripts; Cloudflare Turnstile additionally asks the person checking out to pass a check. The product page shows the widget above 確認送出訂單 and sends its token with the order; `createOrder` checks it with Cloudflare's siteverify (action `checkout`, hostname in `TURNSTILE_HOSTNAMES`) before it looks at the order.
+
+1. Cloudflare dashboard → Turnstile → add a widget in **Managed** mode with the hostnames `tickets.cksc.tw`, `localhost` and `127.0.0.1`.
+2. Put its sitekey in `TURNSTILE_SITE_KEY` in `src/config/app.js` and deploy the site.
+3. Set its secret key as a Secret Manager secret (the prompt hides what you type): `firebase functions:secrets:set TURNSTILE_SECRET`. Do this before the next functions deploy, which fails while the secret is missing.
+4. Set `ENFORCE_TURNSTILE=true` in `functions/.env` and redeploy the functions.
+
+`TURNSTILE_HOSTNAMES` lists only the production hostname, so the production functions reject tokens solved on `localhost`: with `ENFORCE_TURNSTILE=true`, orders cannot be placed from `quasar dev`.
+
 ## Staff Accounts
 
 The first super admin must be created by hand: in the Firebase console add `users/{uid}` with `role: "super_admin"`, using the uid shown under Authentication.

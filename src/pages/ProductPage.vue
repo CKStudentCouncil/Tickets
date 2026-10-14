@@ -141,6 +141,13 @@
             </span>
           </label>
 
+          <TurnstileWidget
+            v-if="TURNSTILE_SITE_KEY"
+            ref="turnstile"
+            v-model="turnstileToken"
+            action="checkout"
+          />
+
           <p v-if="orderError" class="order-error">{{ orderError }}</p>
 
           <div class="order-panel-actions">
@@ -173,6 +180,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from 'src/stores/toast'
 import { submitOrder } from 'src/services/orderService'
+import TurnstileWidget from 'src/components/TurnstileWidget.vue'
+import { TURNSTILE_SITE_KEY } from 'src/config/app'
 import {
   ELIGIBLE_IDENTITIES,
   fetchTicketTypes,
@@ -234,6 +243,8 @@ const submitting = ref(false)
 const orderError = ref('')
 const quantity = ref(1)
 const acceptedTerms = ref(false)
+const turnstile = ref(null)
+const turnstileToken = ref('')
 const buyer = ref({
   school: '',
   class: '',
@@ -281,7 +292,8 @@ const canSubmitOrder = computed(() =>
   (!needsClass.value || (!!buyer.value.class.trim() && !!buyer.value.number.trim())) &&
   Number.isInteger(quantity.value) &&
   quantity.value > 0 &&
-  quantity.value <= maxQuantity.value
+  quantity.value <= maxQuantity.value &&
+  (!TURNSTILE_SITE_KEY || !!turnstileToken.value)
 )
 
 function openOrderForm() {
@@ -321,7 +333,7 @@ async function submitDirectOrder() {
       number: needsClass.value ? buyer.value.number.trim() : '',
       office: school === '建中老師' ? buyer.value.office.trim() : '',
       items: [{ id: ticketType.value.id, quantity: quantity.value }]
-    })
+    }, turnstileToken.value)
 
     showOrderForm.value = false
     toast.show(`訂單 #${result.id} 已送出。`)
@@ -332,6 +344,8 @@ async function submitDirectOrder() {
     orderError.value = error?.message && error.code !== 'functions/internal'
       ? error.message
       : '訂單送出失敗，請稍後再試。'
+    // the token was used up by this attempt; solve a new one before retrying
+    turnstile.value?.reset()
   } finally {
     submitting.value = false
   }

@@ -35,13 +35,15 @@ function byCreatedAtDesc(a, b) {
 
 /* ---------- buyers (signed in; the rules allow only their own orders) ---------- */
 
-// The server takes the buyer's email and userId from the signed-in account
-export async function submitOrder(orderPayload) {
+// The server takes the buyer's email and userId from the signed-in account.
+// Retries resend the same Turnstile token: the server remembers that this
+// requestId already passed, as the token cannot be redeemed twice.
+export async function submitOrder(orderPayload, turnstileToken = '') {
   const requestId = createRequestId()
 
   for (let attempt = 1; ; attempt++) {
     try {
-      const { data } = await createOrderCallable({ orderPayload, requestId })
+      const { data } = await createOrderCallable({ orderPayload, requestId, turnstileToken })
       return data
     } catch (error) {
       if (attempt >= 3 || !RETRYABLE.includes(error?.code)) throw error

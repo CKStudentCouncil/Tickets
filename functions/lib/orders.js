@@ -24,7 +24,14 @@ import {
   sanitizeOrderInput
 } from './orderValidation.js'
 import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
-import { CREATE_ORDER_MIN_INSTANCES, ENFORCE_APP_CHECK, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
+import {
+  CREATE_ORDER_MIN_INSTANCES,
+  ENFORCE_APP_CHECK,
+  ENFORCE_TURNSTILE,
+  ORDER_LIMIT_PER_ACCOUNT,
+  TURNSTILE_HOSTNAMES
+} from './params.js'
+import { CHECKOUT_ACTION, TURNSTILE_SECRET, parseHostnames, verifyTurnstile } from './turnstile.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
 import { heroAttachment } from '../templates/shared.js'
 
@@ -34,6 +41,8 @@ const STOCK_ATTEMPTS = 6
 // After this many, lock every shard with room rather than one random shard
 const SPREAD_AFTER = 2
 const RATE_WINDOW_MS = 10 * 60 * 1000
+// How long a passed Turnstile check covers retries of the same checkout
+const TURNSTILE_PASS_MS = 10 * 60 * 1000
 // Stop retrying a failed confirmation email after this long; staff can resend
 const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 
@@ -45,6 +54,7 @@ const EMAIL_RETRY_WINDOW_MS = 60 * 60 * 1000
 //   buyerPurchases/{sha256(email)}  { quantities: { [ticketTypeId]: n } }, per account email
 //   orderRequests/{requestId}       { orderId } — makes retried checkouts idempotent
 //   rateLimits/{uid}_{slot}         { count }  — only when ORDER_LIMIT_PER_ACCOUNT > 0
+//   turnstilePasses/{requestId}     { uid } — only when ENFORCE_TURNSTILE is on
 //   stockReleases/{orderId}         marks a deleted order as already released
 
 class OrderIdTaken extends Error {}
@@ -168,6 +178,35 @@ function assertAppCheck(context) {
   }
 }
 
+// Turnstile tokens are single-use, but orderService retries a checkout with
+// the same token and requestId when the server was busy or the response was
+// lost. The first pass is remembered per requestId, so such a retry gets
+// through while a token replayed on another checkout does not.
+async function assertTurnstile(data, context, account, requestId) {
+  if (!ENFORCE_TURNSTILE.value()) return
+
+  const passed = await verifyTurnstile({
+    token: data?.turnstileToken,
+    action: CHECKOUT_ACTION,
+    hostnames: parseHostnames(TURNSTILE_HOSTNAMES.value()),
+    secret: process.env[TURNSTILE_SECRET],
+    remoteip: context.rawRequest?.ip
+  })
+  const passRef = requestId ? db.doc(`turnstilePasses/${requestId}`) : null
+
+  if (passed) {
+    if (passRef) {
+      await passRef.set({ uid: account.uid, expiresAt: new Date(Date.now() + TURNSTILE_PASS_MS) })
+    }
+    return
+  }
+
+  const pass = passRef ? (await passRef.get()).data() : null
+  if (pass?.uid !== account.uid || pass.expiresAt.toMillis() < Date.now()) {
+    throw new HttpsError('permission-denied', '人機驗證已過期，請重新驗證後再送出')
+  }
+}
+
 // Buyers must be signed in; the order email is the account's verified email
 function getBuyerAccount(context) {
   const token = context.auth?.token
@@ -228,7 +267,7 @@ function toHttpsError(error) {
 // straight from Firestore (the rules allow the account in `userId`).
 export const createOrder = functions
   .region(REGION)
-  .runWith({ minInstances: CREATE_ORDER_MIN_INSTANCES })
+  .runWith({ minInstances: CREATE_ORDER_MIN_INSTANCES, secrets: [TURNSTILE_SECRET] })
   .https.onCall(async (data, context) => {
     assertAppCheck(context)
     const account = getBuyerAccount(context)
@@ -248,9 +287,11 @@ export const createOrder = functions
     let stockAttempt = 1
 
     try {
-      // the stock look runs alongside the checks before it; their errors come first
+      // the stock look runs alongside the checks before it; their errors come
+      // first. Only checkouts that pass Turnstile count against the rate limit.
       const [checks, look] = await Promise.allSettled([
-        assertShopOpen(account).then(() => enforceAccountLimit(account)),
+        Promise.all([assertTurnstile(data, context, account, requestId), assertShopOpen(account)])
+          .then(() => enforceAccountLimit(account)),
         choose(false)
       ])
       if (checks.status === 'rejected') throw checks.reason
