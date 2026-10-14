@@ -15,6 +15,33 @@
         }
       }(window.location));
     </script>
+    <script type="text/javascript">
+      // LINE's in-app browser opens the page in the system browser when the URL
+      // carries openExternalBrowser=1. Once the param is there, don't redirect
+      // again, so an old LINE that ignores it doesn't loop.
+      (function(l) {
+        var param = 'openExternalBrowser=1';
+        var hasParam = /[?&]openExternalBrowser=1(&|$)/.test(l.search);
+        if (/\bLine\//.test(navigator.userAgent)) {
+          if (!hasParam) {
+            l.replace(
+              l.pathname + (l.search ? l.search + '&' : '?') + param + l.hash
+            );
+          }
+        } else if (hasParam) {
+          var search = l.search
+            .slice(1)
+            .split('&')
+            .filter(function(s) { return s !== param; })
+            .join('&');
+          window.history.replaceState(
+            null,
+            null,
+            l.pathname + (search ? '?' + search : '') + l.hash
+          );
+        }
+      }(window.location));
+    </script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
