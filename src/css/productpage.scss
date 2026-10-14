@@ -290,6 +290,18 @@ h1 {
   }
 }
 
+.order-wait-note {
+  margin: 0 0 16px;
+
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(242, 240, 233, 0.6);
+
+  &.is-waiting {
+    color: var(--off-white);
+  }
+}
+
 .order-error {
   margin: -8px 0 16px;
   font-size: 12.5px;

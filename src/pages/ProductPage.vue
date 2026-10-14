@@ -157,7 +157,7 @@
 
             <p class="account-row">
               確認信將寄送至：
-              <span class="account-email">{{ auth.email }}</span>
+              <span class="account-email">{{ auth.email }}</span>，送出後數分鐘內會收到
             </p>
           </div>
 
@@ -185,6 +185,10 @@
           />
 
           <p v-if="orderError" class="order-error" role="alert">{{ orderError }}</p>
+
+          <p class="order-wait-note" :class="{ 'is-waiting': submitting }" role="status">
+            同時購票的人多時，送出後需要等一下才會有結果：約 500 人同時購票最慢 15 秒、1000 人最慢 30 秒左右。請耐心等候，不要關閉或重新整理頁面。
+          </p>
 
           <div class="order-panel-actions">
             <button
@@ -278,6 +282,7 @@ onMounted(() => {
 
 const showOrderForm = ref(false)
 const submitting = ref(false)
+const BUSY_ERRORS = ['functions/aborted', 'functions/deadline-exceeded']
 const orderError = ref('')
 const orderForm = ref(null)
 const validationAttempted = ref(false)
@@ -416,10 +421,13 @@ async function sendOrder(payload) {
   } catch (error) {
     if (auth.user?.uid !== uid) return
     console.error('Submit order error:', error)
-    // HttpsError messages from createOrder are already user-facing Chinese
-    orderError.value = error?.message && error.code !== 'functions/internal'
-      ? error.message
-      : '訂單送出失敗，請稍後再試。'
+    // HttpsError messages from createOrder are already user-facing Chinese;
+    // busy errors only reach here after the automatic retries also failed
+    orderError.value = BUSY_ERRORS.includes(error?.code)
+      ? '目前購票人數眾多，訂單尚未完成。請稍候幾秒再按上方「確認或重試原訂單」，同一筆訂單不會重複購買。'
+      : error?.message && error.code !== 'functions/internal'
+        ? error.message
+        : '訂單送出失敗，請稍後再試。'
     // the token was used up by this attempt; solve a new one before retrying
     turnstile.value?.reset()
   } finally {
