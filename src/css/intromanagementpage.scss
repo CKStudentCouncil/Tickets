@@ -300,6 +300,37 @@
   gap: 30px;
 }
 
+/* Keep the single publish-time group within its editor column. */
+.editor-grid > .ticket-time-field {
+  grid-column: auto;
+}
+
+.editor-grid .time-range {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.editor-grid .time-inputs > input[type="date"],
+.editor-grid .time-inputs > input[type="time"] {
+  /* Let border-box sizing include padding on iOS Safari. */
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  color-scheme: dark;
+  text-align: center;
+  line-height: 42px;
+}
+
+.editor-grid .time-inputs > input::-webkit-date-and-time-value {
+  text-align: center;
+}
+
+.editor-grid .time-inputs > input::-webkit-datetime-edit {
+  padding: 0;
+}
+
 /* =========================================================
    Enabled
    ========================================================= */

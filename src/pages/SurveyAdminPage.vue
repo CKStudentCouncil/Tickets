@@ -46,7 +46,7 @@
       </div>
 
       <div class="panel">
-        <h2>四大構面平均分數</h2>
+        <h2>五構面平均分數</h2>
 
         <div v-if="responses.length" class="bar-list">
           <div v-for="section in scaleSections" :key="section.key" class="bar-row">

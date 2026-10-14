@@ -56,6 +56,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   unmounted = true
+  token.value = '' // its expiry would go unnoticed once the widget is gone
   if (widgetId !== null) window.turnstile?.remove(widgetId)
 })
 

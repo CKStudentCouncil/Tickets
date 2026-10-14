@@ -92,6 +92,16 @@ export const SCALE_SECTIONS = [
     ]
   },
   {
+    key: 'design',
+    title: '主視覺與系統介面設計',
+    questions: [
+      { id: 'q26', text: '系統的視覺設計整體而言令人滿意' },
+      { id: 'q27', text: '系統的視覺設計與舞會的主視覺風格一致' },
+      { id: 'q28', text: '舞會主視覺設計符合我的審美' },
+      { id: 'q29', text: '整體而言，我喜歡本次舞會的美術設計' }
+    ]
+  },
+  {
     key: 'overall',
     title: '整體評價',
     questions: [

@@ -2,7 +2,7 @@
   <div class="coming-soon">
     <div class="hero-content">
         <div class="title-lockup">
-          <p class="title-lockup-sub">2026 · CK PARTY NIGHT</p><br />
+          <p class="title-lockup-sub">2026 · CK PARTY NIGHT</p>
           <h1 class="title-lockup-brand">COMING SOON</h1>
         </div>
     </div>
@@ -41,12 +41,13 @@ watch(
 .hero-content {
   position: relative;
   z-index: 6;
+  width: min(100%, 70rem);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(22px, 3.4vh, 36px);
+  gap: clamp(18px, 3.4svh, 36px);
   text-align: center;
-  padding: 0 24px;
+  padding-inline: clamp(12px, 4vw, 24px);
 }
 
 .title-lockup {
@@ -58,42 +59,61 @@ watch(
 
 .title-lockup-sub {
   margin: 0;
-  font-size: clamp(0.65rem, 1.2vw, 0.9rem);
+  max-width: 100%;
+  font-size: clamp(0.58rem, 1.2vw, 0.9rem);
   font-weight: 400;
-  letter-spacing: 0.8em;
-  text-indent: 0.8em;
+  letter-spacing: clamp(0.28em, 0.8vw, 0.8em);
+  text-indent: clamp(0.28em, 0.8vw, 0.8em);
   line-height: 1;
   color: var(--lunar);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   text-shadow: 0 3px 20px rgba(0, 0, 0, 0.45);
 }
 
 .title-lockup-brand {
   margin: 0;
+  max-width: 100%;
   font-family: 'Manrope', sans-serif;
-  font-size: clamp(2rem, 5vw, 4.5rem);
+  font-size: clamp(1.65rem, 8vw, 4.5rem);
   font-weight: 400;
-  letter-spacing: 0.5em;
-  text-indent: 0.5em;
+  letter-spacing: clamp(0.14em, 0.5vw, 0.5em);
+  text-indent: clamp(0.14em, 0.5vw, 0.5em);
   line-height: 1;
   color: var(--off-white);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   text-shadow: 0 3px 30px rgba(0, 0, 0, 0.55);
 }
 
 .coming-soon {
-  min-height: calc(100vh - 56px);
-  padding: 24px;
+  width: 100%;
+  min-height: 100svh;
+  min-height: 100dvh;
+  padding: calc(24px + env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    calc(24px + env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 35%, rgba(228, 164, 104, 0.08), transparent 60%),
     #050608;
   text-align: center;
   font-family: 'Manrope', 'Noto Sans TC', sans-serif;
   color: #f2f0e9;
+}
+
+@media (max-height: 480px) {
+  .coming-soon {
+    padding-block: calc(12px + env(safe-area-inset-top, 0px))
+      calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .title-lockup {
+    gap: 10px;
+  }
 }
 
 .eyebrow {

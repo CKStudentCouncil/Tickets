@@ -19,6 +19,9 @@ function createSesClient() {
 
   return new SESv2Client({
     region: process.env.AWS_REGION || DEFAULT_SES_REGION,
+    // Retrying a request whose response was lost can send the same message
+    // twice. The durable queue retries only explicit provider rejections.
+    maxAttempts: 1,
     ...(accessKeyId && secretAccessKey
       ? { credentials: { accessKeyId, secretAccessKey } }
       : {})

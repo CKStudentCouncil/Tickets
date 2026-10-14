@@ -224,7 +224,7 @@ function footer() {
 
   return `
           <tr>
-            <td class="footer-pad" bgcolor="${C.midnight}" style="padding:36px 40px 40px;background:${C.midnight};border-top:1px solid ${C.footerLine};">
+            <td class="footer-pad" bgcolor="${C.midnight}" style="padding:36px 40px 40px;border-top:1px solid ${C.footerLine};">
               <p style="margin:0 0 6px;font-family:${FONT};font-size:15px;font-weight:700;line-height:1.5;letter-spacing:.02em;color:${C.text};">
                 建中舞會購票系統
               </p>

@@ -1,5 +1,16 @@
 rules_version = '2';
 
+// Assumed order model: orders/{id} is created by trusted Cloud Functions with
+// immutable buyer userId, ticketCode, items and totals. delivered / paid are
+// booleans; their UpdatedAt (timestamp), UpdatedByUid and UpdatedByName are
+// written only by atomic staff callables. Admin clients retain deletion access.
+// orders/{id}/history/{eventId} records action, previousValue/value (bool),
+// actorUid/name, occurredAt (timestamp), and optional codeVerification /
+// overrideReason. Trusted functions append it atomically with status changes;
+// clients cannot create, update or delete audit records. Staff may read retained
+// history after an order is deleted. Existing public content and staff flows
+// outside orders keep their established access rules.
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -136,21 +147,16 @@ service cloud.firestore {
       allow list: if isAdmin() || isOrderOwner();
       allow create: if false;
 
-      allow update: if (
-        isManager()
-        && onlyChanges(['delivered', 'deliveryUpdatedAt', 'deliveryUpdatedByName'])
-        && request.resource.data.delivered is bool
-      ) || (
-        isAdmin()
-        && onlyChanges([
-          'delivered', 'deliveryUpdatedAt', 'deliveryUpdatedByName',
-          'paid', 'paymentUpdatedAt', 'paymentUpdatedByName'
-        ])
-        && request.resource.data.get('delivered', false) is bool
-        && request.resource.data.get('paid', false) is bool
-      );
+      // Status transitions and attribution require the atomic callables. Even
+      // administrators cannot bypass their stale-state / QR checks directly.
+      allow update: if false;
 
       allow delete: if isAdmin();
+
+      match /history/{eventId} {
+        allow read: if isManager();
+        allow create, update, delete: if false;
+      }
     }
 
     // Buyers never update or delete orders. ticketSales, buyerPurchases,
@@ -284,11 +290,11 @@ service cloud.firestore {
       return scores[key] is int && scores[key] >= 1 && scores[key] <= 5;
     }
 
-    // every rating question q4..q25 answered with an integer 1-5
+    // every rating question q4..q29 answered with an integer 1-5
     function isValidScores(scores) {
       return scores is map
-        && scores.keys().hasOnly(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25'])
-        && scores.keys().hasAll(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25'])
+        && scores.keys().hasOnly(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25', 'q26', 'q27', 'q28', 'q29'])
+        && scores.keys().hasAll(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25', 'q26', 'q27', 'q28', 'q29'])
         && isScore(scores, 'q4')
         && isScore(scores, 'q5')
         && isScore(scores, 'q6')
@@ -310,7 +316,11 @@ service cloud.firestore {
         && isScore(scores, 'q22')
         && isScore(scores, 'q23')
         && isScore(scores, 'q24')
-        && isScore(scores, 'q25');
+        && isScore(scores, 'q25')
+        && isScore(scores, 'q26')
+        && isScore(scores, 'q27')
+        && isScore(scores, 'q28')
+        && isScore(scores, 'q29');
     }
 
     match /surveyResponses/{responseId} {
