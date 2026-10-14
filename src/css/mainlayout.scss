@@ -131,19 +131,16 @@
 
 .help-toggle {
   flex: none;
-  width: 26px; height: 26px;
+  width: 24px; height: 24px;
   padding: 0;
-  border: 1px solid rgba(242, 240, 233, 0.4);
-  border-radius: 50%;
+  border: none;
   background: none;
   color: rgba(242, 240, 233, 0.85);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: color .3s ease, border-color .3s ease;
+  transition: color .3s ease;
 
-  &:hover { color: var(--ember); border-color: var(--ember); }
+  &:hover { color: var(--ember); }
 }
 
 /* phones: make room for the ? button; About stays in the menu (關於我們) */

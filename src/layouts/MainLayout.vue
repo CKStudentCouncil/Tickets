@@ -33,7 +33,7 @@
           title="購票教學"
           @click="buyGuideOpen = true"
         >
-          ?
+          <CircleQuestionMark :size="18" :stroke-width="1.75" aria-hidden="true" />
         </button>
 
         <div class="menu-wrapper">
@@ -210,6 +210,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
+import { CircleQuestionMark } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
 import { BUY_GUIDE_STEPS } from 'src/data/buyGuide'
 import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'

@@ -22,6 +22,7 @@
     "firebase": "^10.14.1",
     "html2pdf.js": "^0.14.0",
     "jsqr": "^1.4.0",
+    "lucide-vue-next": "^1.0.0",
     "pinia": "^2.1.7",
     "qrcode": "^1.5.4",
     "quasar": "^2.16.0",

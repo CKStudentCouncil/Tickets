@@ -12,7 +12,7 @@
             title="使用教學"
             @click="openGuide"
           >
-            ?
+            <CircleQuestionMark :size="22" :stroke-width="1.75" aria-hidden="true" />
           </button>
         </div>
         <p class="lead">將購票人的票券 QR Code 對準框內，讀到後會自動開啟訂單。</p>
@@ -77,6 +77,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { CircleQuestionMark } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
 import { SITE_URL } from 'src/config/app'
 import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
@@ -358,22 +359,19 @@ onBeforeUnmount(() => {
 
 .help-button {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+  border: none;
   background: transparent;
-  color: var(--off-white);
-  font-family: inherit;
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
+  color: var(--lunar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
 .help-button:hover {
-  border-color: var(--ember);
   color: var(--ember);
 }
 
