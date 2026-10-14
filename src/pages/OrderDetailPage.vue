@@ -334,7 +334,7 @@
           :disabled="downloadingReceipt"
           @click="downloadReceipt"
         >
-          {{ downloadingReceipt ? '產生中...' : '下載 PDF' }}
+          {{ downloadingReceipt ? '產生中...' : '下載收據' }}
         </button>
 
         <button
