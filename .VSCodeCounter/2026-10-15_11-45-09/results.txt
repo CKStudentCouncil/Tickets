@@ -1,0 +1,457 @@
+Date : 2026-10-15 11:45:09
+Directory : /Users/dong/Documents/Code/Tickets
+Total : 301 files,  42727 codes, 949 comments, 11003 blanks, all 54679 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| Markdown           |        143 |     15,696 |         27 |      4,747 |     20,470 |
+| vue                |         26 |      8,255 |         50 |      1,530 |      9,835 |
+| SCSS               |         21 |      8,102 |        322 |      2,769 |     11,193 |
+| JavaScript         |         68 |      6,234 |        493 |        925 |      7,652 |
+| Skill              |         26 |      3,140 |          0 |        904 |      4,044 |
+| JSON               |          4 |        635 |          0 |          4 |        639 |
+| Swift              |          4 |        408 |         20 |         82 |        510 |
+| HTML               |          2 |        114 |          1 |          1 |        116 |
+| YAML               |          2 |         69 |          7 |         26 |        102 |
+| XML                |          1 |         38 |          9 |          3 |         50 |
+| JSON with Comments |          1 |         12 |          0 |          1 |         13 |
+| Ignore             |          1 |         11 |          5 |          4 |         20 |
+| Docker             |          1 |          7 |         14 |          6 |         27 |
+| Dotenv             |          1 |          6 |          1 |          1 |          8 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++-------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                    | files      | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                       |        301 |     42,727 |        949 |     11,003 |     54,679 |
+| . (Files)                                                                                                               |         13 |      1,153 |         51 |        194 |      1,398 |
+| .agents                                                                                                                 |         85 |      9,396 |         11 |      2,767 |     12,174 |
+| .agents/skills                                                                                                          |         85 |      9,396 |         11 |      2,767 |     12,174 |
+| .agents/skills/extension-to-functions-codebase                                                                          |          4 |        364 |          0 |        136 |        500 |
+| .agents/skills/extension-to-functions-codebase (Files)                                                                  |          1 |         92 |          0 |         38 |        130 |
+| .agents/skills/extension-to-functions-codebase/references                                                               |          3 |        272 |          0 |         98 |        370 |
+| .agents/skills/firebase-ai-logic-basics                                                                                 |          5 |        608 |          0 |        197 |        805 |
+| .agents/skills/firebase-ai-logic-basics (Files)                                                                         |          1 |        145 |          0 |         60 |        205 |
+| .agents/skills/firebase-ai-logic-basics/references                                                                      |          4 |        463 |          0 |        137 |        600 |
+| .agents/skills/firebase-app-hosting-basics                                                                              |          4 |        208 |          0 |         76 |        284 |
+| .agents/skills/firebase-app-hosting-basics (Files)                                                                      |          1 |         59 |          0 |         19 |         78 |
+| .agents/skills/firebase-app-hosting-basics/references                                                                   |          3 |        149 |          0 |         57 |        206 |
+| .agents/skills/firebase-auth-basics                                                                                     |          6 |        672 |          0 |        200 |        872 |
+| .agents/skills/firebase-auth-basics (Files)                                                                             |          1 |         88 |          0 |         33 |        121 |
+| .agents/skills/firebase-auth-basics/references                                                                          |          5 |        584 |          0 |        167 |        751 |
+| .agents/skills/firebase-basics                                                                                          |         20 |      1,024 |          0 |        348 |      1,372 |
+| .agents/skills/firebase-basics (Files)                                                                                  |          1 |        126 |          0 |         23 |        149 |
+| .agents/skills/firebase-basics/references                                                                               |         19 |        898 |          0 |        325 |      1,223 |
+| .agents/skills/firebase-basics/references (Files)                                                                       |          7 |        359 |          0 |        140 |        499 |
+| .agents/skills/firebase-basics/references/refresh                                                                       |          5 |        142 |          0 |         60 |        202 |
+| .agents/skills/firebase-basics/references/setup                                                                         |          7 |        397 |          0 |        125 |        522 |
+| .agents/skills/firebase-crashlytics                                                                                     |          3 |        233 |          0 |         83 |        316 |
+| .agents/skills/firebase-crashlytics (Files)                                                                             |          1 |         32 |          0 |         13 |         45 |
+| .agents/skills/firebase-crashlytics/references                                                                          |          2 |        201 |          0 |         70 |        271 |
+| .agents/skills/firebase-data-connect                                                                                    |         17 |      3,279 |          0 |        858 |      4,137 |
+| .agents/skills/firebase-data-connect (Files)                                                                            |          3 |        958 |          0 |        196 |      1,154 |
+| .agents/skills/firebase-data-connect/reference                                                                          |         14 |      2,321 |          0 |        662 |      2,983 |
+| .agents/skills/firebase-firestore                                                                                       |         15 |      1,720 |          0 |        539 |      2,259 |
+| .agents/skills/firebase-firestore (Files)                                                                               |          1 |         67 |          0 |         27 |         94 |
+| .agents/skills/firebase-firestore/references                                                                            |         14 |      1,653 |          0 |        512 |      2,165 |
+| .agents/skills/firebase-firestore/references/enterprise                                                                 |          8 |        929 |          0 |        274 |      1,203 |
+| .agents/skills/firebase-firestore/references/standard                                                                   |          6 |        724 |          0 |        238 |        962 |
+| .agents/skills/firebase-hosting-basics                                                                                  |          3 |        169 |          0 |         64 |        233 |
+| .agents/skills/firebase-hosting-basics (Files)                                                                          |          1 |         47 |          0 |         21 |         68 |
+| .agents/skills/firebase-hosting-basics/references                                                                       |          2 |        122 |          0 |         43 |        165 |
+| .agents/skills/firebase-remote-config-basics                                                                            |          3 |        239 |          1 |         88 |        328 |
+| .agents/skills/firebase-remote-config-basics (Files)                                                                    |          1 |         88 |          0 |         36 |        124 |
+| .agents/skills/firebase-remote-config-basics/references                                                                 |          2 |        151 |          1 |         52 |        204 |
+| .agents/skills/firebase-security-rules-auditor                                                                          |          1 |         71 |          0 |         14 |         85 |
+| .agents/skills/firestore-rules-creation                                                                                 |          1 |        506 |          0 |         79 |        585 |
+| .agents/skills/xcode-project-setup                                                                                      |          3 |        303 |         10 |         85 |        398 |
+| .agents/skills/xcode-project-setup (Files)                                                                              |          1 |         99 |          0 |         44 |        143 |
+| .agents/skills/xcode-project-setup/scripts                                                                              |          2 |        204 |         10 |         41 |        255 |
+| .agents/skills/xcode-project-setup/scripts/xcode_spm_setup                                                              |          2 |        204 |         10 |         41 |        255 |
+| .agents/skills/xcode-project-setup/scripts/xcode_spm_setup (Files)                                                      |          1 |         15 |          1 |          2 |         18 |
+| .agents/skills/xcode-project-setup/scripts/xcode_spm_setup/Sources                                                      |          1 |        189 |          9 |         39 |        237 |
+| .claude                                                                                                                 |         85 |      9,396 |         11 |      2,767 |     12,174 |
+| .claude/skills                                                                                                          |         85 |      9,396 |         11 |      2,767 |     12,174 |
+| .claude/skills/extension-to-functions-codebase                                                                          |          4 |        364 |          0 |        136 |        500 |
+| .claude/skills/extension-to-functions-codebase (Files)                                                                  |          1 |         92 |          0 |         38 |        130 |
+| .claude/skills/extension-to-functions-codebase/references                                                               |          3 |        272 |          0 |         98 |        370 |
+| .claude/skills/firebase-ai-logic-basics                                                                                 |          5 |        608 |          0 |        197 |        805 |
+| .claude/skills/firebase-ai-logic-basics (Files)                                                                         |          1 |        145 |          0 |         60 |        205 |
+| .claude/skills/firebase-ai-logic-basics/references                                                                      |          4 |        463 |          0 |        137 |        600 |
+| .claude/skills/firebase-app-hosting-basics                                                                              |          4 |        208 |          0 |         76 |        284 |
+| .claude/skills/firebase-app-hosting-basics (Files)                                                                      |          1 |         59 |          0 |         19 |         78 |
+| .claude/skills/firebase-app-hosting-basics/references                                                                   |          3 |        149 |          0 |         57 |        206 |
+| .claude/skills/firebase-auth-basics                                                                                     |          6 |        672 |          0 |        200 |        872 |
+| .claude/skills/firebase-auth-basics (Files)                                                                             |          1 |         88 |          0 |         33 |        121 |
+| .claude/skills/firebase-auth-basics/references                                                                          |          5 |        584 |          0 |        167 |        751 |
+| .claude/skills/firebase-basics                                                                                          |         20 |      1,024 |          0 |        348 |      1,372 |
+| .claude/skills/firebase-basics (Files)                                                                                  |          1 |        126 |          0 |         23 |        149 |
+| .claude/skills/firebase-basics/references                                                                               |         19 |        898 |          0 |        325 |      1,223 |
+| .claude/skills/firebase-basics/references (Files)                                                                       |          7 |        359 |          0 |        140 |        499 |
+| .claude/skills/firebase-basics/references/refresh                                                                       |          5 |        142 |          0 |         60 |        202 |
+| .claude/skills/firebase-basics/references/setup                                                                         |          7 |        397 |          0 |        125 |        522 |
+| .claude/skills/firebase-crashlytics                                                                                     |          3 |        233 |          0 |         83 |        316 |
+| .claude/skills/firebase-crashlytics (Files)                                                                             |          1 |         32 |          0 |         13 |         45 |
+| .claude/skills/firebase-crashlytics/references                                                                          |          2 |        201 |          0 |         70 |        271 |
+| .claude/skills/firebase-data-connect                                                                                    |         17 |      3,279 |          0 |        858 |      4,137 |
+| .claude/skills/firebase-data-connect (Files)                                                                            |          3 |        958 |          0 |        196 |      1,154 |
+| .claude/skills/firebase-data-connect/reference                                                                          |         14 |      2,321 |          0 |        662 |      2,983 |
+| .claude/skills/firebase-firestore                                                                                       |         15 |      1,720 |          0 |        539 |      2,259 |
+| .claude/skills/firebase-firestore (Files)                                                                               |          1 |         67 |          0 |         27 |         94 |
+| .claude/skills/firebase-firestore/references                                                                            |         14 |      1,653 |          0 |        512 |      2,165 |
+| .claude/skills/firebase-firestore/references/enterprise                                                                 |          8 |        929 |          0 |        274 |      1,203 |
+| .claude/skills/firebase-firestore/references/standard                                                                   |          6 |        724 |          0 |        238 |        962 |
+| .claude/skills/firebase-hosting-basics                                                                                  |          3 |        169 |          0 |         64 |        233 |
+| .claude/skills/firebase-hosting-basics (Files)                                                                          |          1 |         47 |          0 |         21 |         68 |
+| .claude/skills/firebase-hosting-basics/references                                                                       |          2 |        122 |          0 |         43 |        165 |
+| .claude/skills/firebase-remote-config-basics                                                                            |          3 |        239 |          1 |         88 |        328 |
+| .claude/skills/firebase-remote-config-basics (Files)                                                                    |          1 |         88 |          0 |         36 |        124 |
+| .claude/skills/firebase-remote-config-basics/references                                                                 |          2 |        151 |          1 |         52 |        204 |
+| .claude/skills/firebase-security-rules-auditor                                                                          |          1 |         71 |          0 |         14 |         85 |
+| .claude/skills/firestore-rules-creation                                                                                 |          1 |        506 |          0 |         79 |        585 |
+| .claude/skills/xcode-project-setup                                                                                      |          3 |        303 |         10 |         85 |        398 |
+| .claude/skills/xcode-project-setup (Files)                                                                              |          1 |         99 |          0 |         44 |        143 |
+| .claude/skills/xcode-project-setup/scripts                                                                              |          2 |        204 |         10 |         41 |        255 |
+| .claude/skills/xcode-project-setup/scripts/xcode_spm_setup                                                              |          2 |        204 |         10 |         41 |        255 |
+| .claude/skills/xcode-project-setup/scripts/xcode_spm_setup (Files)                                                      |          1 |         15 |          1 |          2 |         18 |
+| .claude/skills/xcode-project-setup/scripts/xcode_spm_setup/Sources                                                      |          1 |        189 |          9 |         39 |        237 |
+| .github                                                                                                                 |          1 |         58 |          3 |         25 |         86 |
+| .github/workflows                                                                                                       |          1 |         58 |          3 |         25 |         86 |
+| functions                                                                                                               |         33 |      3,825 |        319 |        574 |      4,718 |
+| functions (Files)                                                                                                       |          3 |        108 |          1 |         36 |        145 |
+| functions/lib                                                                                                           |         13 |      1,346 |        216 |        247 |      1,809 |
+| functions/templates                                                                                                     |          4 |        830 |         40 |         64 |        934 |
+| functions/templates (Files)                                                                                             |          3 |        792 |         31 |         61 |        884 |
+| functions/templates/assets                                                                                              |          1 |         38 |          9 |          3 |         50 |
+| functions/test                                                                                                          |         13 |      1,541 |         62 |        227 |      1,830 |
+| functions/test/emulator                                                                                                 |          4 |        735 |         22 |        100 |        857 |
+| functions/test/load                                                                                                     |          3 |        241 |         27 |         30 |        298 |
+| functions/test/unit                                                                                                     |          6 |        565 |         13 |         97 |        675 |
+| public                                                                                                                  |          1 |         20 |          0 |          0 |         20 |
+| src                                                                                                                     |         78 |     18,104 |        548 |      4,574 |     23,226 |
+| src (Files)                                                                                                             |          1 |          7 |          0 |          2 |          9 |
+| src/boot                                                                                                                |          1 |         35 |          9 |          9 |         53 |
+| src/components                                                                                                          |          4 |        293 |          0 |         46 |        339 |
+| src/composables                                                                                                         |          2 |        388 |          8 |         44 |        440 |
+| src/config                                                                                                              |          1 |          7 |         13 |          5 |         25 |
+| src/css                                                                                                                 |         21 |      8,102 |        322 |      2,769 |     11,193 |
+| src/data                                                                                                                |          4 |        187 |          7 |         15 |        209 |
+| src/layouts                                                                                                             |          1 |        250 |          0 |         37 |        287 |
+| src/pages                                                                                                               |         20 |      7,705 |         50 |      1,445 |      9,200 |
+| src/router                                                                                                              |          2 |        205 |         10 |         19 |        234 |
+| src/services                                                                                                            |          4 |        279 |         46 |         54 |        379 |
+| src/stores                                                                                                              |          4 |        168 |         17 |         41 |        226 |
+| src/utils                                                                                                               |         13 |        478 |         66 |         88 |        632 |
+| tests                                                                                                                   |          5 |        775 |          6 |        102 |        883 |
++-------------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                                | language           | code       | comment    | blank      | total      |
++-------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| /Users/dong/Documents/Code/Tickets/.agents/skills/extension-to-functions-codebase/SKILL.md                              | Skill              |         92 |          0 |         38 |        130 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/extension-to-functions-codebase/references/configuration-migration.md | Markdown           |        121 |          0 |         41 |        162 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/extension-to-functions-codebase/references/destructuring-shim.md      | Markdown           |         92 |          0 |         31 |        123 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/extension-to-functions-codebase/references/signature-mapping.md       | Markdown           |         59 |          0 |         26 |         85 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-ai-logic-basics/SKILL.md                                     | Skill              |        145 |          0 |         60 |        205 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-ai-logic-basics/references/flutter_setup.md                  | Markdown           |         75 |          0 |         24 |         99 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-ai-logic-basics/references/ios_setup.md                      | Markdown           |        123 |          0 |         33 |        156 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-ai-logic-basics/references/usage_patterns_android.md         | Markdown           |        120 |          0 |         38 |        158 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-ai-logic-basics/references/usage_patterns_web.md             | Markdown           |        145 |          0 |         42 |        187 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-app-hosting-basics/SKILL.md                                  | Skill              |         59 |          0 |         19 |         78 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-app-hosting-basics/references/cli_commands.md                | Markdown           |         58 |          0 |         28 |         86 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-app-hosting-basics/references/configuration.md               | Markdown           |         46 |          0 |         14 |         60 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-app-hosting-basics/references/emulation.md                   | Markdown           |         45 |          0 |         15 |         60 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-auth-basics/SKILL.md                                         | Skill              |         88 |          0 |         33 |        121 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-auth-basics/references/client_sdk_android.md                 | Markdown           |        122 |          0 |         39 |        161 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-auth-basics/references/client_sdk_web.md                     | Markdown           |        241 |          0 |         61 |        302 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-auth-basics/references/flutter_setup.md                      | Markdown           |        122 |          0 |         28 |        150 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-auth-basics/references/ios_setup.md                          | Markdown           |         67 |          0 |         21 |         88 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-auth-basics/references/security_rules.md                     | Markdown           |         32 |          0 |         18 |         50 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/SKILL.md                                              | Skill              |        126 |          0 |         23 |        149 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/android_setup.md                           | Markdown           |         26 |          0 |         16 |         42 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/firebase-cli-guide.md                      | Markdown           |         13 |          0 |          6 |         19 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/firebase-service-init.md                   | Markdown           |         14 |          0 |          7 |         21 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/flutter_setup.md                           | Markdown           |        106 |          0 |         38 |        144 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/ios_setup.md                               | Markdown           |         86 |          0 |         28 |        114 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/local-env-setup.md                         | Markdown           |         59 |          0 |         22 |         81 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/refresh/android_studio.md                  | Markdown           |         29 |          0 |         13 |         42 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/refresh/antigravity.md                     | Markdown           |         46 |          0 |         19 |         65 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/refresh/claude.md                          | Markdown           |          9 |          0 |          4 |         13 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/refresh/gemini-cli.md                      | Markdown           |         10 |          0 |          4 |         14 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/refresh/other-agents.md                    | Markdown           |         48 |          0 |         20 |         68 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/android_studio.md                    | Markdown           |         15 |          0 |          9 |         24 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/antigravity.md                       | Markdown           |         77 |          0 |         22 |         99 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/claude_code.md                       | Markdown           |         37 |          0 |          9 |         46 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/cursor.md                            | Markdown           |         72 |          0 |         22 |         94 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/gemini_cli.md                        | Markdown           |         38 |          0 |         16 |         54 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/github_copilot.md                    | Markdown           |         81 |          0 |         24 |        105 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/setup/other_agents.md                      | Markdown           |         77 |          0 |         23 |        100 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-basics/references/web_setup.md                               | Markdown           |         55 |          0 |         23 |         78 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-crashlytics/SKILL.md                                         | Skill              |         32 |          0 |         13 |         45 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-crashlytics/references/android_setup.md                      | Markdown           |        115 |          0 |         41 |        156 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-crashlytics/references/ios_setup.md                          | Markdown           |         86 |          0 |         29 |        115 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/SKILL.md                                        | Skill              |        150 |          0 |         45 |        195 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/examples.md                                     | Markdown           |        548 |          0 |         91 |        639 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/cloud_functions.md                    | Markdown           |        147 |          0 |         38 |        185 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/config.md                             | Markdown           |        197 |          0 |         76 |        273 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/data_seeding.md                       | Markdown           |        148 |          0 |         38 |        186 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/native_sql.md                         | Markdown           |        145 |          0 |         26 |        171 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/operations.md                         | Markdown           |        312 |          0 |         74 |        386 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/realtime.md                           | Markdown           |        157 |          0 |         53 |        210 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/schema.md                             | Markdown           |        220 |          0 |         71 |        291 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/sdk_admin_node.md                     | Markdown           |        109 |          0 |         33 |        142 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/sdk_android.md                        | Markdown           |         98 |          0 |         29 |        127 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/sdk_flutter.md                        | Markdown           |        105 |          0 |         30 |        135 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/sdk_ios.md                            | Markdown           |        126 |          0 |         32 |        158 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/sdk_web.md                            | Markdown           |        117 |          0 |         41 |        158 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/search.md                             | Markdown           |        213 |          0 |         52 |        265 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/reference/security.md                           | Markdown           |        227 |          0 |         69 |        296 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-data-connect/templates.md                                    | Markdown           |        260 |          0 |         60 |        320 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/SKILL.md                                           | Skill              |         67 |          0 |         27 |         94 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/android_sdk_usage.md         | Markdown           |        193 |          0 |         39 |        232 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/data_model.md                | Markdown           |         53 |          0 |         23 |         76 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/flutter_setup.md             | Markdown           |        147 |          0 |         34 |        181 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/indexes.md                   | Markdown           |        106 |          0 |         28 |        134 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/ios_setup.md                 | Markdown           |        142 |          0 |         48 |        190 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/provisioning.md              | Markdown           |         90 |          0 |         29 |        119 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/python_sdk_usage.md          | Markdown           |        100 |          0 |         43 |        143 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/enterprise/web_sdk_usage.md             | Markdown           |         98 |          0 |         30 |        128 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/standard/android_sdk_usage.md           | Markdown           |        148 |          0 |         46 |        194 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/standard/flutter_setup.md               | Markdown           |        143 |          0 |         34 |        177 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/standard/indexes.md                     | Markdown           |         81 |          0 |         31 |        112 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/standard/ios_setup.md                   | Markdown           |        134 |          0 |         41 |        175 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/standard/provisioning.md                | Markdown           |         82 |          0 |         29 |        111 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-firestore/references/standard/web_sdk_usage.md               | Markdown           |        136 |          0 |         57 |        193 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-hosting-basics/SKILL.md                                      | Skill              |         47 |          0 |         21 |         68 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-hosting-basics/references/configuration.md                   | Markdown           |         91 |          0 |         25 |        116 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-hosting-basics/references/deploying.md                       | Markdown           |         31 |          0 |         18 |         49 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-remote-config-basics/SKILL.md                                | Skill              |         88 |          0 |         36 |        124 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-remote-config-basics/references/android_setup.md             | Markdown           |         90 |          1 |         29 |        120 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-remote-config-basics/references/ios_setup.md                 | Markdown           |         61 |          0 |         23 |         84 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firebase-security-rules-auditor/SKILL.md                              | Skill              |         71 |          0 |         14 |         85 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/firestore-rules-creation/SKILL.md                                     | Skill              |        506 |          0 |         79 |        585 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/xcode-project-setup/SKILL.md                                          | Skill              |         99 |          0 |         44 |        143 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/xcode-project-setup/scripts/xcode_spm_setup/Package.swift             | Swift              |         15 |          1 |          2 |         18 |
+| /Users/dong/Documents/Code/Tickets/.agents/skills/xcode-project-setup/scripts/xcode_spm_setup/Sources/main.swift        | Swift              |        189 |          9 |         39 |        237 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/extension-to-functions-codebase/SKILL.md                              | Skill              |         92 |          0 |         38 |        130 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/extension-to-functions-codebase/references/configuration-migration.md | Markdown           |        121 |          0 |         41 |        162 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/extension-to-functions-codebase/references/destructuring-shim.md      | Markdown           |         92 |          0 |         31 |        123 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/extension-to-functions-codebase/references/signature-mapping.md       | Markdown           |         59 |          0 |         26 |         85 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-ai-logic-basics/SKILL.md                                     | Skill              |        145 |          0 |         60 |        205 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-ai-logic-basics/references/flutter_setup.md                  | Markdown           |         75 |          0 |         24 |         99 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-ai-logic-basics/references/ios_setup.md                      | Markdown           |        123 |          0 |         33 |        156 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-ai-logic-basics/references/usage_patterns_android.md         | Markdown           |        120 |          0 |         38 |        158 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-ai-logic-basics/references/usage_patterns_web.md             | Markdown           |        145 |          0 |         42 |        187 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-app-hosting-basics/SKILL.md                                  | Skill              |         59 |          0 |         19 |         78 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-app-hosting-basics/references/cli_commands.md                | Markdown           |         58 |          0 |         28 |         86 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-app-hosting-basics/references/configuration.md               | Markdown           |         46 |          0 |         14 |         60 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-app-hosting-basics/references/emulation.md                   | Markdown           |         45 |          0 |         15 |         60 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-auth-basics/SKILL.md                                         | Skill              |         88 |          0 |         33 |        121 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-auth-basics/references/client_sdk_android.md                 | Markdown           |        122 |          0 |         39 |        161 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-auth-basics/references/client_sdk_web.md                     | Markdown           |        241 |          0 |         61 |        302 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-auth-basics/references/flutter_setup.md                      | Markdown           |        122 |          0 |         28 |        150 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-auth-basics/references/ios_setup.md                          | Markdown           |         67 |          0 |         21 |         88 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-auth-basics/references/security_rules.md                     | Markdown           |         32 |          0 |         18 |         50 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/SKILL.md                                              | Skill              |        126 |          0 |         23 |        149 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/android_setup.md                           | Markdown           |         26 |          0 |         16 |         42 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/firebase-cli-guide.md                      | Markdown           |         13 |          0 |          6 |         19 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/firebase-service-init.md                   | Markdown           |         14 |          0 |          7 |         21 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/flutter_setup.md                           | Markdown           |        106 |          0 |         38 |        144 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/ios_setup.md                               | Markdown           |         86 |          0 |         28 |        114 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/local-env-setup.md                         | Markdown           |         59 |          0 |         22 |         81 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/refresh/android_studio.md                  | Markdown           |         29 |          0 |         13 |         42 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/refresh/antigravity.md                     | Markdown           |         46 |          0 |         19 |         65 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/refresh/claude.md                          | Markdown           |          9 |          0 |          4 |         13 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/refresh/gemini-cli.md                      | Markdown           |         10 |          0 |          4 |         14 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/refresh/other-agents.md                    | Markdown           |         48 |          0 |         20 |         68 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/android_studio.md                    | Markdown           |         15 |          0 |          9 |         24 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/antigravity.md                       | Markdown           |         77 |          0 |         22 |         99 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/claude_code.md                       | Markdown           |         37 |          0 |          9 |         46 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/cursor.md                            | Markdown           |         72 |          0 |         22 |         94 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/gemini_cli.md                        | Markdown           |         38 |          0 |         16 |         54 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/github_copilot.md                    | Markdown           |         81 |          0 |         24 |        105 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/setup/other_agents.md                      | Markdown           |         77 |          0 |         23 |        100 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-basics/references/web_setup.md                               | Markdown           |         55 |          0 |         23 |         78 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-crashlytics/SKILL.md                                         | Skill              |         32 |          0 |         13 |         45 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-crashlytics/references/android_setup.md                      | Markdown           |        115 |          0 |         41 |        156 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-crashlytics/references/ios_setup.md                          | Markdown           |         86 |          0 |         29 |        115 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/SKILL.md                                        | Skill              |        150 |          0 |         45 |        195 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/examples.md                                     | Markdown           |        548 |          0 |         91 |        639 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/cloud_functions.md                    | Markdown           |        147 |          0 |         38 |        185 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/config.md                             | Markdown           |        197 |          0 |         76 |        273 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/data_seeding.md                       | Markdown           |        148 |          0 |         38 |        186 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/native_sql.md                         | Markdown           |        145 |          0 |         26 |        171 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/operations.md                         | Markdown           |        312 |          0 |         74 |        386 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/realtime.md                           | Markdown           |        157 |          0 |         53 |        210 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/schema.md                             | Markdown           |        220 |          0 |         71 |        291 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/sdk_admin_node.md                     | Markdown           |        109 |          0 |         33 |        142 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/sdk_android.md                        | Markdown           |         98 |          0 |         29 |        127 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/sdk_flutter.md                        | Markdown           |        105 |          0 |         30 |        135 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/sdk_ios.md                            | Markdown           |        126 |          0 |         32 |        158 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/sdk_web.md                            | Markdown           |        117 |          0 |         41 |        158 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/search.md                             | Markdown           |        213 |          0 |         52 |        265 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/reference/security.md                           | Markdown           |        227 |          0 |         69 |        296 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-data-connect/templates.md                                    | Markdown           |        260 |          0 |         60 |        320 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/SKILL.md                                           | Skill              |         67 |          0 |         27 |         94 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/android_sdk_usage.md         | Markdown           |        193 |          0 |         39 |        232 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/data_model.md                | Markdown           |         53 |          0 |         23 |         76 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/flutter_setup.md             | Markdown           |        147 |          0 |         34 |        181 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/indexes.md                   | Markdown           |        106 |          0 |         28 |        134 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/ios_setup.md                 | Markdown           |        142 |          0 |         48 |        190 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/provisioning.md              | Markdown           |         90 |          0 |         29 |        119 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/python_sdk_usage.md          | Markdown           |        100 |          0 |         43 |        143 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/enterprise/web_sdk_usage.md             | Markdown           |         98 |          0 |         30 |        128 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/standard/android_sdk_usage.md           | Markdown           |        148 |          0 |         46 |        194 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/standard/flutter_setup.md               | Markdown           |        143 |          0 |         34 |        177 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/standard/indexes.md                     | Markdown           |         81 |          0 |         31 |        112 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/standard/ios_setup.md                   | Markdown           |        134 |          0 |         41 |        175 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/standard/provisioning.md                | Markdown           |         82 |          0 |         29 |        111 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-firestore/references/standard/web_sdk_usage.md               | Markdown           |        136 |          0 |         57 |        193 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-hosting-basics/SKILL.md                                      | Skill              |         47 |          0 |         21 |         68 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-hosting-basics/references/configuration.md                   | Markdown           |         91 |          0 |         25 |        116 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-hosting-basics/references/deploying.md                       | Markdown           |         31 |          0 |         18 |         49 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-remote-config-basics/SKILL.md                                | Skill              |         88 |          0 |         36 |        124 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-remote-config-basics/references/android_setup.md             | Markdown           |         90 |          1 |         29 |        120 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-remote-config-basics/references/ios_setup.md                 | Markdown           |         61 |          0 |         23 |         84 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firebase-security-rules-auditor/SKILL.md                              | Skill              |         71 |          0 |         14 |         85 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/firestore-rules-creation/SKILL.md                                     | Skill              |        506 |          0 |         79 |        585 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/xcode-project-setup/SKILL.md                                          | Skill              |         99 |          0 |         44 |        143 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/xcode-project-setup/scripts/xcode_spm_setup/Package.swift             | Swift              |         15 |          1 |          2 |         18 |
+| /Users/dong/Documents/Code/Tickets/.claude/skills/xcode-project-setup/scripts/xcode_spm_setup/Sources/main.swift        | Swift              |        189 |          9 |         39 |        237 |
+| /Users/dong/Documents/Code/Tickets/.dockerignore                                                                        | Ignore             |         11 |          5 |          4 |         20 |
+| /Users/dong/Documents/Code/Tickets/.github/workflows/deploy.yml                                                         | YAML               |         58 |          3 |         25 |         86 |
+| /Users/dong/Documents/Code/Tickets/DEVELOPMENT.md                                                                       | Markdown           |        183 |          0 |         85 |        268 |
+| /Users/dong/Documents/Code/Tickets/Dockerfile                                                                           | Docker             |          7 |         14 |          6 |         27 |
+| /Users/dong/Documents/Code/Tickets/README.md                                                                            | Markdown           |        172 |         25 |         80 |        277 |
+| /Users/dong/Documents/Code/Tickets/docker-compose.yml                                                                   | YAML               |         11 |          4 |          1 |         16 |
+| /Users/dong/Documents/Code/Tickets/firebase.json                                                                        | JSON               |         47 |          0 |          1 |         48 |
+| /Users/dong/Documents/Code/Tickets/firestore.indexes.json                                                               | JSON               |        462 |          0 |          1 |        463 |
+| /Users/dong/Documents/Code/Tickets/functions/.env                                                                       | Dotenv             |          6 |          1 |          1 |          8 |
+| /Users/dong/Documents/Code/Tickets/functions/README.md                                                                  | Markdown           |         97 |          0 |         34 |        131 |
+| /Users/dong/Documents/Code/Tickets/functions/index.js                                                                   | JavaScript         |          5 |          0 |          1 |          6 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/common.js                                                              | JavaScript         |         22 |          3 |         10 |         35 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/constants.js                                                           | JavaScript         |         36 |         12 |         11 |         59 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/lineup.js                                                              | JavaScript         |         66 |          1 |         20 |         87 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/mailQueue.js                                                           | JavaScript         |         62 |          4 |          8 |         74 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/mailQueueCore.js                                                       | JavaScript         |        191 |         23 |         16 |        230 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/mailer.js                                                              | JavaScript         |         26 |          5 |          7 |         38 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/notifications.js                                                       | JavaScript         |        146 |         12 |         12 |        170 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/orderActions.js                                                        | JavaScript         |         98 |          4 |         14 |        116 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/orderValidation.js                                                     | JavaScript         |        166 |         46 |         49 |        261 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/orders.js                                                              | JavaScript         |        462 |         76 |         81 |        619 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/params.js                                                              | JavaScript         |          7 |         18 |          7 |         32 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/time.js                                                                | JavaScript         |         20 |          5 |          4 |         29 |
+| /Users/dong/Documents/Code/Tickets/functions/lib/turnstile.js                                                           | JavaScript         |         44 |          7 |          8 |         59 |
+| /Users/dong/Documents/Code/Tickets/functions/templates/assets/hero-terrain.svg                                          | XML                |         38 |          9 |          3 |         50 |
+| /Users/dong/Documents/Code/Tickets/functions/templates/notification.js                                                  | JavaScript         |        104 |          0 |         11 |        115 |
+| /Users/dong/Documents/Code/Tickets/functions/templates/orderConfirmation.js                                             | JavaScript         |        183 |          7 |         23 |        213 |
+| /Users/dong/Documents/Code/Tickets/functions/templates/shared.js                                                        | JavaScript         |        505 |         24 |         27 |        556 |
+| /Users/dong/Documents/Code/Tickets/functions/test/emulator/createOrder.test.js                                          | JavaScript         |        400 |         15 |         65 |        480 |
+| /Users/dong/Documents/Code/Tickets/functions/test/emulator/mailQueue.test.js                                            | JavaScript         |        212 |          0 |         15 |        227 |
+| /Users/dong/Documents/Code/Tickets/functions/test/emulator/orderActions.test.js                                         | JavaScript         |         94 |          0 |         13 |        107 |
+| /Users/dong/Documents/Code/Tickets/functions/test/emulator/setup.js                                                     | JavaScript         |         29 |          7 |          7 |         43 |
+| /Users/dong/Documents/Code/Tickets/functions/test/load/createOrder.load.js                                              | JavaScript         |        228 |         24 |         26 |        278 |
+| /Users/dong/Documents/Code/Tickets/functions/test/load/run.js                                                           | JavaScript         |          7 |          2 |          3 |         12 |
+| /Users/dong/Documents/Code/Tickets/functions/test/load/scenarios.js                                                     | JavaScript         |          6 |          1 |          1 |          8 |
+| /Users/dong/Documents/Code/Tickets/functions/test/unit/consistency.test.js                                              | JavaScript         |         36 |          2 |          8 |         46 |
+| /Users/dong/Documents/Code/Tickets/functions/test/unit/mailQueue.test.js                                                | JavaScript         |         19 |          0 |          3 |         22 |
+| /Users/dong/Documents/Code/Tickets/functions/test/unit/mailer.test.js                                                   | JavaScript         |         58 |          2 |         13 |         73 |
+| /Users/dong/Documents/Code/Tickets/functions/test/unit/notifications.test.js                                            | JavaScript         |         15 |          2 |          4 |         21 |
+| /Users/dong/Documents/Code/Tickets/functions/test/unit/orderValidation.test.js                                          | JavaScript         |        371 |          7 |         52 |        430 |
+| /Users/dong/Documents/Code/Tickets/functions/test/unit/turnstile.test.js                                                | JavaScript         |         66 |          0 |         17 |         83 |
+| /Users/dong/Documents/Code/Tickets/index.html                                                                           | HTML               |         94 |          1 |          1 |         96 |
+| /Users/dong/Documents/Code/Tickets/jsconfig.json                                                                        | JSON with Comments |         12 |          0 |          1 |         13 |
+| /Users/dong/Documents/Code/Tickets/package.json                                                                         | JSON               |         43 |          0 |          1 |         44 |
+| /Users/dong/Documents/Code/Tickets/postcss.config.js                                                                    | JavaScript         |          3 |          0 |          1 |          4 |
+| /Users/dong/Documents/Code/Tickets/public/404.html                                                                      | HTML               |         20 |          0 |          0 |         20 |
+| /Users/dong/Documents/Code/Tickets/quasar.config.js                                                                     | JavaScript         |         25 |          2 |         11 |         38 |
+| /Users/dong/Documents/Code/Tickets/skills-lock.json                                                                     | JSON               |         83 |          0 |          1 |         84 |
+| /Users/dong/Documents/Code/Tickets/src/App.vue                                                                          | vue                |          7 |          0 |          2 |          9 |
+| /Users/dong/Documents/Code/Tickets/src/boot/firebase.js                                                                 | JavaScript         |         35 |          9 |          9 |         53 |
+| /Users/dong/Documents/Code/Tickets/src/components/AppToast.vue                                                          | vue                |         90 |          0 |         11 |        101 |
+| /Users/dong/Documents/Code/Tickets/src/components/CountdownText.vue                                                     | vue                |         12 |          0 |          4 |         16 |
+| /Users/dong/Documents/Code/Tickets/src/components/GuideDialog.vue                                                       | vue                |        126 |          0 |         20 |        146 |
+| /Users/dong/Documents/Code/Tickets/src/components/TurnstileWidget.vue                                                   | vue                |         65 |          0 |         11 |         76 |
+| /Users/dong/Documents/Code/Tickets/src/composables/useAdminOrders.js                                                    | JavaScript         |        376 |          6 |         39 |        421 |
+| /Users/dong/Documents/Code/Tickets/src/composables/useNow.js                                                            | JavaScript         |         12 |          2 |          5 |         19 |
+| /Users/dong/Documents/Code/Tickets/src/config/app.js                                                                    | JavaScript         |          7 |         13 |          5 |         25 |
+| /Users/dong/Documents/Code/Tickets/src/css/_legal-page.scss                                                             | SCSS               |        189 |         13 |         60 |        262 |
+| /Users/dong/Documents/Code/Tickets/src/css/aboutpage.scss                                                               | SCSS               |        157 |          1 |         24 |        182 |
+| /Users/dong/Documents/Code/Tickets/src/css/accountpage.scss                                                             | SCSS               |        593 |         78 |        292 |        963 |
+| /Users/dong/Documents/Code/Tickets/src/css/adminpage.scss                                                               | SCSS               |      1,084 |         85 |        367 |      1,536 |
+| /Users/dong/Documents/Code/Tickets/src/css/app.scss                                                                     | SCSS               |         42 |          0 |          8 |         50 |
+| /Users/dong/Documents/Code/Tickets/src/css/homepage.scss                                                                | SCSS               |        415 |          1 |         73 |        489 |
+| /Users/dong/Documents/Code/Tickets/src/css/intromanagementpage.scss                                                     | SCSS               |        362 |         20 |        191 |        573 |
+| /Users/dong/Documents/Code/Tickets/src/css/intropage.scss                                                               | SCSS               |        236 |          6 |        129 |        371 |
+| /Users/dong/Documents/Code/Tickets/src/css/loginpage.scss                                                               | SCSS               |        203 |          4 |         55 |        262 |
+| /Users/dong/Documents/Code/Tickets/src/css/mainlayout.scss                                                              | SCSS               |        289 |          8 |         28 |        325 |
+| /Users/dong/Documents/Code/Tickets/src/css/managementpage.scss                                                          | SCSS               |        292 |          7 |         52 |        351 |
+| /Users/dong/Documents/Code/Tickets/src/css/orderdetailpage.scss                                                         | SCSS               |        475 |          0 |         83 |        558 |
+| /Users/dong/Documents/Code/Tickets/src/css/orderspage.scss                                                              | SCSS               |        463 |          5 |         75 |        543 |
+| /Users/dong/Documents/Code/Tickets/src/css/ordersuccesspage.scss                                                        | SCSS               |        237 |          6 |         37 |        280 |
+| /Users/dong/Documents/Code/Tickets/src/css/performermanagementpage.scss                                                 | SCSS               |      1,399 |         55 |        880 |      2,334 |
+| /Users/dong/Documents/Code/Tickets/src/css/performerpage.scss                                                           | SCSS               |        311 |         24 |        157 |        492 |
+| /Users/dong/Documents/Code/Tickets/src/css/productpage.scss                                                             | SCSS               |        350 |          6 |         56 |        412 |
+| /Users/dong/Documents/Code/Tickets/src/css/salespolicypage.scss                                                         | SCSS               |         54 |          3 |         18 |         75 |
+| /Users/dong/Documents/Code/Tickets/src/css/surveyadminpage.scss                                                         | SCSS               |        623 |          0 |        126 |        749 |
+| /Users/dong/Documents/Code/Tickets/src/css/surveypage.scss                                                              | SCSS               |        321 |          0 |         55 |        376 |
+| /Users/dong/Documents/Code/Tickets/src/css/termspage.scss                                                               | SCSS               |          7 |          0 |          3 |         10 |
+| /Users/dong/Documents/Code/Tickets/src/data/buyGuide.js                                                                 | JavaScript         |         46 |          1 |          2 |         49 |
+| /Users/dong/Documents/Code/Tickets/src/data/schools.js                                                                  | JavaScript         |         28 |          4 |          6 |         38 |
+| /Users/dong/Documents/Code/Tickets/src/data/surveyQuestions.js                                                          | JavaScript         |        109 |          0 |          6 |        115 |
+| /Users/dong/Documents/Code/Tickets/src/data/ticketTypes.js                                                              | JavaScript         |          4 |          2 |          1 |          7 |
+| /Users/dong/Documents/Code/Tickets/src/layouts/MainLayout.vue                                                           | vue                |        250 |          0 |         37 |        287 |
+| /Users/dong/Documents/Code/Tickets/src/pages/AboutPage.vue                                                              | vue                |         89 |          0 |          8 |         97 |
+| /Users/dong/Documents/Code/Tickets/src/pages/AccountPage.vue                                                            | vue                |        458 |          3 |         50 |        511 |
+| /Users/dong/Documents/Code/Tickets/src/pages/AdminPage.vue                                                              | vue                |        696 |          0 |         62 |        758 |
+| /Users/dong/Documents/Code/Tickets/src/pages/ComingSoonPage.vue                                                         | vue                |        140 |          0 |         17 |        157 |
+| /Users/dong/Documents/Code/Tickets/src/pages/HomePage.vue                                                               | vue                |        148 |          1 |         17 |        166 |
+| /Users/dong/Documents/Code/Tickets/src/pages/IntroManagementPage.vue                                                    | vue                |        647 |          9 |        174 |        830 |
+| /Users/dong/Documents/Code/Tickets/src/pages/IntroPage.vue                                                              | vue                |         98 |          6 |         31 |        135 |
+| /Users/dong/Documents/Code/Tickets/src/pages/LoginPage.vue                                                              | vue                |        237 |          0 |         45 |        282 |
+| /Users/dong/Documents/Code/Tickets/src/pages/ManagementPage.vue                                                         | vue                |        689 |          0 |        117 |        806 |
+| /Users/dong/Documents/Code/Tickets/src/pages/OrderDetailPage.vue                                                        | vue                |        834 |          0 |        142 |        976 |
+| /Users/dong/Documents/Code/Tickets/src/pages/OrderSuccessPage.vue                                                       | vue                |        144 |          0 |         30 |        174 |
+| /Users/dong/Documents/Code/Tickets/src/pages/OrdersPage.vue                                                             | vue                |        238 |          0 |         43 |        281 |
+| /Users/dong/Documents/Code/Tickets/src/pages/PerformerManagementPage.vue                                                | vue                |      1,172 |         20 |        351 |      1,543 |
+| /Users/dong/Documents/Code/Tickets/src/pages/PerformerPage.vue                                                          | vue                |        204 |         11 |         45 |        260 |
+| /Users/dong/Documents/Code/Tickets/src/pages/ProductPage.vue                                                            | vue                |        380 |          0 |         63 |        443 |
+| /Users/dong/Documents/Code/Tickets/src/pages/SalesPolicyPage.vue                                                        | vue                |        193 |          0 |         24 |        217 |
+| /Users/dong/Documents/Code/Tickets/src/pages/ScanPage.vue                                                               | vue                |        476 |          0 |         57 |        533 |
+| /Users/dong/Documents/Code/Tickets/src/pages/SurveyAdminPage.vue                                                        | vue                |        551 |          0 |        129 |        680 |
+| /Users/dong/Documents/Code/Tickets/src/pages/SurveyPage.vue                                                             | vue                |        185 |          0 |         25 |        210 |
+| /Users/dong/Documents/Code/Tickets/src/pages/TermsPage.vue                                                              | vue                |        126 |          0 |         15 |        141 |
+| /Users/dong/Documents/Code/Tickets/src/router/index.js                                                                  | JavaScript         |         57 |          3 |         14 |         74 |
+| /Users/dong/Documents/Code/Tickets/src/router/routes.js                                                                 | JavaScript         |        148 |          7 |          5 |        160 |
+| /Users/dong/Documents/Code/Tickets/src/services/contentService.js                                                       | JavaScript         |         63 |         13 |         11 |         87 |
+| /Users/dong/Documents/Code/Tickets/src/services/orderService.js                                                         | JavaScript         |        169 |         19 |         27 |        215 |
+| /Users/dong/Documents/Code/Tickets/src/services/shopService.js                                                          | JavaScript         |         17 |         11 |          4 |         32 |
+| /Users/dong/Documents/Code/Tickets/src/services/ticketTypeService.js                                                    | JavaScript         |         30 |          3 |         12 |         45 |
+| /Users/dong/Documents/Code/Tickets/src/stores/auth.js                                                                   | JavaScript         |         85 |          7 |         19 |        111 |
+| /Users/dong/Documents/Code/Tickets/src/stores/index.js                                                                  | JavaScript         |          3 |          0 |          2 |          5 |
+| /Users/dong/Documents/Code/Tickets/src/stores/shop.js                                                                   | JavaScript         |         54 |         10 |         14 |         78 |
+| /Users/dong/Documents/Code/Tickets/src/stores/toast.js                                                                  | JavaScript         |         26 |          0 |          6 |         32 |
+| /Users/dong/Documents/Code/Tickets/src/utils/analytics.js                                                               | JavaScript         |          5 |          2 |          2 |          9 |
+| /Users/dong/Documents/Code/Tickets/src/utils/checkoutRecovery.js                                                        | JavaScript         |         84 |          4 |         11 |         99 |
+| /Users/dong/Documents/Code/Tickets/src/utils/datetime.js                                                                | JavaScript         |         99 |         14 |         24 |        137 |
+| /Users/dong/Documents/Code/Tickets/src/utils/debounce.js                                                                | JavaScript         |          7 |          0 |          1 |          8 |
+| /Users/dong/Documents/Code/Tickets/src/utils/guideSeen.js                                                               | JavaScript         |         13 |          4 |          3 |         20 |
+| /Users/dong/Documents/Code/Tickets/src/utils/notificationProgress.js                                                    | JavaScript         |         13 |          3 |          4 |         20 |
+| /Users/dong/Documents/Code/Tickets/src/utils/orderSearch.js                                                             | JavaScript         |         58 |          4 |         11 |         73 |
+| /Users/dong/Documents/Code/Tickets/src/utils/pdf.js                                                                     | JavaScript         |         20 |          5 |          2 |         27 |
+| /Users/dong/Documents/Code/Tickets/src/utils/qrScanner.js                                                               | JavaScript         |        123 |         21 |         18 |        162 |
+| /Users/dong/Documents/Code/Tickets/src/utils/qrcode.js                                                                  | JavaScript         |         14 |          3 |          3 |         20 |
+| /Users/dong/Documents/Code/Tickets/src/utils/redirect.js                                                                | JavaScript         |          4 |          1 |          1 |          6 |
+| /Users/dong/Documents/Code/Tickets/src/utils/text.js                                                                    | JavaScript         |         18 |          1 |          3 |         22 |
+| /Users/dong/Documents/Code/Tickets/src/utils/ticketQr.js                                                                | JavaScript         |         20 |          4 |          5 |         29 |
+| /Users/dong/Documents/Code/Tickets/tests/checkoutRecovery.test.js                                                       | JavaScript         |         76 |          0 |          9 |         85 |
+| /Users/dong/Documents/Code/Tickets/tests/firestore.rules.test.js                                                        | JavaScript         |        480 |          6 |         65 |        551 |
+| /Users/dong/Documents/Code/Tickets/tests/notificationProgress.test.js                                                   | JavaScript         |         23 |          0 |          4 |         27 |
+| /Users/dong/Documents/Code/Tickets/tests/orderSearch.test.js                                                            | JavaScript         |        170 |          0 |         20 |        190 |
+| /Users/dong/Documents/Code/Tickets/tests/ticketQr.test.js                                                               | JavaScript         |         26 |          0 |          4 |         30 |
+| Total                                                                                                                   |                    |     42,727 |        949 |     11,003 |     54,679 |
++-------------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
