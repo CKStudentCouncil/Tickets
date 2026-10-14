@@ -10,7 +10,7 @@ export const APP_CHECK_SITE_KEY = '6LcPrdEtAAAAALTnztzn22Xswpru02nuB9HoySEl'
 // Empty = no widget. After filling it in and deploying the site, set the
 // TURNSTILE_SECRET secret and ENFORCE_TURNSTILE=true in functions/.env and
 // redeploy the functions (see functions/README.md).
-export const TURNSTILE_SITE_KEY = ''
+export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
 
 // Before the shop opens visitors (except staff) are redirected to /comingsoon
 // and createOrder refuses orders. Super admins set the opening time on the
