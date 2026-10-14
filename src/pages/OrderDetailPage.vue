@@ -331,9 +331,10 @@
         <button
           type="button"
           class="secondary-button"
+          :disabled="downloadingReceipt"
           @click="downloadReceipt"
         >
-          下載收據
+          {{ downloadingReceipt ? '產生中...' : '下載 PDF' }}
         </button>
 
         <button
@@ -357,7 +358,143 @@ import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
 import { escapeHtml } from 'src/utils/text'
+import { downloadElementAsPdf } from 'src/utils/pdf'
 import { renderOrderQr } from 'src/utils/qrcode'
+
+// Styles for the plain receipt used by both the print window and the PDF,
+// all scoped to .receipt-doc
+const RECEIPT_STYLES = `
+  .receipt-doc,
+  .receipt-doc * {
+    box-sizing: border-box;
+  }
+
+  .receipt-doc {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    background: #fff;
+    color: #111;
+    font-family:
+      Arial,
+      "Noto Sans TC",
+      sans-serif;
+    line-height: 1.4;
+  }
+
+  /* the PDF copy sits on the site page, so undo Quasar's heading type */
+  .receipt-doc h1,
+  .receipt-doc h2 {
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: normal;
+  }
+
+  .receipt-doc .head {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid #111;
+  }
+
+  .receipt-doc .eyebrow {
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .receipt-doc h1 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .receipt-doc .order-id {
+    text-align: right;
+    font-size: 12px;
+    color: #555;
+  }
+
+  .receipt-doc .section {
+    padding: 24px 0;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .receipt-doc .section h2 {
+    margin: 0 0 16px;
+    font-size: 15px;
+  }
+
+  .receipt-doc .info {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 16px;
+    font-size: 13px;
+  }
+
+  .receipt-doc .info .label {
+    color: #666;
+  }
+
+  .receipt-doc table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .receipt-doc th,
+  .receipt-doc td {
+    padding: 10px 0;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+  }
+
+  .receipt-doc th {
+    font-size: 11px;
+    color: #666;
+  }
+
+  .receipt-doc .center {
+    text-align: center;
+  }
+
+  .receipt-doc .right {
+    text-align: right;
+  }
+
+  .receipt-doc .sub {
+    margin-top: 4px;
+    color: #666;
+    font-size: 11px;
+  }
+
+  .receipt-doc .total {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 18px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .receipt-doc .note {
+    margin-top: 24px;
+    padding: 16px;
+    background: #f5f5f5;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  .receipt-doc .footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 32px;
+    padding-top: 14px;
+    border-top: 1px solid #111;
+    font-size: 10px;
+    color: #666;
+  }
+`
 
 const route = useRoute()
 const router = useRouter()
@@ -371,6 +508,7 @@ const qrCanvas = ref(null)
 const loadError = ref(false)
 const qrError = ref('')
 const changingStatus = ref(false)
+const downloadingReceipt = ref(false)
 const statusError = ref('')
 const overrideReason = ref('')
 let loadSequence = 0
@@ -476,7 +614,7 @@ async function setPaid(paid) {
   }
 }
 
-function buildReceiptHtml() {
+function buildReceiptMarkup() {
   if (!order.value) {
     return ''
   }
@@ -520,149 +658,7 @@ function buildReceiptHtml() {
   const phone = currentOrder.customerPhone || '—'
 
   return `
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8">
-<title>CK PARTY NIGHT 購票收據</title>
-
-<style>
-  * {
-    box-sizing: border-box;
-  }
-
-  body {
-    margin: 0;
-    padding: 40px;
-    background: #fff;
-    color: #111;
-    font-family:
-      Arial,
-      "Noto Sans TC",
-      sans-serif;
-  }
-
-  .receipt {
-    width: 100%;
-    max-width: 760px;
-    margin: 0 auto;
-  }
-
-  .head {
-    display: flex;
-    justify-content: space-between;
-    gap: 24px;
-    padding-bottom: 24px;
-    border-bottom: 2px solid #111;
-  }
-
-  .eyebrow {
-    margin-bottom: 8px;
-    font-size: 11px;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 0;
-    font-size: 28px;
-  }
-
-  .order-id {
-    text-align: right;
-    font-size: 12px;
-    color: #555;
-  }
-
-  .section {
-    padding: 24px 0;
-    border-bottom: 1px solid #ccc;
-  }
-
-  .section h2 {
-    margin: 0 0 16px;
-    font-size: 15px;
-  }
-
-  .info {
-    display: grid;
-    grid-template-columns: 120px 1fr;
-    gap: 8px 16px;
-    font-size: 13px;
-  }
-
-  .info .label {
-    color: #666;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  th,
-  td {
-    padding: 10px 0;
-    border-bottom: 1px solid #ddd;
-    text-align: left;
-  }
-
-  th {
-    font-size: 11px;
-    color: #666;
-  }
-
-  .center {
-    text-align: center;
-  }
-
-  .right {
-    text-align: right;
-  }
-
-  .sub {
-    margin-top: 4px;
-    color: #666;
-    font-size: 11px;
-  }
-
-  .total {
-    display: flex;
-    justify-content: space-between;
-    padding-top: 18px;
-    font-size: 18px;
-    font-weight: 700;
-  }
-
-  .note {
-    margin-top: 24px;
-    padding: 16px;
-    background: #f5f5f5;
-    font-size: 11px;
-    line-height: 1.7;
-  }
-
-  .footer {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 32px;
-    padding-top: 14px;
-    border-top: 1px solid #111;
-    font-size: 10px;
-    color: #666;
-  }
-
-  @media print {
-    body {
-      padding: 0;
-    }
-  }
-</style>
-</head>
-
-<body>
-  <div class="receipt">
+  <div class="receipt-doc">
     <div class="head">
       <div>
         <div class="eyebrow">
@@ -805,43 +801,59 @@ ${
       </span>
     </div>
   </div>
-</body>
+`
+}
+
+function buildReceiptHtml() {
+  return `
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>CK PARTY NIGHT 購票收據</title>
+
+<style>
+  body {
+    margin: 0;
+    padding: 40px;
+    background: #fff;
+  }
+
+  @media print {
+    body {
+      padding: 0;
+    }
+  }
+
+${RECEIPT_STYLES}</style>
+</head>
+
+<body>
+${buildReceiptMarkup()}</body>
 </html>
   `
 }
 
-function downloadReceipt() {
-  if (!order.value) {
+async function downloadReceipt() {
+  if (!order.value || downloadingReceipt.value) {
     return
   }
 
-  const html = buildReceiptHtml()
+  downloadingReceipt.value = true
 
-  const blob = new Blob(
-    [html],
-    {
-      type: 'text/html;charset=utf-8'
-    }
-  )
+  // html2pdf renders a copy of this off-page element; every rule in
+  // RECEIPT_STYLES is scoped to .receipt-doc so nothing leaks onto the page
+  const element = document.createElement('div')
+  element.innerHTML = `<style>${RECEIPT_STYLES}</style>${buildReceiptMarkup()}`
 
-  const url =
-    URL.createObjectURL(blob)
-
-  const anchor =
-    document.createElement('a')
-
-  anchor.href = url
-
-  anchor.download =
-    `CK-PARTY-NIGHT-${order.value.id}.html`
-
-  document.body.appendChild(anchor)
-
-  anchor.click()
-
-  anchor.remove()
-
-  URL.revokeObjectURL(url)
+  try {
+    await downloadElementAsPdf(element, `CK-PARTY-NIGHT-${order.value.id}.pdf`)
+  } catch (error) {
+    console.error('PDF generation failed:', error)
+    toast.show('收據 PDF 產生失敗，請稍後再試')
+  } finally {
+    downloadingReceipt.value = false
+  }
 }
 
 function printReceipt() {
