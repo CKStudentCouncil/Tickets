@@ -1,9 +1,11 @@
 import { after, beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Timestamp } from 'firebase-admin/firestore'
-import { PROJECT_ID, db, fft, functions } from './setup.js'
+import { PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
 import { createMailQueue, MAIL_LEASE_MS, MAIL_MAX_ATTEMPTS } from '../../lib/mailQueueCore.js'
 import { enqueueManualOrderResend } from '../../lib/mailQueue.js'
+
+assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 beforeEach(async () => {
   const response = await fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`, { method: 'DELETE' })

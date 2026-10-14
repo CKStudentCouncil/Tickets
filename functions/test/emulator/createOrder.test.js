@@ -3,8 +3,10 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf } from './setup.js'
+import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
 import { getBuyerKey, SHARD_COUNT } from '../../lib/orderValidation.js'
+
+assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 const callCreate = fft.wrap(functions.createOrder)
 const callRelease = fft.wrap(functions.releaseOrderStock)

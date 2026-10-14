@@ -1,8 +1,10 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { PROJECT_ID, db, fft } from './setup.js'
+import { PROJECT_ID, db, fft, isEmulator } from './setup.js'
 import { updateOrderDelivery, updateOrderPayment } from '../../lib/orderActions.js'
+
+assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 const deliver = fft.wrap(updateOrderDelivery)
 const pay = fft.wrap(updateOrderPayment)
