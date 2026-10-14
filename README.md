@@ -8,7 +8,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 
 - Ticket types (price, sale window, eligibility, stock, per-person limit) configured in the admin UI
 - Server-side order validation in a Cloud Function transaction, so tickets cannot be oversold
-- Confirmation email with a QR code that door staff scan into the admin order view
+- Confirmation email with a QR code that door staff scan into the admin order view, with the phone's camera app or the in-page scanner on `/admin/scan`
 - Role-based administration for managers, admins, and super admins
 - Atomic QR collection and payment updates with staff audit history
 - Shared queued AWS SES delivery for confirmation and payment / pickup emails
@@ -226,6 +226,7 @@ firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,function
 | `/intro`, `/performer`, `/about` | Party introduction, lineup, about |
 | `/survey` | User survey |
 | `/admin` | Admin dashboard / notifications |
+| `/admin/scan` | In-page camera scanner for ticket QR codes |
 | `/admin/orders/:id` | Staff order view (ticket QR codes link here) |
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |

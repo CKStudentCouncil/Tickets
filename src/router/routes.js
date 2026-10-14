@@ -117,6 +117,12 @@ const routes = [
         }
       },
       {
+        // in-page camera scanner for ticket QR codes (no phone scanner app)
+        path: 'scan',
+        name: 'admin-scan',
+        component: () => import('pages/ScanPage.vue')
+      },
+      {
         path: 'orders/:id',
         name: 'admin-order-detail',
         // door staff (managers) scan ticket QR codes into this page

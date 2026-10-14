@@ -105,6 +105,9 @@
         <p v-if="order.deliveryUpdatedByName">
           最後領票更新：{{ order.deliveryUpdatedByName }} · {{ formatDateTime(order.deliveryUpdatedAt) }}
         </p>
+        <button type="button" class="secondary-button" @click="router.push({ name: 'admin-scan' })">
+          掃描下一張
+        </button>
       </section>
 
       <article class="receipt">

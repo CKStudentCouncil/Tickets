@@ -122,7 +122,7 @@ For a new development project, bootstrap the first super admin by adding `users/
 2. `src/services/orderService.js` persists the payload and `requestId` per account before calling `createOrder`. Automatic retries, manual retries and reloads reuse it until success or an authoritative rejection.
 3. `functions/lib/orders.js` takes the UID and verified email from authentication, validates the shop opening and ticket configuration, and reserves stock and buyer allowance in a Firestore transaction.
 4. The function saves the order and returns `{ id }`. A repeated request with the same ID returns the already-created order.
-5. The order-created trigger enqueues a deterministic confirmation job. The shared scheduled worker records SES acceptance or a failed/uncertain outcome. The email's QR code opens `/admin/orders/{id}?c={ticketCode}`.
+5. The order-created trigger enqueues a deterministic confirmation job. The shared scheduled worker records SES acceptance or a failed/uncertain outcome. The email's QR code opens `/admin/orders/{id}?c={ticketCode}`; staff scan it with the phone's camera app or with `/admin/scan`, which reads it in the page (BarcodeDetector, or jsQR where that is missing) and opens the same URL.
 
 Keep price, eligibility, sale windows, stock limits, and purchase limits authoritative on the server. Changes to validation belong in [functions/lib/orderValidation.js](functions/lib/orderValidation.js) and its tests, with matching frontend feedback where needed. Preserve the same request ID when retrying an uncertain checkout result.
 

@@ -28,6 +28,7 @@
     <div class="page-heading">
       <p class="eyebrow">後台管理</p>
       <h1>{{ canManageOrders ? '後台管理' : '通知管理' }}</h1>
+      <router-link :to="{ name: 'admin-scan' }" class="btn scan-link">掃描票券 QR Code</router-link>
     </div>
 
     <div
@@ -747,4 +748,10 @@ async function resendEmail(order) {
 
 <style scoped>
 @import 'src/css/adminpage.scss';
+
+.scan-link {
+  display: inline-block;
+  margin-top: 20px;
+  text-decoration: none;
+}
 </style>

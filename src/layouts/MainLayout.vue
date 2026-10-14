@@ -50,6 +50,14 @@
             <div class="nav-divider" role="separator" />
 
             <router-link
+              v-if="auth.isManager"
+              to="/admin/scan"
+              @click="menuOpen = false"
+            >
+              掃描票券
+            </router-link>
+
+            <router-link
               v-if="auth.isManager && !auth.isAdmin"
               to="/admin"
               @click="menuOpen = false"
