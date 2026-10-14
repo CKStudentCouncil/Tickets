@@ -189,7 +189,7 @@ async function assertTurnstile(data, context, account, requestId) {
     token: data?.turnstileToken,
     action: CHECKOUT_ACTION,
     hostnames: parseHostnames(TURNSTILE_HOSTNAMES.value()),
-    secret: process.env[TURNSTILE_SECRET],
+    secret: process.env[TURNSTILE_SECRET]?.trim(),
     remoteip: context.rawRequest?.ip
   })
   const passRef = requestId ? db.doc(`turnstilePasses/${requestId}`) : null
