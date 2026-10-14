@@ -206,6 +206,7 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
   return renderEmail({
     title: '2026 建中舞會 COSMOS 購票成功通知',
     preheader: `您的 COSMOS 購票已確認，票券編號 ${safeOrderId}，共 ${totalTicketCount} 張，總金額 NT$ ${formatCurrency(order.finalTotal)}`,
-    content
+    content,
+    heroCaption: 'Confirmation'
   });
 }

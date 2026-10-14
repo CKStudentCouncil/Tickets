@@ -18,9 +18,7 @@ export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
 // do. Keep in sync with functions/lib/constants.js
 export const SHOP_OPEN_AT = new Date('2026-11-05T12:00:00+08:00')
 
-// Party date and venue shown on the home page and receipts. The emails show
-// the same line (EVENT_META in functions/templates/shared.js, checked by
-// functions/test/unit/consistency.test.js).
+// Party date and venue shown on the home page and receipts.
 export const EVENT_DATE = '2026/12/13'
 export const EVENT_DATE_LONG = '2026 年 12 月 13 日'
 export const EVENT_VENUE = '建中明道樓後停車場'

@@ -50,9 +50,6 @@ export const FONT =
 
 export const MONO = "'SF Mono',SFMono-Regular,Consolas,Menlo,monospace";
 
-// Same line as the homepage hero (src/pages/HomePage.vue)
-export const EVENT_META = '2026/12/13 · 建中明道樓後停車場';
-
 const HERO_TERRAIN = readFileSync(new URL('./assets/hero-terrain.png', import.meta.url));
 
 // Inline image referenced by the hero as cid:hero-terrain; every email that
@@ -250,8 +247,9 @@ function footer() {
 }
 
 // Full document: head, hidden preheader, hero, `content` and the footer.
-// `title` and `preheader` must already be escaped.
-export function renderEmail({ title, preheader, content }) {
+// `title` and `preheader` must already be escaped. `heroCaption` is the line
+// under COSMOS that names the kind of email (Confirmation, Notification).
+export function renderEmail({ title, preheader, content, heroCaption }) {
   // Padded with zero-width joiners + non-breaking spaces so Gmail (and
   // similar clients) can't fall through to whatever visible text happens
   // to come right after this block for their inbox-preview snippet.
@@ -509,11 +507,11 @@ export function renderEmail({ title, preheader, content }) {
                     <p class="lockup-sub" style="margin:0 0 22px;padding-left:.7em;font-family:${FONT};font-size:11px;font-weight:400;line-height:1.4;letter-spacing:.7em;color:${C.lunar};">
                       2026 · CK PARTY NIGHT
                     </p>
-                    <h1 class="brand" style="margin:0;padding-left:.5em;font-family:${FONT};font-size:44px;font-weight:400;line-height:1.1;letter-spacing:.5em;color:${C.text};">
+                    <h1 class="brand" style="margin:0;padding-left:.5em;font-family:${FONT};font-size:44px;font-weight:400;line-height:1.1;letter-spacing:.5em;color:#ffffff;">
                       COSMOS
                     </h1>
                     <p style="margin:26px 0 0;font-family:${FONT};font-size:13px;line-height:1.6;letter-spacing:.05em;color:${C.muted};">
-                      ${EVENT_META}
+                      ${heroCaption}
                     </p>
                   </td>
                 </tr>

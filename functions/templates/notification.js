@@ -108,6 +108,7 @@ export function generateOrderNotificationHTML({
   return renderEmail({
     title: `${label} - 2026 CK PARTY NIGHT`,
     preheader: preheaderParts.join('，'),
-    content
+    content,
+    heroCaption: 'Notification'
   });
 }

@@ -6,7 +6,6 @@ import assert from 'node:assert/strict'
 import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
-import { EVENT_META } from '../../templates/shared.js'
 
 const srcFile = (path) => new URL(`../../../src/${path}`, import.meta.url)
 
@@ -43,9 +42,4 @@ test('notification email links to this site only', () => {
   const html = generateOrderNotificationHTML({ type: 'custom', message: 'hi' })
   assert.doesNotMatch(html, /souvenir\.cksc\.tw/)
   assert.match(html, new RegExp(`${SITE_URL.replace(/\./g, '\\.')}/survey`))
-})
-
-test('email hero shows the same date and venue as the site (src/config/app.js)', async () => {
-  const app = await import(srcFile('config/app.js'))
-  assert.equal(`${app.EVENT_DATE} · ${app.EVENT_VENUE}`, EVENT_META)
 })
