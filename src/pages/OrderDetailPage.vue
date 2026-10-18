@@ -1,350 +1,274 @@
 <template>
   <div class="detail-page">
     <div v-if="loading && !order" class="state-screen" role="status">
-      <span class="eyebrow">CK PARTY NIGHT</span>
       <p>載入訂單中...</p>
     </div>
 
     <div v-else-if="loadError && !order" class="state-screen" role="alert">
       <h1>目前無法載入訂單</h1>
-      <p>請檢查連線後重試。</p>
-      <button type="button" class="primary-button" @click="loadOrder">重新載入</button>
+      <p>請檢查連線後重試</p>
+      <button type="button" class="btn" @click="loadOrder">重新載入</button>
     </div>
 
     <div v-else-if="!order" class="state-screen">
-      <span class="eyebrow">CK PARTY NIGHT</span>
+      <p class="eyebrow">CK PARTY NIGHT</p>
       <h1>找不到訂單</h1>
-      <p v-if="isAdminView">此訂單不存在。</p>
-      <p v-else>此訂單不存在，或不是以目前登入的帳號（{{ auth.email }}）訂購。</p>
+      <p v-if="isAdminView">此訂單不存在</p>
+      <p v-else>此訂單不存在，或不是以目前登入的帳號（{{ auth.email }}）訂購</p>
 
-      <button
-        type="button"
-        class="primary-button"
-        @click="goBack"
-      >
-        返回
-      </button>
+      <button type="button" class="btn" @click="goBack">返回</button>
     </div>
 
     <main v-else class="detail-content" :aria-busy="loading">
       <div v-if="loadError" class="qr-check danger" role="alert">
-        無法更新訂單，目前顯示上次載入的資料。
+        <span>無法更新訂單，目前顯示上次載入的資料。</span>
         <button type="button" :disabled="loading" @click="loadOrder">重新載入</button>
       </div>
-      <header class="page-header">
-        <div>
-          <span class="eyebrow">CK PARTY NIGHT</span>
-          <h1>訂單詳情</h1>
-          <p class="lead">建中舞會購票系統</p>
-        </div>
 
-        <button
-          type="button"
-          class="back-button"
-          @click="goBack"
-        >
-          返回
-        </button>
+      <!-- ---------- heading ---------- -->
+      <header class="page-heading">
+        <p class="eyebrow">
+          CK PARTY NIGHT · {{ isAdminView ? 'STAFF VIEW' : 'CUSTOMER VIEW' }}
+        </p>
+        <h1>訂單詳情</h1>
+        <p class="heading-meta" style="margin-bottom: 2ch;">
+          ORDER <span class="mono">{{ order.id }}</span>
+        </p>
+        <div class="heading-actions">
+          <button type="button" class="btn-outline" @click="goBack">返回</button>
+          <button
+            v-if="isAdminView"
+            type="button"
+            class="btn"
+            @click="router.push({ name: 'admin-scan' })"
+          >
+            掃描下一張
+          </button>
+        </div>
       </header>
 
-      <section
-        v-if="isAdminView"
-        class="admin-toolbar"
-      >
-        <p v-if="qrCheck === 'ok'" class="qr-check ok">✓ QR 驗證碼相符</p>
-        <p v-else-if="qrCheck === 'mismatch'" class="qr-check danger">
-          ⚠ QR 驗證碼不符，可能是偽造的 QR Code。請核對購票人姓名與證件後再處理。
-        </p>
-        <p v-else-if="qrCheck === 'none'" class="qr-check warn">
-          請掃描購票人的票券 QR Code 後領票。管理員可核對身分並填寫原因後手動處理。
-        </p>
-        <label v-if="auth.isAdmin" class="manual-reason">
-          手動領票或重設的原因
-          <input v-model="overrideReason" maxlength="500" placeholder="核對身分的方式或重設原因">
-        </label>
-        <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
-        <div class="toggle-group">
-          <span class="toggle-label">
-            領票狀態
-          </span>
+      <!-- ---------- status / check-in ---------- -->
+      <section class="panel" style="border-top: none; margin-top: 0; padding-top: 0;">
+        <div class="panel-head">
+          <h2>{{ isAdminView ? '領票作業' : '訂單狀態' }}</h2>
+          <span v-if="isAdminView" class="panel-tag">CHECK-IN DESK</span>
+        </div>
 
-          <div class="toggle-switch">
-            <button
-              type="button"
-              :class="{ active: !order.delivered }"
-              :disabled="changingStatus || !order.delivered || !auth.isAdmin || !overrideReason.trim() || loading || loadError"
-              @click="setDelivered(false)"
-            >
-              未領票
-            </button>
+        <template v-if="isAdminView">
+          <p v-if="qrCheck === 'ok'" class="qr-check ok">✓ QR 驗證碼相符</p>
+          <p v-else-if="qrCheck === 'mismatch'" class="qr-check danger">
+            ⚠ QR 驗證碼不符，可能是偽造的 QR Code。請核對購票人姓名與證件後再處理
+          </p>
+          <p v-else-if="qrCheck === 'none'" class="qr-check warn">
+            請掃描購票人的票券 QR Code 後領票。管理員可核對身分並填寫原因後手動處理
+          </p>
 
-            <button
-              type="button"
-              :class="{ active: order.delivered }"
-              :disabled="changingStatus || order.delivered || !canCollect || loading || loadError"
-              @click="setDelivered(true)"
-            >
-              已領票
-            </button>
+          <label v-if="auth.isAdmin" class="manual-reason">
+            手動領票或重設的原因
+            <input v-model="overrideReason" maxlength="500" placeholder="核對身分的方式或重設原因">
+          </label>
+
+          <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
+        </template>
+
+        <div class="status-block">
+          <div class="delivery-bar" :class="order.delivered ? 'delivered' : 'pending'">
+            <span class="status-dot" />
+            <span>領票狀態：{{ order.delivered ? '已領票' : '未領票' }}</span>
+            <div v-if="isAdminView" class="delivery-actions">
+              <button
+                type="button"
+                class="btn-sm muted"
+                :disabled="changingStatus || !order.delivered || !auth.isAdmin || !overrideReason.trim() || loading || loadError"
+                @click="setDelivered(false)"
+              >
+                標記未領票
+              </button>
+              <button
+                type="button"
+                class="btn-sm"
+                :disabled="changingStatus || order.delivered || !canCollect || loading || loadError"
+                @click="setDelivered(true)"
+              >
+                標記已領票
+              </button>
+            </div>
+          </div>
+
+          <div class="delivery-bar" :class="order.paid ? 'paid' : 'pending'">
+            <span class="status-dot" />
+            <span>付款狀態：{{ order.paid ? '已付款' : '未付款' }}</span>
+            <div v-if="isAdminView && auth.isAdmin" class="delivery-actions">
+              <button
+                type="button"
+                class="btn-sm muted"
+                :disabled="changingStatus || !order.paid || loading || loadError"
+                @click="setPaid(false)"
+              >
+                標記未付款
+              </button>
+              <button
+                type="button"
+                class="btn-sm"
+                :disabled="changingStatus || order.paid || loading || loadError"
+                @click="setPaid(true)"
+              >
+                標記已付款
+              </button>
+            </div>
           </div>
         </div>
-        <p v-if="changingStatus" role="status">正在確認並更新訂單…</p>
-        <div v-if="auth.isAdmin" class="toggle-group">
-          <span class="toggle-label">付款狀態</span>
-          <div class="toggle-switch">
-            <button type="button" :class="{ active: !order.paid }"
-              :disabled="changingStatus || !order.paid || loading || loadError" @click="setPaid(false)">
-              未付款
-            </button>
-            <button type="button" :class="{ active: order.paid }"
-              :disabled="changingStatus || order.paid || loading || loadError" @click="setPaid(true)">
-              已付款
-            </button>
-          </div>
-        </div>
-        <p v-if="order.deliveryUpdatedByName">
+
+        <p v-if="changingStatus" class="check-meta" role="status">正在確認並更新訂單…</p>
+        <p v-if="isAdminView && order.deliveryUpdatedByName" class="check-meta">
           最後領票更新：{{ order.deliveryUpdatedByName }} · {{ formatDateTime(order.deliveryUpdatedAt) }}
         </p>
-        <button type="button" class="secondary-button" @click="router.push({ name: 'admin-scan' })">
-          掃描下一張
-        </button>
       </section>
 
-      <article class="receipt">
-        <div class="receipt-head">
+      <!-- ---------- QR ---------- -->
+      <section class="panel">
+        <h2>訂單 QR Code</h2>
+        <p class="panel-copy">領票時請出示此 QR Code 給工作人員掃描</p>
+
+        <div class="order-qr-card">
+          <div class="qr-canvas-wrapper">
+            <canvas
+              ref="qrCanvas"
+              class="order-qr"
+              width="220"
+              height="220"
+              role="img"
+              :aria-label="`訂單 ${order.id} 的領票 QR Code`"
+            />
+          </div>
+
+          <p v-if="qrError" role="alert">{{ qrError }}</p>
+          <button v-if="qrError" type="button" class="btn" @click="renderQr">
+            重新產生 QR Code
+          </button>
+        </div>
+      </section>
+
+      <!-- ---------- buyer info ---------- -->
+      <section class="panel">
+        <h2>購票資訊</h2>
+
+        <dl class="info-list">
           <div>
-            <span class="receipt-kicker">
-              CK PARTY NIGHT
+            <dt>訂單編號</dt>
+            <dd class="mono">{{ order.id }}</dd>
+          </div>
+          <div>
+            <dt>建立時間</dt>
+            <dd class="num">{{ formatDateTime(order.createdAt) }}</dd>
+          </div>
+          <div v-if="order.customerName">
+            <dt>購票人</dt>
+            <dd>{{ order.customerName }}</dd>
+          </div>
+          <div v-if="order.customerEmail">
+            <dt>Email</dt>
+            <dd class="mono">{{ order.customerEmail }}</dd>
+          </div>
+          <div v-if="order.customerPhone">
+            <dt>聯絡電話</dt>
+            <dd class="mono">{{ order.customerPhone }}</dd>
+          </div>
+          <div v-if="order.school">
+            <dt>學校</dt>
+            <dd>{{ order.school }}</dd>
+          </div>
+          <div v-if="order.class">
+            <dt>班級</dt>
+            <dd>{{ order.class }}</dd>
+          </div>
+          <div v-if="order.number">
+            <dt>座號</dt>
+            <dd>{{ order.number }}</dd>
+          </div>
+          <div v-if="order.office">
+            <dt>辦公室</dt>
+            <dd>{{ order.office }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- ---------- tickets ---------- -->
+      <section class="panel">
+        <h2>票券明細</h2>
+
+        <ul v-if="(order.items || []).length" class="product-stats">
+          <li v-for="(item, index) in order.items || []" :key="item.id || index">
+            <span>{{ item.name }}</span>
+            <span class="item-meta">
+              <span class="num">× {{ item.quantity }}</span>
+              <strong class="num">
+                NT$ {{ (Number(item.price || 0) * Number(item.quantity || 0)).toLocaleString() }}
+              </strong>
             </span>
+          </li>
+        </ul>
+        <p v-else class="panel-copy">尚無票券資料</p>
 
-            <h2>購票收據</h2>
+        <div class="stats-row">
+          <div class="stat">
+            <div>應付總額</div>
+            <div class="num accent">NT$ {{ Number(order.finalTotal ?? 0).toLocaleString() }}</div>
           </div>
-
-          <div class="receipt-meta">
-            <span>訂單編號</span>
-            <strong>{{ order.id }}</strong>
+          <div class="stat">
+            <div>付款狀態</div>
+            <div class="num">{{ order.paid ? '已付款' : '未付款' }}</div>
+          </div>
+          <div class="stat">
+            <div>領票狀態</div>
+            <div class="num">{{ order.delivered ? '已領票' : '未領票' }}</div>
           </div>
         </div>
+      </section>
 
-        <div class="status-pills">
-          <span
-            class="status-pill"
-            :class="{ on: order.delivered }"
-          >
-            <i />
-            {{ order.delivered ? '已領票' : '未領票' }}
-          </span>
-          <span class="status-pill" :class="{ on: order.paid }">
-            <i />{{ order.paid ? '已付款' : '未付款' }}
-          </span>
-        </div>
+      <!-- ---------- event ---------- -->
+      <section class="panel">
+        <h2>活動資訊</h2>
 
-        <section class="receipt-section order-qr-section">
-          <div class="section-heading">
-            <span class="section-index">QR</span>
-            <h3>訂單 QR Code</h3>
+        <dl class="info-list">
+          <div>
+            <dt>活動</dt>
+            <dd>CK PARTY NIGHT</dd>
           </div>
-
-          <div class="order-qr-card">
-            <div class="qr-canvas-wrapper">
-              <canvas
-                ref="qrCanvas"
-                class="order-qr"
-                width="220"
-                height="220"
-                role="img"
-                :aria-label="`訂單 ${order.id} 的領票 QR Code`"
-              />
-            </div>
-
-            <p>領票時請出示此 QR Code 給工作人員掃描 </p>
-            <p v-if="qrError" role="alert">{{ qrError }}</p>
-            <button v-if="qrError" type="button" class="primary-button" @click="renderQr">
-              重新產生 QR Code
-            </button>
+          <div>
+            <dt>日期</dt>
+            <dd>{{ EVENT_DATE_LONG }}</dd>
           </div>
-        </section>
-
-        <section class="receipt-section">
-          <div class="section-heading">
-            <span class="section-index">01</span>
-            <h3>購票資訊</h3>
+          <div>
+            <dt>地點</dt>
+            <dd>{{ EVENT_VENUE }}</dd>
           </div>
+        </dl>
 
-          <dl class="detail-list">
-            <div>
-              <dt>訂單編號</dt>
-              <dd>{{ order.id }}</dd>
-            </div>
+        <p class="panel-copy">
+          請依主辦單位公告之方式及時間辦理領票。入場須使用紙本票券方可入場。
+        </p>
+      </section>
 
-            <div>
-              <dt>建立時間</dt>
-              <dd>
-                {{ formatDateTime(order.createdAt) }}
-              </dd>
-            </div>
-
-            <div v-if="order.customerName">
-              <dt>購票人</dt>
-              <dd>{{ order.customerName }}</dd>
-            </div>
-
-            <div v-if="order.customerEmail">
-              <dt>Email</dt>
-              <dd>{{ order.customerEmail }}</dd>
-            </div>
-
-            <div v-if="order.customerPhone">
-              <dt>聯絡電話</dt>
-              <dd>{{ order.customerPhone }}</dd>
-            </div>
-
-            <div v-if="order.school">
-              <dt>學校</dt>
-              <dd>{{ order.school }}</dd>
-            </div>
-
-            <div v-if="order.class">
-              <dt>班級</dt>
-              <dd>{{ order.class }}</dd>
-            </div>
-
-            <div v-if="order.number">
-              <dt>座號</dt>
-              <dd>{{ order.number }}</dd>
-            </div>
-
-            <div v-if="order.office">
-              <dt>辦公室</dt>
-              <dd>{{ order.office }}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section class="receipt-section">
-          <div class="section-heading">
-            <span class="section-index">02</span>
-            <h3>票券明細</h3>
-          </div>
-
-          <div class="receipt-items">
-            <div
-              v-for="(item, index) in order.items || []"
-              :key="item.id || index"
-              class="receipt-item"
-            >
-              <div class="item-main">
-                <strong>
-                  {{ item.name }}
-                </strong>
-              </div>
-
-              <div class="item-meta">
-                <span>
-                  × {{ item.quantity }}
-                </span>
-
-                <strong>
-                  NT$
-                  {{
-                    (
-                      Number(item.price || 0) *
-                      Number(item.quantity || 0)
-                    ).toLocaleString()
-                  }}
-                </strong>
-              </div>
-            </div>
-          </div>
-
-          <div class="receipt-total">
-            <span>應付總額</span>
-
-            <strong>
-              NT$
-              {{
-                Number(
-                  order.finalTotal ??
-                  0
-                ).toLocaleString()
-              }}
-            </strong>
-          </div>
-        </section>
-
-        <section class="receipt-section">
-          <div class="section-heading">
-            <span class="section-index">03</span>
-            <h3>活動資訊</h3>
-          </div>
-
-          <dl class="detail-list">
-            <div>
-              <dt>活動</dt>
-              <dd>CK PARTY NIGHT</dd>
-            </div>
-
-            <div>
-              <dt>日期</dt>
-              <dd>{{ EVENT_DATE_LONG }}</dd>
-            </div>
-
-            <div>
-              <dt>地點</dt>
-              <dd>{{ EVENT_VENUE }}</dd>
-            </div>
-
-            <div>
-              <dt>領票狀態</dt>
-              <dd>
-                {{
-                  order.delivered
-                    ? '已領票'
-                    : '未領票'
-                }}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <div class="receipt-note">
-          <span>NOTE</span>
-
-          <p>
-            請依主辦單位公告之方式及時間辦理領票。
-            入場須使用紙本票券方可入場。
-          </p>
-        </div>
-
-        <footer class="receipt-footer">
-          <span>
-            臺北市立建國高級中學班聯會
-          </span>
-
-          <span>
-            CK PARTY NIGHT 2026 · COSMOS
-          </span>
-        </footer>
-      </article>
-
-      <div class="receipt-actions">
+      <div class="order-actions">
         <button
           type="button"
-          class="secondary-button"
+          class="btn-outline"
           :disabled="downloadingReceipt"
           @click="downloadReceipt"
         >
           {{ downloadingReceipt ? '產生中...' : '下載收據' }}
         </button>
 
-        <button
-          type="button"
-          class="primary-button"
-          @click="printReceipt"
-        >
+        <button type="button" class="btn" @click="printReceipt">
           列印收據
         </button>
       </div>
+
+      <footer class="page-footer">
+        <span>臺北市立建國高級中學班聯會</span>
+        <span>CK PARTY NIGHT 2026 · COSMOS</span>
+      </footer>
     </main>
   </div>
 </template>
@@ -910,66 +834,4 @@ watch(orderId, () => {
 
 <style scoped>
 @import 'src/css/orderdetailpage.scss';
-
-.qr-check {
-  width: 100%;
-  margin: 0 0 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.qr-check.ok {
-  background: #e7f5ec;
-  color: var(--success, #19703a);
-}
-
-.qr-check.warn {
-  background: #fff6e0;
-  color: #8a5a00;
-}
-
-.qr-check.danger {
-  background: #fdecea;
-  color: var(--danger, #a12622);
-}
-
-.qr-canvas-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 220px;
-  height: 220px;
-  margin: 0 auto 16px;
-  padding: 0;
-  background: #ffffff;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.qr-canvas-wrapper canvas {
-  display: block;
-  width: 220px !important;
-  height: 220px !important;
-}
-
-.manual-reason {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.manual-reason input {
-  padding: 10px;
-  border: 1px solid #9aa3ac;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-}
-
-.toggle-switch button:disabled {
-  cursor: not-allowed;
-  opacity: .6;
-}
 </style>

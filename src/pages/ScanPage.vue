@@ -2,9 +2,15 @@
   <div class="scan-page">
     <main class="scan-content">
       <header class="page-heading">
-        <p class="eyebrow">領票</p>
+        <div class="heading-topline">
+          <p class="eyebrow">領票服務 <span>／ CHECK-IN</span></p>
+          <span class="live-badge"><i />現場模式</span>
+        </div>
         <div class="title-row">
-          <h1>掃描票券</h1>
+          <div>
+            <h1>掃描票券</h1>
+            <p class="lead">對準購票人的 QR Code，快速完成核票與領票。</p>
+          </div>
           <button
             type="button"
             class="help-button"
@@ -13,12 +19,17 @@
             @click="openGuide"
           >
             <CircleQuestionMark :size="22" :stroke-width="1.75" aria-hidden="true" />
+            <span>教學</span>
           </button>
         </div>
-        <p class="lead">將購票人的票券 QR Code 對準框內，讀到後會自動開啟訂單。</p>
       </header>
 
-      <div class="viewfinder">
+      <div class="scanner-card">
+        <div class="scanner-card-head">
+          <span>掃描視窗</span>
+          <span class="scanner-status"><i />{{ state === 'scanning' ? '相機已就緒' : '準備中' }}</span>
+        </div>
+        <div class="viewfinder">
         <video
           ref="video"
           muted
@@ -33,6 +44,8 @@
           <p role="alert">{{ errorMessage }}</p>
           <button type="button" class="primary-button" @click="start()">重新開啟相機</button>
         </div>
+        </div>
+        <p class="scanner-caption"><span>01</span> 將 QR Code 放入框線內，系統會自動辨識</p>
       </div>
 
       <p class="scan-notice" role="status" aria-live="polite">{{ notice }}</p>
@@ -311,9 +324,10 @@ onBeforeUnmount(() => {
   --line: rgba(242, 240, 233, .14);
   --line-soft: rgba(242, 240, 233, .08);
   --danger: #c97878;
+  --ink: #080a0d;
 
   min-height: 100vh;
-  padding: 120px 16px 100px;
+  padding: 104px 16px 100px;
   background:
     radial-gradient(
       ellipse 60% 40% at 90% 0%,
@@ -332,15 +346,51 @@ onBeforeUnmount(() => {
 }
 
 .page-heading {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
+  padding: 22px 0 25px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.heading-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
 .eyebrow {
-  margin: 0 0 12px;
+  margin: 0;
   color: var(--ember);
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: .28em;
+}
+
+.eyebrow span {
+  color: rgba(242, 240, 233, .4);
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+
+.live-badge,
+.scanner-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--lunar);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.live-badge i,
+.scanner-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #77bf8b;
+  box-shadow: 0 0 0 4px rgba(119, 191, 139, .12);
 }
 
 .page-heading h1 {
@@ -353,21 +403,22 @@ onBeforeUnmount(() => {
 
 .title-row {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
 }
 
 .help-button {
   flex: none;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--lunar);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, .025);
+  color: var(--lunar);
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -376,17 +427,35 @@ onBeforeUnmount(() => {
 }
 
 .lead {
-  margin: 10px 0 0;
+  margin: 11px 0 0;
   color: var(--lunar);
   font-size: 14px;
   line-height: 1.7;
+}
+
+.scanner-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .018));
+  box-shadow: 0 22px 55px rgba(0, 0, 0, .22);
+}
+
+.scanner-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 4px 13px;
+  color: var(--off-white);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
 }
 
 .viewfinder {
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 0;
   background: #000;
 }
 
@@ -399,10 +468,41 @@ onBeforeUnmount(() => {
 
 .frame {
   position: absolute;
-  inset: 16%;
-  border: 2px solid var(--ember);
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .35);
+  inset: 15%;
+  border: 0;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .42);
   pointer-events: none;
+}
+
+.frame::before,
+.frame::after {
+  position: absolute;
+  inset: 0;
+  border: 2px solid transparent;
+  content: '';
+}
+
+.frame::before {
+  border-top-color: var(--ember);
+  border-left-color: var(--ember);
+}
+
+.frame::after {
+  border-right-color: var(--ember);
+  border-bottom-color: var(--ember);
+}
+
+.scanner-caption {
+  margin: 13px 4px 2px;
+  color: var(--lunar);
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+
+.scanner-caption span {
+  margin-right: 8px;
+  color: var(--ember);
+  font-family: monospace;
 }
 
 .overlay {
@@ -456,14 +556,16 @@ onBeforeUnmount(() => {
 
 .manual {
   margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line-soft);
+  padding: 20px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, .02);
 }
 
 .manual label {
   display: block;
   margin-bottom: 10px;
-  color: rgba(242, 240, 233, .55);
+  color: var(--off-white);
+  font-weight: 600;
   font-size: 13px;
 }
 
@@ -502,6 +604,34 @@ onBeforeUnmount(() => {
   color: var(--lunar);
   font-size: 12.5px;
   line-height: 1.6;
+}
+
+@media (max-width: 420px) {
+  .heading-topline,
+  .title-row {
+    align-items: flex-start;
+  }
+
+  .heading-topline {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .title-row {
+    flex-direction: column;
+  }
+
+  .help-button {
+    align-self: flex-start;
+  }
+
+  .manual-row {
+    flex-direction: column;
+  }
+
+  .manual-row button {
+    width: 100%;
+  }
 }
 
 .secondary-button,
