@@ -10,7 +10,6 @@
       </div>
 
       <router-link to="/" class="brand" aria-label="建中舞會購票系統首頁">
-        <img src="/cksclogo.png" alt="建中舞會購票系統 Logo" class="brand-mark" />
         <span>CK Tickets</span>
       </router-link>
 
