@@ -10,6 +10,7 @@ import {
   sanitizeOrderInput,
   checkTicketType,
   getBuyerKey,
+  isOnSale,
   isSchoolAccount,
   MAX_TICKETS_PER_ORDER
 } from '../../src/server/domain/orderValidation.js'
@@ -192,6 +193,19 @@ describe('checkTicketType', () => {
     expectHttpsError(() => checkTicketType(ticketType, 1, { ...ok, alreadyBought: 4 }), 'failed-precondition')
     expectHttpsError(() => checkTicketType(ticketType, 5, ok), 'failed-precondition')
     assert.doesNotThrow(() => checkTicketType({ ...ticketType, unlimited: true }, 20, { ...ok, alreadyBought: 50 }))
+  })
+})
+
+describe('isOnSale', () => {
+  const now = new Date('2026-11-05T04:00:00Z') // 12:00 in Taiwan
+  test('true only inside the sale window, read as Taiwan time', () => {
+    assert.equal(isOnSale({ salesStartTime: '2026-11-05T12:00', salesEndTime: '2026-11-06T12:00' }, now), true)
+    assert.equal(isOnSale({ salesStartTime: '2026-11-05T12:01', salesEndTime: '2026-11-06T12:00' }, now), false)
+    assert.equal(isOnSale({ salesStartTime: '2026-11-01T12:00', salesEndTime: '2026-11-05T11:59' }, now), false)
+  })
+  test('a type without a window is never on sale', () => {
+    assert.equal(isOnSale({ salesStartTime: '', salesEndTime: '2026-11-06T12:00' }, now), false)
+    assert.equal(isOnSale({}, now), false)
   })
 })
 

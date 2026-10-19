@@ -148,6 +148,14 @@ export function getPurchaseLimit(ticketType) {
   return ticketType.unlimited ? null : Number(ticketType.purchaseLimitPerPerson) || null
 }
 
+// Whether `now` falls inside the type's sale window (a type without one is
+// never on sale). Only these types are shown to the public.
+export function isOnSale(ticketType, now = new Date()) {
+  const start = parseTaipeiDateTime(ticketType.salesStartTime)
+  const end = parseTaipeiDateTime(ticketType.salesEndTime)
+  return !!start && !!end && now >= start && now <= end
+}
+
 // Throws when this type is not on sale now or not for this buyer. `email` is
 // the verified account email. Also checked before the checkout batch, so a
 // buyer is told this rather than that the type is sold out.

@@ -116,8 +116,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { fetchTicketTypes, getTicketStatus } from 'src/services/ticketTypeService'
+import { useAuthStore } from 'src/stores/auth'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
 import { useNow } from 'src/composables/useNow'
 
@@ -133,8 +134,15 @@ function statusOf(ticketType) {
   return getTicketStatus(ticketType, now.value)
 }
 
+const auth = useAuthStore()
+
+// Visitors see only the types on sale (the server sends no others); staff
+// also see the upcoming ones, greyed out
 const availableTicketTypes = computed(() =>
-  ticketTypes.value.filter((ticketType) => statusOf(ticketType).state !== 'ended')
+  ticketTypes.value.filter((ticketType) => {
+    const state = statusOf(ticketType).state
+    return auth.isManager ? state !== 'ended' : state === 'selling'
+  })
 )
 
 function scrollToCollection() {
@@ -142,22 +150,44 @@ function scrollToCollection() {
   collectionSection.value?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
 }
 
-async function loadTicketTypes() {
-  loadingTicketTypes.value = true
-  ticketTypesError.value = false
+// `silent`: a background refresh that keeps the list on screen
+async function loadTicketTypes({ silent = false } = {}) {
+  if (!silent) {
+    loadingTicketTypes.value = true
+    ticketTypesError.value = false
+  }
 
   try {
     ticketTypes.value = await fetchTicketTypes()
+    ticketTypesError.value = false
   } catch (error) {
     console.error('Load ticket types error:', error)
-    ticketTypesError.value = true
-    ticketTypes.value = []
+    if (!silent) {
+      ticketTypesError.value = true
+      ticketTypes.value = []
+    }
   } finally {
-    loadingTicketTypes.value = false
+    if (!silent) loadingTicketTypes.value = false
   }
 }
 
-onMounted(loadTicketTypes)
+// A type that goes on sale is only sent once it is on sale, so an open page
+// asks again every minute and whenever it comes back into view
+const REFRESH_MS = 60_000
+let refreshTimer
+const refresh = () => loadTicketTypes({ silent: true })
+const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+
+onMounted(() => {
+  loadTicketTypes()
+  refreshTimer = setInterval(refresh, REFRESH_MS)
+  document.addEventListener('visibilitychange', onVisible)
+})
+
+onBeforeUnmount(() => {
+  clearInterval(refreshTimer)
+  document.removeEventListener('visibilitychange', onVisible)
+})
 </script>
 
 <style scoped lang="scss">

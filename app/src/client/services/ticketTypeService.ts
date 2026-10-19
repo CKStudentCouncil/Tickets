@@ -4,9 +4,16 @@ import { parseDate } from 'src/utils/datetime'
 // Single source of ticket configuration; also read by the checkout
 export { ELIGIBLE_IDENTITIES } from 'src/data/ticketTypes'
 
+const named = (types: any[]) => (Array.isArray(types) ? types.filter((type) => type?.id && type?.name) : [])
+
+// The types on sale now (every type when a staff member is signed in)
 export async function fetchTicketTypes() {
-  const { types } = await unwrap(client.public['ticket-types'].$get())
-  return Array.isArray(types) ? types.filter((type: any) => type?.id && type?.name) : []
+  return named((await unwrap(client.public['ticket-types'].$get())).types)
+}
+
+// Every type, on sale or not (super admins, for the management page)
+export async function fetchAllTicketTypes() {
+  return named((await unwrap(client.admin['ticket-types'].$get())).types)
 }
 
 // The list is public, so only the editor's uid is stored (PARTY-26)

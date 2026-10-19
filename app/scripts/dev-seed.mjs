@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Fills the local D1 (wrangler dev) with two ticket types, an open shop and
+// Fills the local D1 (wrangler dev) with three ticket types (one not on sale yet), an open shop and
 // two signed-in accounts (removing every order), and writes their session cookies to
 // test/e2e/.cookies.json for the smoke test. Local only.
 import { execFileSync } from 'node:child_process'
@@ -18,7 +18,9 @@ const iso = (offset) => new Date(now + offset).toISOString()
 const q = (v) => (v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`)
 const types = [
   { id: 'open', name: '一階票', price: 900, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-H), salesEndTime: iso(48 * H), totalTicketQuantity: 100, purchaseLimitPerPerson: 4 },
-  { id: 'campus', name: '早鳥票', price: 700, eligibleBuyerIdentity: 'campus_students', salesStartTime: iso(-H), salesEndTime: iso(48 * H), unlimitedStock: true, purchaseLimitPerPerson: 2 }
+  { id: 'campus', name: '早鳥票', price: 700, eligibleBuyerIdentity: 'campus_students', salesStartTime: iso(-H), salesEndTime: iso(48 * H), unlimitedStock: true, purchaseLimitPerPerson: 2 },
+  // not on sale yet: only staff see it
+  { id: 'later', name: '二售票', price: 1100, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(48 * H), salesEndTime: iso(96 * H), totalTicketQuantity: 50, purchaseLimitPerPerson: 4 }
 ]
 const accounts = [
   { id: 'dev-buyer', email: 'buyer@example.com', role: null, staffName: null },

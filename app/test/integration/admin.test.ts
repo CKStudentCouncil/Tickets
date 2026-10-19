@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { beforeEach, describe, test } from 'vitest'
 import { activateInvite } from '../../src/server/auth'
 import {
-  HOUR, anonymous, as, call, createOrder, db, iso, ok, order, rejects, resetData, setShopOpenAt, setTypes, type Account
+  HOUR, TICKET_TYPES, anonymous, as, call, createOrder, db, iso, ok, order, rejects, resetData, setShopOpenAt, setTypes, type Account
 } from './helpers'
 
 let orderId: string
@@ -142,7 +142,7 @@ describe('permissions (the old Firestore rules)', () => {
   })
 
   test('only super admins edit ticket types, the opening time, staff and content', async () => {
-    const types = (await ok(call(anonymous, 'GET', '/public/ticket-types'))).types
+    const types = (await ok(call(superAdmin, 'GET', '/admin/ticket-types'))).types
     for (const account of [anonymous, buyer, manager1, admin]) {
       assert.ok([401, 403].includes((await call(account, 'PUT', '/admin/ticket-types', { types })).status))
       assert.ok([401, 403].includes((await call(account, 'PUT', '/admin/shop', { openAt: null })).status))
@@ -155,12 +155,27 @@ describe('permissions (the old Firestore rules)', () => {
     assert.equal((await ok(call(anonymous, 'GET', '/public/shop'))).openAt, openAt)
   })
 
+  test('visitors see only ticket types on sale; staff see them all', async () => {
+    await setTypes({}, [...TICKET_TYPES, { id: 'ended', name: '已結束票', price: 1, salesStartTime: iso(-2 * HOUR), salesEndTime: iso(-HOUR), totalTicketQuantity: 5 }])
+    const ids = async (account: Account) =>
+      (await ok(call(account, 'GET', '/public/ticket-types'))).types.map((t: { id: string }) => t.id).sort()
+    for (const account of [anonymous, buyer]) {
+      assert.deepEqual(await ids(account), ['campus', 'open', 'small'])
+    }
+    assert.deepEqual(await ids(manager1), ['campus', 'ended', 'future', 'open', 'small'])
+
+    for (const account of [anonymous, buyer, manager1, admin]) {
+      assert.ok([401, 403].includes((await call(account, 'GET', '/admin/ticket-types')).status))
+    }
+    assert.equal((await ok(call(superAdmin, 'GET', '/admin/ticket-types'))).types.length, 5)
+  })
+
   test('removing a ticket type keeps it while it has sales', async () => {
-    const types = (await ok(call(anonymous, 'GET', '/public/ticket-types'))).types
+    const types = (await ok(call(superAdmin, 'GET', '/admin/ticket-types'))).types
     await ok(call(superAdmin, 'PUT', '/admin/ticket-types', { types: types.filter((t: { id: string }) => !['open', 'small'].includes(t.id)) }))
     const rows = (await db.prepare('SELECT id, active FROM ticket_types ORDER BY id').all()).results
     assert.deepEqual(rows, [{ id: 'campus', active: 1 }, { id: 'future', active: 1 }, { id: 'open', active: 0 }])
-    assert.deepEqual((await ok(call(anonymous, 'GET', '/public/ticket-types'))).types.map((t: { id: string }) => t.id), ['campus', 'future'])
+    assert.deepEqual((await ok(call(superAdmin, 'GET', '/admin/ticket-types'))).types.map((t: { id: string }) => t.id), ['campus', 'future'])
   })
 })
 

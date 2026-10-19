@@ -1,7 +1,9 @@
 // What anyone may read: ticket types, the shop's opening time and published
-// content. Unpublished content (and disabled stories) never leaves the server.
+// content. Ticket types outside their sale window, unpublished content and
+// disabled stories never leave the server (staff see every ticket type).
 import { Hono } from 'hono'
-import type { AppEnv } from '../context'
+import { staffRole, type AppEnv } from '../context'
+import { isOnSale } from '../domain/orderValidation.js'
 import { getSetting, listTicketTypes } from '../data/settings'
 import { iso } from '../data/rows'
 import { storyFromRow, lineupFromRow, type StoryRow, type LineupRow } from '../data/content'
@@ -10,8 +12,18 @@ import { storyFromRow, lineupFromRow, type StoryRow, type LineupRow } from '../d
 const PUBLISH_SLACK_MS = 5 * 60 * 1000
 
 export const publicRoutes = new Hono<AppEnv>()
+  // Staff see every type, to preview them and to order before the sale
+  // opens (the checkout lets them); everyone else only the ones on sale now.
   .get('/ticket-types', async (c) => {
-    return c.json({ types: await listTicketTypes(c.env.DB) })
+    const user = c.get('user')
+    const [types, isStaff] = await Promise.all([
+      listTicketTypes(c.env.DB),
+      user ? staffRole(c.env.DB, user.id).then(({ rank }) => rank > 0) : false
+    ])
+    const now = new Date()
+    // the answer depends on who asks
+    c.header('Cache-Control', 'private, no-store')
+    return c.json({ types: isStaff ? types : types.filter((type) => isOnSale(type, now)) })
   })
   .get('/shop', async (c) => {
     const shop = await getSetting<{ openAt?: string | null }>(c.env.DB, 'shop')

@@ -371,7 +371,7 @@ import CountdownText from 'src/components/CountdownText.vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
-import { fetchTicketTypes, saveTicketTypes } from 'src/services/ticketTypeService'
+import { fetchAllTicketTypes, saveTicketTypes } from 'src/services/ticketTypeService'
 import { saveShopOpenAt } from 'src/services/shopService'
 import {
   addDaysInputValue,
@@ -593,7 +593,7 @@ async function loadTicketTypeSettings() {
   loadingTicketTypes.value = true
 
   try {
-    const savedTypes = await fetchTicketTypes()
+    const savedTypes = await fetchAllTicketTypes()
 
     ticketTypeForm.value = savedTypes.length
       ? savedTypes.map((ticketType) => ({

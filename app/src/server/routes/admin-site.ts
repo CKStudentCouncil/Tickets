@@ -56,6 +56,11 @@ export const adminSiteRoutes = new Hono<AppEnv>()
   // The whole list is saved at once, as the management page edits it. A type
   // dropped from the list keeps its row (inactive) when it has sales, so its
   // stock can be given back if an order is deleted.
+  // Every ticket type, on sale or not, for the management page
+  .get('/ticket-types', requireRole('super_admin'), async (c) => {
+    const { results } = await c.env.DB.prepare('SELECT * FROM ticket_types WHERE active = 1 ORDER BY sort').all<TicketTypeRow>()
+    return c.json({ types: results.map(ticketTypeFromRow) })
+  })
   .put('/ticket-types', requireRole('super_admin'), valid('json', ticketTypesBody), async (c) => {
     const db = c.env.DB
     const { types } = c.req.valid('json')
