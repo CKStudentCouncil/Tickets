@@ -104,7 +104,9 @@ console.log(`seeding ${buyers} buyers and ${stock} tickets on ${args.target}…`
 d1(sql)
 
 const key = secret()
-const cookie = (token) => `better-auth.session_token=${encodeURIComponent(`${token}.${createHmac('sha256', key).update(token).digest('base64')}`)}`
+// better-auth prefixes the cookie with __Secure- when SITE_URL is https
+const cookieName = base.startsWith('https://') ? '__Secure-better-auth.session_token' : 'better-auth.session_token'
+const cookie = (token) => `${cookieName}=${encodeURIComponent(`${token}.${createHmac('sha256', key).update(token).digest('base64')}`)}`
 
 const payload = (i) => ({
   orderPayload: {
