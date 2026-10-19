@@ -246,7 +246,14 @@ export class CheckoutGate extends DurableObject<Env> {
           continue
         }
         this.queue.unshift(...later)
-        await this.commit(admitted, rejected)
+        try {
+          await this.commit(admitted, rejected)
+        } catch (error) {
+          // never leave a caller waiting; a promise already resolved keeps its result
+          console.error('[gate] commit failed', error)
+          this.counts = null
+          for (const { resolve } of [...admitted, ...rejected]) resolve({ kind: 'unknown' })
+        }
       }
     } finally {
       this.running = false
