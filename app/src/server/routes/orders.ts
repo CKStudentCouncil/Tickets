@@ -9,7 +9,7 @@ import { orderFromRow, type OrderRow } from '../data/rows'
 import { ORDER_ID_PATTERN } from '../domain/orderValidation.js'
 
 const checkoutBody = z.object({
-  orderPayload: z.unknown(),
+  orderPayload: z.unknown().optional(),
   requestId: z.string().max(100).optional(),
   turnstileToken: z.string().max(4096).optional()
 })

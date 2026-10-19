@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:spike": "vitest run --config test/spike/vitest.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --project unit"
