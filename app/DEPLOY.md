@@ -4,6 +4,28 @@ This is the checklist for putting `app/` on Cloudflare: first staging, then prod
 
 Run every command from `app/` with `npx wrangler login` done (or `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set). Commands without `--env production` act on staging; add `--env production` for production.
 
+## Staging before Google sign-in and SES are ready
+
+Staging can go up before the Google OAuth client and the SES keys exist. Sign-in and email then fail, which is expected; everything else, including the load test, works. Follow steps 1–3, 5 and 8 below with these changes:
+
+1. **Check the token first.** `curl -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify` must answer `"status":"active"`, and `npx wrangler whoami` must succeed. Before creating anything, list the account's Workers, D1 databases and R2 buckets to make sure no `cksc-tickets-staging*` names exist yet.
+2. **Turnstile off on staging.** The `workers.dev` host is not on the Turnstile widget's hostname list, so set the top-level `ENFORCE_TURNSTILE` to `"false"` in `wrangler.jsonc` and build with Cloudflare's always-passing test key: `PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA yarn build`.
+3. **Secrets.**
+   - Generate `BETTER_AUTH_SECRET` into a shell variable and set it with `printf %s "$SECRET" | npx wrangler secret put BETTER_AUTH_SECRET`. Never write it to a file or print it. The load test signs its cookies with it.
+   - Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `not-configured` until the real client exists.
+   - Leave the AWS keys unset.
+4. **Deploy twice.** After the first `npx wrangler deploy`, put the `https://cksc-tickets-staging.<subdomain>.workers.dev` address into the top-level `SITE_URL` and its host into `TURNSTILE_HOSTNAMES`, build again and deploy again.
+5. **Smoke check.**
+   - `/api/public/shop` and `/api/me` answer 200.
+   - `/`, `/product/x` and `/admin` answer HTML (in a browser, `/admin` goes on to `/login`).
+   - `npx wrangler tail` shows no errors.
+6. **Load test** (step 8.4): 300 buyers / 100 tickets, then 1000 / 800, then `--cleanup`.
+   - Record the outcome counts, p50/p95/p99, and the CPU time per request (`npx wrangler tail --format json`, or Metrics in the dashboard).
+   - On the free plan, 1102 errors (CPU time exceeded) may appear. Report them as they are; they decide whether Workers Paid is needed.
+7. **Commit** the staging `database_id`, address and `ENFORCE_TURNSTILE: "false"` to `main-xn72jn`. Record the staging address here.
+
+Never touch production (`--env production`), DNS or the `main` branch while doing this.
+
 ## 1. Account
 
 - Use one Cloudflare account for the site, the account that holds the `cksc.tw` zone, so the Worker can take `tickets.cksc.tw` as a custom domain.
