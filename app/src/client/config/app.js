@@ -6,7 +6,7 @@ export const SITE_URL = 'https://tickets.cksc.tw'
 // secret when ENFORCE_TURNSTILE is "true" (wrangler.jsonc, DEPLOY.md).
 // PUBLIC_TURNSTILE_SITE_KEY overrides it at build time, e.g. Cloudflare's
 // always-passing test key 1x00000000000000000000AA for local runs.
-export const TURNSTILE_SITE_KEY = import.meta.env?.PUBLIC_TURNSTILE_SITE_KEY ?? '0x4AAAAAAFWXF__M6iNt9Yf9'
+export const TURNSTILE_SITE_KEY = import.meta.env?.PUBLIC_TURNSTILE_SITE_KEY || '0x4AAAAAAFWXF__M6iNt9Yf9'
 
 // Before the shop opens visitors (except staff) are redirected to /comingsoon
 // and the checkout refuses orders. Super admins set the opening time on the

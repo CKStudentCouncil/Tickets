@@ -2,3 +2,6 @@ node_modules/
 .wrangler/
 dist/
 .dev.vars
+import/
+test/e2e/.cookies.json
+test/e2e/screenshots/

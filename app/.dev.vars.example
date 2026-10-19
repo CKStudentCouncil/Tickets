@@ -1,0 +1,9 @@
+# Local secrets for `wrangler dev` (copy to .dev.vars, which git ignores)
+BETTER_AUTH_SECRET=local-dev-secret-local-dev-secret-0000
+GOOGLE_CLIENT_ID=local-client-id
+GOOGLE_CLIENT_SECRET=local-client-secret
+SITE_URL=http://localhost:8787
+TURNSTILE_HOSTNAMES=localhost
+ENFORCE_TURNSTILE=false
+# AWS_ACCESS_KEY_ID=
+# AWS_SECRET_ACCESS_KEY=
