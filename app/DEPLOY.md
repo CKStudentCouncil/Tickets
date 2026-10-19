@@ -24,6 +24,8 @@ Staging can go up before the Google OAuth client and the SES keys exist. Sign-in
    - On the free plan, 1102 errors (CPU time exceeded) may appear. Report them as they are; they decide whether Workers Paid is needed.
 7. **Commit** the staging `database_id`, address and `ENFORCE_TURNSTILE: "false"` to `main-xn72jn`. Record the staging address here.
 
+Staging is up at https://cksc-tickets-staging.ckscitdivision.workers.dev (D1 `cksc-tickets-staging`, R2 `cksc-tickets-staging-media`, queue `cksc-tickets-staging-mail`).
+
 Never touch production (`--env production`), DNS or the `main` branch while doing this.
 
 ## 1. Account
