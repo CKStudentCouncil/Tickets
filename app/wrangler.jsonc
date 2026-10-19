@@ -18,14 +18,14 @@
     "run_worker_first": ["/api/*", "/media/*", "/admin", "/admin/*"]
   },
   "vars": {
-    "SITE_URL": "https://cksc-tickets-staging.example.workers.dev",
-    "TURNSTILE_HOSTNAMES": "cksc-tickets-staging.example.workers.dev",
-    "ENFORCE_TURNSTILE": "true",
+    "SITE_URL": "https://cksc-tickets-staging.ckscitdivision.workers.dev",
+    "TURNSTILE_HOSTNAMES": "cksc-tickets-staging.ckscitdivision.workers.dev",
+    "ENFORCE_TURNSTILE": "false",
     "SES_RECIPIENTS_PER_SECOND": "14",
     "AWS_REGION": "us-east-1"
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "cksc-tickets-staging", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "./migrations" }
+    { "binding": "DB", "database_name": "cksc-tickets-staging", "database_id": "a10f60c7-79f8-41d4-a894-2b4bdbb5efbb", "migrations_dir": "./migrations" }
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "cksc-tickets-staging-media" }],
   "queues": {
