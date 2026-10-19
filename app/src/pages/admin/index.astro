@@ -1,0 +1,10 @@
+---
+// The staff pages: the Worker serves this page for every URL under /admin.
+// Its bundle is separate from the public site's.
+import Shell from '../../layouts/Shell.astro'
+---
+<Shell>
+  <script>
+    import '../../client/entries/admin.js'
+  </script>
+</Shell>

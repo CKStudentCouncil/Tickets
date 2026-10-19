@@ -6,10 +6,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "dev": "astro build && wrangler dev",
-    "build": "astro build",
-    "deploy:staging": "astro build && wrangler deploy",
-    "deploy:production": "astro build && wrangler deploy --env production"
+    "dev": "yarn build && wrangler dev",
+    "build": "astro build && node scripts/check-bundles.mjs",
+    "deploy:staging": "yarn build && wrangler deploy",
+    "deploy:production": "yarn build && wrangler deploy --env production"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.4",

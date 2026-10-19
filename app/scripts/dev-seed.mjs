@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Fills the local D1 (wrangler dev) with two ticket types, an open shop and
-// two signed-in accounts, and writes their session cookies to
+// two signed-in accounts (removing every order), and writes their session cookies to
 // test/e2e/.cookies.json for the smoke test. Local only.
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
@@ -25,7 +25,10 @@ const accounts = [
   { id: 'dev-admin', email: 'admin@example.com', role: 'super_admin', staffName: '王管理' }
 ]
 
-let sql = `DELETE FROM session WHERE userId IN (SELECT id FROM user WHERE id LIKE 'dev-%' OR email IN ('buyer@example.com', 'admin@example.com'));
+// a clean slate of orders each run (the per-person limit counts earlier runs)
+let sql = `DELETE FROM order_items; DELETE FROM order_history; DELETE FROM order_requests; DELETE FROM buyer_purchases;
+DELETE FROM mail_jobs; DELETE FROM orders;
+DELETE FROM session WHERE userId IN (SELECT id FROM user WHERE id LIKE 'dev-%' OR email IN ('buyer@example.com', 'admin@example.com'));
 DELETE FROM user WHERE id LIKE 'dev-%' OR email IN ('buyer@example.com', 'admin@example.com');\n`
 types.forEach((t, i) => {
   sql += `INSERT OR REPLACE INTO ticket_types (id, sort, active, config, stock, sold, updated_at) VALUES (${q(t.id)}, ${i}, 1, ${q(JSON.stringify(t))}, ${t.unlimitedStock ? 'NULL' : t.totalTicketQuantity}, 0, ${now});\n`

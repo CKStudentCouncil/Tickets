@@ -1,5 +1,6 @@
 // The Worker: the API, the lineup images in R2, and the static Astro site
-// (Workers Static Assets, which serve index.html for every page URL). Also the mail queue consumer and the cron sweep.
+// (Workers Static Assets): the staff app for /admin URLs, the public app
+// (index.html, the SPA fallback) for every other page. Also the mail queue consumer and the cron sweep.
 import { api } from '../server/app'
 import type { Env, MailMessage } from '../server/env'
 import { consumeMailBatch, sweepMail } from '../server/mail/worker'
@@ -20,6 +21,10 @@ export default {
     if (url.pathname.startsWith('/api/')) return api.fetch(request, env, ctx)
     if (url.pathname.startsWith('/media/lineup/') && request.method === 'GET') {
       return serveMedia(env, decodeURIComponent(url.pathname.slice('/media/'.length)))
+    }
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      // every staff page is the staff app's one HTML page
+      return env.ASSETS.fetch(new Request(new URL('/admin/', url), request))
     }
     return env.ASSETS.fetch(request)
   },

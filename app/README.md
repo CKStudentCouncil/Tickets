@@ -11,7 +11,8 @@ The Cloudflare version of the ticket site: the same Vue pages, now served by one
 | Mail (SES through `aws4fetch`, queue consumer, cron sweep) | `src/server/mail/`, email templates in `src/server/templates/` |
 | Pure rules shared with the tests | `src/server/domain/` |
 | Database tables | `migrations/` |
-| The site (Astro page mounting the Vue app) | `src/pages/index.astro`, `src/client/` |
+| The public site and the staff pages: two Astro pages, each with its own Vue app and bundle | `src/pages/index.astro`, `src/pages/admin/index.astro`, `src/client/entries/` |
+| Routes of both apps (pages by name; each entry loads only its own) | `src/client/router/routes.js`, `src/client/router/index.js` |
 | RPC client and the services the pages call | `src/client/api.ts`, `src/client/services/` |
 
 ## Develop
@@ -24,7 +25,7 @@ yarn install
 cp .dev.vars.example .dev.vars       # local secrets for wrangler dev
 npx wrangler d1 migrations apply DB --local
 node scripts/dev-seed.mjs            # ticket types, an open shop, a buyer and a super admin
-yarn dev                             # astro build && wrangler dev → http://localhost:8787
+yarn dev                             # build, then wrangler dev → http://localhost:8787
 ```
 
 Google sign-in needs a real OAuth client in `.dev.vars` (redirect URI `http://localhost:8787/api/auth/callback/google`). Without one, use the seeded accounts: `test/e2e/.cookies.json` holds their session cookies (`better-auth.session_token`).
@@ -49,6 +50,8 @@ node scripts/load-test.mjs --cleanup --target local
 Local latency numbers mean little (`wrangler dev` handles one request at a time); measure on staging (DEPLOY.md step 8).
 
 ## Notes
+
+- The public site (`/`, every URL outside `/admin`) and the staff pages (`/admin/…`) are separate apps: the Worker serves `admin/index.html` for `/admin` URLs and `index.html` for the rest. A link from one to the other is a full page load. `yarn build` runs `scripts/check-bundles.mjs`, which fails if the public bundle reaches a staff page or `jsQR` / `exceljs`, or the staff bundle a public page. A new page goes in `routes.js` and in the `pages` map of its entry.
 
 - The API keeps the Firestore field names (camelCase, ISO dates) and the callables' error codes (`functions/<code>` on the client), so the pages and `src/client/utils/checkoutRecovery.js` work as before.
 - Values shared by the client and the server (site URL, schools, opening time, ticket identities) are checked against each other by `test/unit/consistency.test.js`.

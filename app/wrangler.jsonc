@@ -12,9 +12,10 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    // every page URL gets index.html; vue-router shows the page
+    // every page URL gets index.html (the public app); the Worker sends
+    // /admin URLs to admin/index.html (the staff app)
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/media/*"]
+    "run_worker_first": ["/api/*", "/media/*", "/admin", "/admin/*"]
   },
   "vars": {
     "SITE_URL": "https://cksc-tickets-staging.example.workers.dev",
