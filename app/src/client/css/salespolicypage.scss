@@ -1,0 +1,74 @@
+@use 'legal-page';
+
+h1 {
+  margin-bottom: 36px;
+}
+
+.intro {
+  max-width: 100ch;
+}
+
+/* ---------- meta ---------- */
+
+.meta-list {
+  margin: 0 0 36px;
+
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.meta-list > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 24px;
+
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.meta-list > div:last-child {
+  border-bottom: 0;
+}
+
+.meta-list dt {
+  color: var(--lunar);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  line-height: 1.8;
+}
+
+.meta-list dd {
+  margin: 0;
+
+  color: var(--off-white);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- clauses ---------- */
+
+// clauses cite each other by number (第一條第二款), so the counter stays visible
+.terms-body ol {
+  counter-reset: clause;
+}
+
+.terms-body li {
+  counter-increment: clause;
+  padding-left: 28px;
+}
+
+.terms-body li::before {
+  content: counter(clause) '.';
+
+  font-family: 'Manrope', sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .meta-list > div {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 16px;
+  }
+}

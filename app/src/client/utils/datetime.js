@@ -3,7 +3,7 @@ const NAIVE_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
 
 // Admin-entered datetimes always mean Taiwan time. New values are stored as
 // "YYYY-MM-DDTHH:mm:00+08:00"; older ones as "YYYY-MM-DDTHH:mm" without an
-// offset, which is read as Taiwan time too (same as functions/lib/time.js).
+// offset, which is read as Taiwan time too (same as src/server/domain/time.js).
 export function parseDate(value) {
   if (!value) return null
   if (value instanceof Date) return value

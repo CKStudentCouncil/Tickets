@@ -1,21 +1,17 @@
-// Production site; QR codes point here (keep in sync with functions/lib/constants.js)
+// Production site; QR codes point here (keep in sync with src/server/domain/constants.js)
 export const SITE_URL = 'https://tickets.cksc.tw'
 
-// reCAPTCHA Enterprise site key for Firebase App Check (PARTY-15). Empty =
-// App Check off. After filling it in and deploying the site, set
-// ENFORCE_APP_CHECK=true in functions/.env and redeploy the functions.
-export const APP_CHECK_SITE_KEY = '6LcPrdEtAAAAALTnztzn22Xswpru02nuB9HoySEl'
-
 // Cloudflare Turnstile sitekey for the checkout check on the product page.
-// Empty = no widget. After filling it in and deploying the site, set the
-// TURNSTILE_SECRET secret and ENFORCE_TURNSTILE=true in functions/.env and
-// redeploy the functions (see functions/README.md).
-export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
+// Empty = no widget. The Worker checks the token with the TURNSTILE_SECRET
+// secret when ENFORCE_TURNSTILE is "true" (wrangler.jsonc, DEPLOY.md).
+// PUBLIC_TURNSTILE_SITE_KEY overrides it at build time, e.g. Cloudflare's
+// always-passing test key 1x00000000000000000000AA for local runs.
+export const TURNSTILE_SITE_KEY = import.meta.env?.PUBLIC_TURNSTILE_SITE_KEY ?? '0x4AAAAAAFWXF__M6iNt9Yf9'
 
 // Before the shop opens visitors (except staff) are redirected to /comingsoon
-// and createOrder refuses orders. Super admins set the opening time on the
-// management page (settings/shop); this is only the default used until they
-// do. Keep in sync with functions/lib/constants.js
+// and the checkout refuses orders. Super admins set the opening time on the
+// management page; this is only the default used until they
+// do. Keep in sync with src/server/domain/constants.js
 export const SHOP_OPEN_AT = new Date('2026-11-05T12:00:00+08:00')
 
 // Party date and venue shown on the home page and receipts.

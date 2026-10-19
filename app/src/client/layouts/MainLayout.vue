@@ -1,0 +1,285 @@
+<template>
+  <div class="app-shell">
+    <header class="site-header">
+      <div class="blur-container" aria-hidden="true">
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+        <div class="blur-filter" />
+      </div>
+
+      <router-link to="/" class="brand" aria-label="建中舞會購票系統首頁">
+        <span>CK Tickets</span>
+      </router-link>
+
+      <div class="header-actions">
+        <router-link to="/about" class="about-link" aria-label="關於我們">
+          About
+        </router-link>
+        <router-link to="/intro" class="intro-link" aria-label="舞會故事">
+          Intro
+        </router-link>
+        <router-link to="/performer" class="order-link" aria-label="演出陣容">
+          Lineup
+        </router-link>
+
+        <button
+          v-if="!route.meta.isAdminSection"
+          class="help-toggle"
+          type="button"
+          aria-label="購票教學"
+          title="購票教學"
+          @click="buyGuideOpen = true"
+        >
+          <CircleQuestionMark :size="18" :stroke-width="1.75" aria-hidden="true" />
+        </button>
+
+        <div class="menu-wrapper">
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="切換導覽選單"
+            aria-haspopup="true"
+            :aria-expanded="menuOpen"
+            @click.stop="menuOpen = !menuOpen"
+          >
+            <q-icon name="menu" size="1.3rem" />
+          </button>
+
+          <nav class="primary-nav" :class="{ open: menuOpen }" aria-label="主要導覽">
+            <router-link to="/" exact-active-class="is-active" @click="menuOpen = false">首頁</router-link>
+            <router-link to="/orders" active-class="is-active" @click="menuOpen = false">已購門票</router-link>
+            <router-link to="/about" active-class="is-active" @click="menuOpen = false">關於我們</router-link>
+            <router-link to="/intro" active-class="is-active" @click="menuOpen = false">舞會介紹</router-link>
+            <router-link to="/policy" active-class="is-active" @click="menuOpen = false">銷售條款</router-link>
+            <router-link to="/terms" active-class="is-active" @click="menuOpen = false">使用者條款</router-link>
+            <router-link to="/performer" active-class="is-active" @click="menuOpen = false">社團與藝人</router-link>
+            <router-link to="/survey" active-class="is-active" @click="menuOpen = false">使用者問卷</router-link>
+
+            <div class="nav-divider" role="separator" />
+
+            <router-link
+              v-if="auth.isManager"
+              to="/admin/scan"
+              @click="menuOpen = false"
+            >
+              掃描票券
+            </router-link>
+
+            <router-link
+              v-if="auth.isManager && !auth.isAdmin"
+              to="/admin"
+              @click="menuOpen = false"
+            >
+              通知管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isAdmin"
+              to="/admin"
+              @click="menuOpen = false"
+            >
+              後台管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/management"
+              @click="menuOpen = false"
+            >
+              票務管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/account"
+              @click="menuOpen = false"
+            >
+              帳號管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isManager"
+              to="/admin/survey"
+              @click="menuOpen = false"
+            >
+              問卷管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/intromanagement"
+              @click="menuOpen = false"
+            >
+              舞會介紹管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isSuperAdmin"
+              to="/admin/performer"
+              @click="menuOpen = false"
+            >
+              社團與藝人管理
+            </router-link>
+
+            <router-link
+              v-if="!auth.isLoggedIn"
+              :to="{ name: 'login', query: { redirect: $route.fullPath } }"
+              @click="menuOpen = false"
+            >
+              登入
+            </router-link>
+
+            <template v-else>
+
+              <button type="button" @click="handleSignOut">
+                登出
+              </button>
+            </template>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main class="page-container">
+      <router-view v-if="!auth.loading" :key="$route.fullPath" />
+      <div v-else class="loading-screen" role="status">載入中…</div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <p class="footer-heading">Navigation</p>
+          <nav class="footer-links">
+            <router-link to="/">首頁</router-link>
+            <router-link to="/orders">已購門票</router-link>
+            <router-link to="/policy">銷售條款</router-link>
+            <router-link to="/terms">使用者條款</router-link>
+            <router-link to="/survey">使用者問卷</router-link>
+          </nav>
+        </div>
+
+        <div class="footer-col">
+          <p class="footer-heading">Introduction</p>
+          <nav class="footer-links">
+            <router-link to="/about">關於我們</router-link>
+            <router-link to="/intro">舞會介紹</router-link>
+            <router-link to="/performer">社團與藝人</router-link>
+          </nav>
+        </div>
+
+        <div class="footer-col">
+          <p class="footer-heading">Links</p>
+          <nav class="footer-links">
+            <a href="https://cksc.tw" target="_blank">建中班聯會</a>
+            <a href="https://cktfgpromo.cksc.tw" target="_blank">建北特約官網</a>
+            <a href="https://souvenir.cksc.tw" target="_blank">建中校慶紀念品</a>
+            <a href="https://www.instagram.com/cksc.81st/" target="_blank" rel="noopener">CKSC Instagram</a>
+            <a href="https://www.instagram.com/ck_party_night/" target="_blank" rel="noopener">CK Party Night Instagram</a>
+          </nav>
+        </div>
+
+        <div class="footer-col footer-brand">
+          <div class="footer-logo">
+            <span>建中舞會購票系統</span>
+          </div>
+          <p class="footer-meta">Taipei Municipal Chien Kuo High School Student Council</p>
+          <p class="footer-meta">Developed by Chris Sun and Jim Tang</p>
+        </div>
+      </div>
+      <div class="footer-bottom text-center">
+        <span>© <span class="num">{{ currentYear }}</span> CK Tickets. All rights reserved.</span>
+      </div>
+    </footer>
+
+    <GuideDialog
+      v-model="buyGuideOpen"
+      :steps="BUY_GUIDE_STEPS"
+      label="購票教學"
+      finish-label="我知道了"
+      @hide="markGuideSeen(BUY_GUIDE_SEEN_KEY)"
+    />
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from 'src/stores/auth'
+import { useShopStore } from 'src/stores/shop'
+import { useToastStore } from 'src/stores/toast'
+import { CircleQuestionMark } from 'lucide-vue-next'
+import GuideDialog from 'src/components/GuideDialog.vue'
+import { BUY_GUIDE_STEPS } from 'src/data/buyGuide'
+import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
+
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const shop = useShopStore()
+const toast = useToastStore()
+
+// The router guard checks the opening time on the way in. A visitor already
+// in the shop goes back to Coming Soon if it turns out to be later: the
+// settings arrived after the guard stopped waiting, or a super admin
+// postponed the opening.
+watch(
+  () => route.meta.shop && !auth.isManager && shop.loaded && !shop.isOpenNow,
+  (mustLeave) => {
+    if (mustLeave) router.replace({ name: 'comingsoon', query: { redirect: route.fullPath } })
+  }
+)
+
+const menuOpen = ref(false)
+
+// 購票教學 opens by itself on a device's first visit to the shop side
+const BUY_GUIDE_SEEN_KEY = 'cksc.buyGuideSeen'
+const buyGuideOpen = ref(false)
+watch(
+  () => !auth.loading && !!route.name && !route.meta.isAdminSection,
+  (ready) => {
+    if (ready && !isGuideSeen(BUY_GUIDE_SEEN_KEY)) buyGuideOpen.value = true
+  },
+  { immediate: true }
+)
+const currentYear = computed(() => new Date().getFullYear())
+
+function closeMenu() {
+  menuOpen.value = false
+}
+
+function handleClickOutside(event) {
+  const menu = document.querySelector('.menu-wrapper')
+
+  if (menu && !menu.contains(event.target)) {
+    closeMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener(
+    'click',
+    handleClickOutside
+  )
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener(
+    'click',
+    handleClickOutside
+  )
+})
+
+async function handleSignOut() {
+  await auth.signOut()
+  menuOpen.value = false
+
+  toast.show('已登出')
+  router.push('/')
+}
+</script>
+
+<style scoped>
+@import 'src/css/mainlayout.scss';
+</style>

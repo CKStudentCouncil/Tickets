@@ -1,4 +1,4 @@
-// Same shape as ORDER_ID_PATTERN in functions/lib/orderValidation.js
+// Same shape as ORDER_ID_PATTERN in src/server/domain/orderValidation.js
 export const ORDER_ID_PATTERN = /^[A-Z]{1,4}\d{8}(\d{4}|[A-HJ-NP-Z2-9]{6})$/
 
 // Reads a scanned ticket QR (made by getOrderQrUrl / the confirmation email)

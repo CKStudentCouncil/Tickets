@@ -5,7 +5,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run --project unit"
+    "test:unit": "vitest run --project unit",
+    "dev": "astro build && wrangler dev",
+    "build": "astro build",
+    "deploy:staging": "astro build && wrangler deploy",
+    "deploy:production": "astro build && wrangler deploy --env production"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.4",
@@ -36,6 +40,7 @@
     "posthog-js": "^1.438.12",
     "qrcode": "^1.5.4",
     "vue": "^3.5.44",
+    "vue-router": "4",
     "zod": "^4.6.7"
   }
 }

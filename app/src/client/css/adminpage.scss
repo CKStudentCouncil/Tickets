@@ -1,0 +1,1535 @@
+.admin-page,
+.notify-modal {
+  --void: #050608;
+  --surface: #0d1015;
+  --surface-soft: #11151b;
+  --lunar: #9aa3ac;
+  --off-white: #f2f0e9;
+  --ember: #e4a468;
+  --line: rgba(242, 240, 233, 0.14);
+  --line-soft: rgba(242, 240, 233, 0.08);
+  --danger: #c97878;
+}
+
+.admin-page {
+  min-height: 100vh;
+  padding: 120px clamp(20px, 5vw, 64px) 100px;
+
+  background:
+    radial-gradient(
+      ellipse 60% 40% at 90% 0%,
+      rgba(228, 164, 104, 0.07),
+      transparent 65%
+    ),
+    var(--void);
+
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- global page width ---------- */
+
+.admin-page > * {
+  width: min(100%, 1100px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- heading ---------- */
+
+.page-heading {
+  margin-bottom: 52px;
+}
+
+.eyebrow {
+  margin: 0 0 16px;
+
+  color: var(--ember);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.page-heading h1 {
+  margin: 0;
+
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.3;
+  font-weight: 800;
+
+  color: var(--off-white);
+}
+
+/* ---------- filters ---------- */
+
+.filter-block {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  margin-top: 14px;
+}
+
+.filter-block label,
+.filter-block > span {
+  flex: none;
+
+  color: rgba(242, 240, 233, 0.55);
+  font-size: 13px;
+}
+
+/*
+ * IMPORTANT
+ * 固定 select / input 高度，避免 iOS Safari 原生表單控制項
+ * 導致 select 比 input 矮。
+ */
+
+.filter-block select,
+.filter-block input {
+  width: min(100%, 360px);
+
+  height: 42px;
+  min-height: 42px;
+
+  box-sizing: border-box;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+
+  background: transparent;
+  color: var(--off-white);
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+
+  outline: none;
+
+  transition:
+    border-color .25s ease,
+    background .25s ease;
+}
+
+/* ---------- select ---------- */
+
+.filter-block select {
+  /*
+   * 關閉 iOS / Safari 原生 select 外觀，
+   * 讓高度、邊框與整體視覺可以完全由 CSS 控制。
+   */
+  appearance: none;
+  -webkit-appearance: none;
+
+  padding: 0 40px 0 13px;
+
+  line-height: normal;
+
+  /*
+   * 自製下拉箭頭
+   */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%239aa3ac' stroke-width='1.2'/%3E%3C/svg%3E");
+
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 12px;
+}
+
+/* ---------- input ---------- */
+
+.filter-block input {
+  padding: 0 13px;
+
+  line-height: normal;
+}
+
+/* ---------- other form controls ---------- */
+
+.field input,
+.field select,
+.field textarea {
+  min-height: 42px;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+
+  background: transparent;
+  color: var(--off-white);
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+
+  outline: none;
+
+  transition:
+    border-color .25s ease,
+    background .25s ease;
+}
+
+/* Modal 裡的 select 同樣取消 Safari 原生高度問題 */
+
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+
+  padding: 0 40px 0 12px;
+
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%239aa3ac' stroke-width='1.2'/%3E%3C/svg%3E");
+
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 12px;
+}
+
+.filter-block select:focus,
+.filter-block input:focus,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: rgba(228, 164, 104, 0.65);
+
+  background-color: rgba(228, 164, 104, 0.025);
+}
+
+select option {
+  background: #0d1015;
+  color: var(--off-white);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(242, 240, 233, 0.3);
+}
+
+/* ---------- tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 28px;
+
+  margin-top: 42px;
+
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  position: relative;
+
+  padding: 0 0 14px;
+
+  border: 0;
+  background: transparent;
+
+  color: rgba(242, 240, 233, 0.42);
+
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: color .25s ease;
+}
+
+.tabs button:hover,
+.tabs button.active {
+  color: var(--off-white);
+}
+
+.tabs button.active::after {
+  content: '';
+
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+
+  height: 1px;
+
+  background: var(--ember);
+}
+
+/* ---------- panels ---------- */
+
+.panel {
+  margin-top: 52px;
+  padding-top: 32px;
+
+  border-top: 1px solid var(--line-soft);
+}
+
+.panel h2,
+.orders-section > h2 {
+  margin: 0;
+
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.5;
+
+  color: var(--off-white);
+}
+
+.panel-copy {
+  margin: 9px 0 0;
+
+  color: rgba(242, 240, 233, 0.45);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+/* ---------- buttons ---------- */
+
+.btn,
+.btn-outline,
+.btn-sm {
+  border-radius: 0;
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background .25s ease,
+    border-color .25s ease,
+    color .25s ease,
+    opacity .25s ease;
+}
+
+.btn {
+  padding: 11px 20px;
+
+  border: 1px solid var(--ember);
+  background: var(--ember);
+  color: #16110a;
+
+  font-size: 12px;
+  letter-spacing: .03em;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f0b57e;
+  border-color: #f0b57e;
+}
+
+.btn-outline {
+  padding: 10px 18px;
+
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--off-white);
+
+  font-size: 12px;
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--ember);
+  color: var(--ember);
+  background: rgba(228, 164, 104, 0.06);
+}
+
+.btn-outline.danger {
+  color: var(--danger);
+  border-color: rgba(201, 120, 120, 0.3);
+}
+
+.btn-outline.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: rgba(201, 120, 120, 0.06);
+}
+
+.btn:disabled,
+.btn-outline:disabled,
+.btn-sm:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+/* ---------- ticket types ---------- */
+
+.ticket-type-panel {
+  margin-top: 52px;
+}
+
+.notify-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ticket-type-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ticket-type-card {
+  margin-top: 30px;
+  padding-top: 28px;
+
+  border-top: 1px solid var(--line-soft);
+}
+
+.ticket-type-card-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ticket-type-grid {
+  display: grid;
+
+  grid-template-columns:
+    minmax(180px, 0.8fr)
+    minmax(380px, 1.8fr)
+    minmax(150px, .7fr)
+    minmax(180px, .8fr);
+
+  gap: 24px;
+
+  margin-top: 26px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.field > span,
+.field > .field-label {
+  color: rgba(242, 240, 233, 0.48);
+
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.ticket-name-field {
+  width: min(100%, 420px);
+}
+
+.ticket-time-field {
+  grid-column: span 2;
+}
+
+.time-range {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 18px;
+}
+
+.time-group {
+  min-width: 0;
+}
+
+.time-label {
+  margin-bottom: 7px;
+
+  color: rgba(242, 240, 233, 0.35);
+  font-size: 10px;
+}
+
+.time-inputs {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 8px;
+
+  min-width: 0;
+}
+
+.time-inputs input {
+  box-sizing: border-box;
+
+  min-width: 0;
+  width: 100%;
+  max-width: 400px;
+}
+
+@media (max-width: 200px) {
+  .time-inputs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.time-presets {
+  display: flex;
+  gap: 6px;
+
+  margin-top: 8px;
+}
+
+.time-chip {
+  padding: 5px 9px;
+
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--lunar);
+
+  font-family: inherit;
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+.time-chip:hover {
+  border-color: var(--ember);
+  color: var(--ember);
+}
+
+.time-summary {
+  margin: 9px 0 0;
+
+  font-size: 11px;
+  color: var(--lunar);
+}
+
+.time-summary.ok {
+  color: var(--ember);
+}
+
+.time-summary.error {
+  color: var(--danger);
+}
+
+.ticket-limit-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  min-height: 20px;
+
+  color: rgba(242, 240, 233, 0.58);
+  font-size: 12px;
+}
+
+.ticket-limit-controls input {
+  width: 16px;
+  min-height: auto;
+  accent-color: var(--ember);
+}
+
+.empty {
+  margin: 28px 0 0;
+
+  color: rgba(242, 240, 233, 0.38);
+  font-size: 13px;
+}
+
+/* ---------- notification ---------- */
+
+.notify-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.notify-panel .notify-header {
+  width: 100%;
+}
+
+/* ---------- export ---------- */
+
+.export-panel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+}
+
+.stats-row {
+  display: flex;
+  gap: 52px;
+
+  margin-top: 24px;
+}
+
+.stat {
+  min-width: 110px;
+
+  color: rgba(242, 240, 233, 0.42);
+  font-size: 11px;
+}
+
+.stat .num {
+  display: block;
+
+  margin-top: 6px;
+
+  color: var(--off-white);
+
+  font-size: 21px;
+  font-weight: 600;
+}
+
+/* ---------- personnel ---------- */
+
+.personnel-grid {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 24px;
+
+  margin-top: 28px;
+}
+
+.personnel-card {
+  padding-top: 16px;
+
+  border-top: 1px solid var(--line-soft);
+}
+
+.personnel-name {
+  margin: 0 0 9px;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.personnel-stat {
+  margin: 5px 0;
+
+  color: rgba(242, 240, 233, 0.48);
+  font-size: 11.5px;
+}
+
+.personnel-stat.total {
+  color: rgba(242, 240, 233, 0.68);
+}
+
+/* ---------- product stats ---------- */
+
+.product-stats {
+  display: flex;
+  flex-direction: column;
+
+  margin: 24px 0 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.product-stats li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+
+  padding: 14px 0;
+
+  border-bottom: 1px solid var(--line-soft);
+
+  font-size: 13px;
+}
+
+.product-stats li:first-child {
+  border-top: 1px solid var(--line-soft);
+}
+
+.product-stats .num {
+  color: var(--lunar);
+  font-size: 11px;
+}
+
+/* ---------- orders ---------- */
+
+.orders-section {
+  margin-top: 70px;
+}
+
+.orders-section > h2 {
+  padding-bottom: 18px;
+
+  border-bottom: 1px solid var(--line);
+}
+
+.order-card {
+  padding: 26px 0 30px;
+
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.order-card > p {
+  margin: 8px 0;
+
+  color: rgba(242, 240, 233, 0.58);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.order-card > p strong {
+  color: rgba(242, 240, 233, 0.78);
+  font-weight: 600;
+}
+
+.mono,
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.delivery-bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  min-height: 36px;
+  margin-bottom: 8px;
+
+  color: rgba(242, 240, 233, 0.6);
+  font-size: 11.5px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+
+  border-radius: 50%;
+}
+
+.delivery-bar.delivered .status-dot {
+  background: var(--ember);
+  box-shadow: 0 0 8px rgba(228, 164, 104, .55);
+}
+
+.delivery-bar.paid .status-dot {
+  background: var(--ember);
+  box-shadow: 0 0 8px rgba(228, 164, 104, .55);
+}
+
+.delivery-bar.pending .status-dot {
+  background: #555b63;
+}
+
+.delivery-actions {
+  display: flex;
+  gap: 7px;
+
+  margin-left: auto;
+}
+
+.btn-sm {
+  padding: 6px 10px;
+
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--lunar);
+
+  font-size: 10px;
+}
+
+.btn-sm:hover:not(:disabled) {
+  border-color: var(--ember);
+  color: var(--ember);
+}
+
+.btn-sm.muted {
+  opacity: .7;
+}
+
+.customer-box,
+.items-box {
+  margin-top: 22px;
+  padding-top: 18px;
+
+  border-top: 1px solid var(--line-soft);
+}
+
+.customer-box > strong,
+.items-box > strong {
+  display: block;
+
+  margin-bottom: 10px;
+
+  color: var(--off-white);
+  font-size: 12px;
+}
+
+.customer-box ul,
+.items-box ul {
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.customer-box li,
+.items-box li {
+  margin: 6px 0;
+
+  color: rgba(242, 240, 233, 0.52);
+  font-size: 12px;
+}
+
+.order-actions {
+  display: flex;
+  gap: 10px;
+
+  margin-top: 24px;
+}
+
+/* ---------- modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(0, 0, 0, .72);
+  backdrop-filter: blur(5px);
+}
+
+.modal {
+  width: min(100%, 680px);
+
+  max-height: calc(100vh - 40px);
+
+  overflow-y: auto;
+
+  padding: 32px;
+
+  background: #0d1015;
+
+  border: 1px solid var(--line);
+
+  box-shadow: 0 30px 80px rgba(0, 0, .45);
+}
+
+.notify-modal h2 {
+  margin: 0 0 30px;
+
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 1.3rem;
+}
+
+.type-select {
+  margin-bottom: 24px;
+}
+
+.field-label {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: rgba(242, 240, 233, 0.48);
+
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.type-options {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 7px;
+}
+
+.type-option {
+  padding: 10px;
+
+  border: 1px solid var(--line);
+
+  background: transparent;
+  color: rgba(242, 240, 233, .55);
+
+  font-family: inherit;
+  font-size: 11px;
+
+  cursor: pointer;
+}
+
+.type-option:hover,
+.type-option.active {
+  border-color: var(--ember);
+
+  color: var(--ember);
+
+  background: rgba(228, 164, 104, .05);
+}
+
+.notify-modal > .filter-block {
+  margin: 0 0 22px;
+}
+
+.notify-modal > .filter-block select {
+  width: 100%;
+}
+
+.notify-modal > .field {
+  margin-top: 22px;
+}
+
+.notify-preview {
+  margin-top: 28px;
+
+  padding: 18px;
+
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+
+  color: rgba(242, 240, 233, .55);
+
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.notify-preview p {
+  margin: 5px 0;
+}
+
+.preview-label {
+  margin-bottom: 10px !important;
+
+  color: var(--ember);
+
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+
+  text-transform: uppercase;
+}
+
+.preview-count {
+  margin-top: 16px !important;
+
+  color: rgba(242, 240, 233, .75) !important;
+}
+
+.notify-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+
+  margin-top: 26px;
+}
+
+/* ---------- state ---------- */
+
+.state-screen {
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  gap: 20px;
+
+  background: var(--void);
+  color: var(--off-white);
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+}
+
+.state-screen h2 {
+  margin: 0;
+
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 1.5rem;
+}
+
+.state-screen p {
+  margin: 0;
+
+  color: rgba(242, 240, 233, .5);
+  font-size: 13px;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .ticket-type-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .ticket-time-field {
+    grid-column: span 2;
+  }
+
+  .personnel-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-page {
+    padding: 120px 20px 80px;
+  }
+
+  .page-heading {
+    margin-bottom: 40px;
+  }
+
+  .filter-block {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-block select,
+  .filter-block input {
+    width: 100%;
+    height: 42px;
+    min-height: 42px;
+  }
+
+  .tabs {
+    gap: 22px;
+    margin-top: 34px;
+  }
+
+  .notify-header,
+  .export-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ticket-type-header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ticket-type-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-time-field {
+    grid-column: auto;
+  }
+
+  .ticket-type-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ticket-name-field {
+    width: 100%;
+  }
+
+  .time-range {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-row {
+    flex-wrap: wrap;
+    gap: 24px 36px;
+  }
+
+  .personnel-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .delivery-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .delivery-actions {
+    width: 100%;
+    margin-left: 15px;
+  }
+
+  .order-actions {
+    flex-direction: column;
+  }
+
+  .order-actions .btn,
+  .order-actions .btn-outline {
+    width: 100%;
+  }
+
+  .modal {
+    padding: 24px 20px;
+  }
+
+  .type-options {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .notify-actions {
+    flex-direction: column-reverse;
+  }
+
+  .notify-actions .btn,
+  .notify-actions .btn-outline {
+    width: 100%;
+  }
+}
+
+/* ---------- date / time inputs ---------- */
+
+.time-inputs {
+  min-width: 0;
+}
+
+.time-inputs input {
+  box-sizing: border-box;
+
+  min-width: 0;
+  width: 100%;
+}
+
+/* ---------- narrow screens ---------- */
+
+@media (max-width: 420px) {
+  .time-inputs {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   Ticket Type Management — layout fix
+   ========================================================= */
+
+/* Prevent grid children from overflowing their grid tracks */
+.ticket-type-panel,
+.ticket-type-card,
+.ticket-type-grid,
+.field,
+.ticket-time-field,
+.time-range,
+.time-group,
+.time-inputs,
+.ticket-limit-field {
+  min-width: 0;
+}
+
+/* Ticket type card */
+.ticket-type-card {
+  width: 100%;
+  padding: 34px 0 38px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Header of each ticket type */
+.ticket-type-card-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Ticket name */
+.ticket-name-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Main ticket settings grid */
+.ticket-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 30px 30px;
+  width: 100%;
+  margin-top: 30px;
+}
+
+/* Every field must be allowed to shrink */
+.ticket-type-grid > .field {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Labels */
+.ticket-type-grid .field > span,
+.ticket-name-field > span,
+.ticket-time-field > span {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--lunar);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+/* =========================================================
+   Date / Time range
+   ========================================================= */
+
+.ticket-time-field {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Start and end sections */
+.time-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+/* Each start/end group */
+.time-group {
+  min-width: 0;
+  width: 100%;
+}
+
+/* 「開始」 / 「結束」 */
+.time-label {
+  margin-bottom: 8px;
+  color: var(--lunar);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/*
+ * IMPORTANT:
+ * The date and time inputs must have their own grid columns.
+ * minmax(0, 1fr) prevents them from pushing each other outside
+ * the parent container.
+ */
+.time-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+/* Override possible global input width rules */
+.time-inputs > input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: rgba(255, 255, 255, .025);
+  color: var(--off-white);
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   Date / Time input — visual refinement
+   ========================================================= */
+
+.time-inputs > input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 13px;
+  box-sizing: border-box;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+
+  background: rgba(255, 255, 255, .025);
+  color: var(--off-white);
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  transition:
+    border-color .2s ease,
+    background-color .2s ease;
+}
+
+/* 保留 Safari / iPadOS 原生 date & time 控制項 */
+.time-inputs > input[type="date"],
+.time-inputs > input[type="time"] {
+  appearance: auto;
+  -webkit-appearance: auto;
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--off-white);
+}
+
+/* Safari words */
+.time-inputs > input::-webkit-date-and-time-value {
+  text-align: left;
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* Focus */
+.time-inputs > input:focus {
+  border-color: rgba(228, 164, 104, .6);
+  outline: none;
+  background: rgba(228, 164, 104, .035);
+}
+
+/* Disabled */
+.time-inputs > input:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.time-inputs > input:focus {
+  border-color: rgba(228, 164, 104, .6);
+  outline: none;
+  background: rgba(228, 164, 104, .035);
+}
+
+/* Time quick buttons */
+.time-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.time-chip {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--lunar);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    color .2s ease,
+    border-color .2s ease,
+    background-color .2s ease;
+}
+
+.time-chip:hover {
+  border-color: rgba(228, 164, 104, .55);
+  color: var(--ember);
+  background: rgba(228, 164, 104, .035);
+}
+
+/* Sale status */
+.time-summary {
+  margin: 12px 0 0;
+  color: var(--ember);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.time-summary.ok {
+  color: #9bbda3;
+}
+
+.time-summary.error {
+  color: var(--danger);
+}
+
+/* =========================================================
+   Normal inputs / selects
+   ========================================================= */
+
+.ticket-type-card input,
+.ticket-type-card select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Number fields */
+.ticket-type-card input[type="number"] {
+  min-height: 44px;
+}
+
+/* Select */
+.ticket-type-card .select-field {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* =========================================================
+   Purchase limit
+   ========================================================= */
+
+.ticket-limit-field {
+  min-width: 0;
+}
+
+.ticket-limit-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 32px;
+  margin-bottom: 9px;
+  color: var(--lunar);
+  font-size: 12px;
+}
+
+.ticket-limit-controls input[type="checkbox"] {
+  flex: 0 0 auto;
+  max-width: 28px;
+  max-height: 28px;
+  min-width: 28px;
+  margin: 0;
+  accent-color: var(--ember);
+  cursor: pointer;
+}
+
+.ticket-limit-field > input[type="number"] {
+  width: 100%;
+}
+
+/* =========================================================
+   Header buttons
+   ========================================================= */
+
+.ticket-type-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.ticket-type-header-actions .btn,
+.ticket-type-header-actions .btn-outline {
+  white-space: nowrap;
+}
+
+/* =========================================================
+   Tablet
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .ticket-type-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .ticket-time-field {
+    grid-column: auto;
+  }
+
+  .time-range {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================
+   iPad / smaller screens
+   ========================================================= */
+
+@media (max-width: 700px) {
+  .ticket-type-card-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .ticket-type-header-actions {
+    width: 100%;
+  }
+
+  .ticket-type-header-actions .btn,
+  .ticket-type-header-actions .btn-outline {
+    flex: 1 1 0;
+    width: 100%;
+  }
+
+  .time-range {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .time-inputs {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+}
+
+/* =========================================================
+   iPhone / narrow screens
+   ========================================================= */
+
+@media (max-width: 480px) {
+  .ticket-type-card {
+    padding-top: 28px;
+    padding-bottom: 30px;
+  }
+
+  .ticket-type-grid {
+    gap: 24px;
+  }
+
+  .time-inputs {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .time-inputs > input {
+    width: 100%;
+  }
+
+  .ticket-type-header-actions {
+    flex-direction: column;
+  }
+
+  .ticket-type-header-actions .btn,
+  .ticket-type-header-actions .btn-outline {
+    flex: none;
+  }
+}
+
+.ticket-type-card input,
+.ticket-type-card select {
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.notify-modal {
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  max-width: min(680px, calc(100vw - 32px));
+}
+
+.order-page-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.stats-row { flex-wrap: wrap; gap: 24px; }

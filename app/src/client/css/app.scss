@@ -1,0 +1,49 @@
+:root {
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --canvas: #f5f5f7;
+  --surface: #ffffff;
+  --line: #e5e5e7;
+  --link: #06c;
+  --success: #19703a;
+  --danger: #a12622;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro TC", "PingFang TC",
+    "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(0, 102, 204, 0.28);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(0, 102, 204, 0.18);
+}
+

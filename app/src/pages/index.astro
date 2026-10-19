@@ -1,0 +1,45 @@
+---
+// The single page of the site; see astro.config.mjs
+import App from '../client/App.vue'
+---
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <script is:inline>
+      // LINE's in-app browser opens the page in the system browser when the URL
+      // carries openExternalBrowser=1. Once the param is there, don't redirect
+      // again, so an old LINE that ignores it doesn't loop.
+      (function (l) {
+        var param = 'openExternalBrowser=1'
+        var hasParam = /[?&]openExternalBrowser=1(&|$)/.test(l.search)
+        if (/\bLine\//.test(navigator.userAgent)) {
+          if (!hasParam) l.replace(l.pathname + (l.search ? l.search + '&' : '?') + param + l.hash)
+        } else if (hasParam) {
+          var search = l.search.slice(1).split('&').filter(function (s) { return s !== param }).join('&')
+          window.history.replaceState(null, null, l.pathname + (search ? '?' + search : '') + l.hash)
+        }
+      })(window.location)
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width, viewport-fit=cover" />
+    <meta name="theme-color" content="#050608" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="The Official CK Party Night tickets ordering system." />
+    <meta name="keywords" content="建中舞會, 建中舞會購票, 建中舞會門票, CK Party Night, CK Party Night 2026, 建國中學, 建國中學班聯會, 建中班聯會, 建中班聯, 建班, 建舞, CK, CKHS, CKSC, 舞會門票, 高中舞會, 台北高中舞會, 校園演唱會, 校園演唱會門票, 校園演唱會購票, 校園演唱會訂票, 校園演唱會訂票系統, 校唱" />
+    <meta name="author" content="臺北市立建國高級中學班聯會" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="建中舞會購票系統" />
+    <meta property="og:description" content="Official CK Party Night tickets ordering system." />
+    <meta property="og:url" content="https://tickets.cksc.tw/" />
+    <meta property="og:image" content="https://tickets.cksc.tw/cksclogo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="建中舞會購票系統" />
+    <meta name="twitter:description" content="Official CK Party Night tickets ordering system." />
+    <meta name="twitter:image" content="https://tickets.cksc.tw/cksclogo.png" />
+    <link rel="icon" type="image/png" href="/cksclogo.png" />
+    <title>建中舞會購票系統</title>
+  </head>
+  <body>
+    <App client:only="vue" />
+  </body>
+</html>

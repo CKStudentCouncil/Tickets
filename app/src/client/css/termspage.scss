@@ -1,0 +1,9 @@
+@use 'legal-page';
+
+.terms-body li {
+  padding-left: 20px;
+}
+
+.terms-body li::before {
+  content: '—';
+}

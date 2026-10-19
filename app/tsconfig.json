@@ -8,10 +8,16 @@
     "skipLibCheck": true,
     "types": [
       "@cloudflare/workers-types",
-      "@cloudflare/vitest-plugin/types"
+      "@cloudflare/vitest-plugin/types",
+      "astro/client"
     ],
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "paths": {
+      "src/*": [
+        "./src/client/*"
+      ]
+    }
   },
   "include": [
     "src",
