@@ -49,7 +49,8 @@ export function authOptions(env: Pick<Env, 'DB' | 'SITE_URL' | 'BETTER_AUTH_SECR
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
-      cookieCache: { enabled: true, maxAge: 60 }
+      // most requests then skip the session lookup; roles are always read fresh
+      cookieCache: { enabled: true, maxAge: 5 * 60 }
     },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] }

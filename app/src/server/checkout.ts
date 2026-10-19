@@ -10,8 +10,8 @@ import { ApiError, type ErrorCode } from './errors'
 import { flag, type Env } from './env'
 import { rankOf } from './auth'
 import type { SessionUser } from './context'
-import { SCHOOL_CODES } from './domain/constants.js'
-import { getTaiwanDateKey } from './domain/time.js'
+import { SCHOOL_CODES, SHOP_OPEN_AT } from './domain/constants.js'
+import { getTaiwanDateKey, parseTaipeiDateTime } from './domain/time.js'
 import {
   checkTicketType,
   generateOrderId,
@@ -23,8 +23,8 @@ import {
   sanitizeOrderInput
 } from './domain/orderValidation.js'
 import { CHECKOUT_ACTION, parseHostnames, verifyTurnstile } from './domain/turnstile.js'
-import { getShopOpenAt, listTicketTypeRows } from './data/settings'
-import { ticketTypeFromRow, type TicketTypeConfig } from './data/rows'
+import { listTicketTypeRows } from './data/settings'
+import { ticketTypeFromRow, type TicketTypeConfig, type TicketTypeRow } from './data/rows'
 import { confirmationJobId, mailJobInsert } from './mail/jobs'
 
 const ORDER_ID_ATTEMPTS = 3
@@ -63,15 +63,18 @@ function rejectedRequestError(request: RequestRow, uid: string) {
 const missingRequestOrderError = () =>
   new ApiError('not-found', '原訂單已取消，請重新建立訂單', { checkoutRejected: true })
 
+type RequestLookup = RequestRow & { order_user_id: string | null; deleted_at: number | null }
+
+const requestLookup = (db: D1Database, requestId: string) => db.prepare(
+  `SELECT r.user_id, r.order_id, r.status, r.error_code, r.error_message,
+          o.user_id AS order_user_id, o.deleted_at
+   FROM order_requests r LEFT JOIN orders o ON o.id = r.order_id
+   WHERE r.request_id = ?`
+).bind(requestId)
+
 // What an earlier checkout with this request id came to: its order, or its
 // definite rejection (thrown). Null when the request id is new.
-async function resolveRequest(db: D1Database, requestId: string, uid: string): Promise<CheckoutResult | null> {
-  const request = await db.prepare(
-    `SELECT r.user_id, r.order_id, r.status, r.error_code, r.error_message,
-            o.user_id AS order_user_id, o.deleted_at
-     FROM order_requests r LEFT JOIN orders o ON o.id = r.order_id
-     WHERE r.request_id = ?`
-  ).bind(requestId).first<RequestRow & { order_user_id: string | null; deleted_at: number | null }>()
+function resolveRequestRow(request: RequestLookup | undefined, uid: string): CheckoutResult | null {
   if (!request) return null
   if (request.status === 'rejected') throw rejectedRequestError(request, uid)
   if (request.user_id !== uid) throw invalidRequest()
@@ -80,6 +83,10 @@ async function resolveRequest(db: D1Database, requestId: string, uid: string): P
   if (!request.order_user_id || request.deleted_at != null) throw missingRequestOrderError()
   if (request.order_user_id !== uid) throw invalidRequest()
   return { status: 200, id: request.order_id! }
+}
+
+async function resolveRequest(db: D1Database, requestId: string, uid: string) {
+  return resolveRequestRow((await requestLookup(db, requestId).first<RequestLookup>()) ?? undefined, uid)
 }
 
 // Turnstile tokens are single-use, but the client retries a checkout with the
@@ -117,10 +124,9 @@ async function assertTurnstile(env: Env, input: CheckoutInput, uid: string, requ
 
 // The /comingsoon page only hides the shop in the browser, so the same gate
 // is enforced here; staff may order before it, as they may browse the shop.
-async function assertShopOpen(db: D1Database, uid: string) {
-  if (new Date() >= (await getShopOpenAt(db))) return
-  const row = await db.prepare('SELECT role FROM user WHERE id = ?').bind(uid).first<{ role: string | null }>()
-  if (rankOf(row?.role) === 0) throw new ApiError('failed-precondition', '尚未開賣')
+function assertShopOpen(shop: { value: string } | undefined, role: string | null | undefined) {
+  const openAt = parseTaipeiDateTime(shop ? JSON.parse(shop.value).openAt : null) || SHOP_OPEN_AT
+  if (new Date() < openAt && rankOf(role) === 0) throw new ApiError('failed-precondition', '尚未開賣')
 }
 
 // Orders per account per minute (the ORDER_LIMITER binding), counted only
@@ -156,11 +162,21 @@ export async function checkout(
   const uid = user.id
   const requestId = isValidRequestId(input?.requestId) ? input.requestId! : null
 
+  // Everything the checkout reads, in one round trip to D1
+  const buyerKey = await getBuyerKey(user.email)
+  const [requests, shops, roles, typeRows, bought] = await db.batch([
+    requestId ? requestLookup(db, requestId) : db.prepare('SELECT NULL WHERE 0'),
+    db.prepare(`SELECT value FROM settings WHERE key = 'shop'`),
+    db.prepare('SELECT role FROM user WHERE id = ?').bind(uid),
+    db.prepare('SELECT id, sort, active, config, stock, sold FROM ticket_types WHERE active = 1'),
+    db.prepare('SELECT ticket_type_id, quantity FROM buyer_purchases WHERE email_hash = ?').bind(buyerKey)
+  ])
+
   // A committed checkout remains recoverable even if the shop is later closed
   // or throttling starts. The batch below also inserts this request id, so
   // two simultaneous calls cannot both create an order.
   if (requestId) {
-    const previous = await resolveRequest(db, requestId, uid)
+    const previous = resolveRequestRow(requests.results[0] as RequestLookup | undefined, uid)
     if (previous) return previous
   }
 
@@ -168,17 +184,12 @@ export async function checkout(
     const { order, quantities } = sanitizeOrderInput(input?.orderPayload, user.email)
 
     await assertTurnstile(env, input, uid, requestId, remoteip)
-    await assertShopOpen(db, uid)
+    assertShopOpen(shops.results[0] as { value: string } | undefined, (roles.results[0] as { role: string | null } | undefined)?.role)
     await enforceAccountLimit(env, uid)
 
-    const buyerKey = await getBuyerKey(order.customerEmail)
-    const [rows, bought] = await Promise.all([
-      listTicketTypeRows(db),
-      db.prepare('SELECT ticket_type_id, quantity FROM buyer_purchases WHERE email_hash = ?').bind(buyerKey)
-        .all<{ ticket_type_id: string; quantity: number }>()
-    ])
+    const rows = typeRows.results as TicketTypeRow[]
     const types = new Map(rows.map((row) => [row.id, { row, type: ticketTypeFromRow(row) }]))
-    const alreadyBought = new Map(bought.results.map((r) => [r.ticket_type_id, r.quantity]))
+    const alreadyBought = new Map((bought.results as { ticket_type_id: string; quantity: number }[]).map((r) => [r.ticket_type_id, r.quantity]))
 
     const now = new Date()
     const items = [...quantities].map(([id, quantity]) => {
