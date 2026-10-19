@@ -6,8 +6,18 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types"]
+    "types": [
+      "@cloudflare/workers-types",
+      "@cloudflare/vitest-plugin/types"
+    ],
+    "allowJs": true,
+    "checkJs": false
   },
-  "include": ["src", "test"],
-  "exclude": ["test/**/vitest.config.ts"]
+  "include": [
+    "src",
+    "test"
+  ],
+  "exclude": [
+    "test/**/vitest.config.ts"
+  ]
 }

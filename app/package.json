@@ -4,22 +4,39 @@
   "type": "module",
   "scripts": {
     "test:spike": "vitest run --config test/spike/vitest.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.4",
     "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^26.6.5",
+    "@types/qrcode": "^1.5.6",
+    "sass": "^1.105.2",
     "typescript": "^7.0.2",
     "vitest": "~4.1.0",
     "wrangler": "4"
   },
   "dependencies": {
+    "@astrojs/vue": "^7.1.0",
+    "@hono/zod-validator": "^0.9.1",
+    "astro": "^7.4.0",
     "aws4fetch": "^1.0.20",
     "better-auth": "^1.7.11",
     "drizzle-orm": "^0.45.4",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "hono": "^4.13.13",
+    "html2pdf.js": "^0.14.0",
+    "jsqr": "^1.4.0",
+    "lucide-vue-next": "^1.0.0",
     "mimetext": "^3.0.28",
-    "qrcode": "^1.5.4"
+    "pinia": "^4.1.0",
+    "posthog-js": "^1.438.12",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.44",
+    "zod": "^4.6.7"
   }
 }

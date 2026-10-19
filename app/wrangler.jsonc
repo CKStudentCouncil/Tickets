@@ -1,0 +1,61 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Staging is the top-level config; production is env.production.
+  // The resource ids are placeholders until the Cloudflare account is chosen:
+  // see DEPLOY.md for the commands that create them.
+  "name": "cksc-tickets-staging",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "upload_source_maps": true,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/api/*", "/media/*", "/product/*", "/orders/*", "/admin/orders/*"]
+  },
+  "vars": {
+    "SITE_URL": "https://cksc-tickets-staging.example.workers.dev",
+    "TURNSTILE_HOSTNAMES": "cksc-tickets-staging.example.workers.dev",
+    "ENFORCE_TURNSTILE": "true",
+    "SES_RECIPIENTS_PER_SECOND": "14",
+    "AWS_REGION": "us-east-1"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "cksc-tickets-staging", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "./migrations" }
+  ],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "cksc-tickets-staging-media" }],
+  "queues": {
+    "producers": [{ "binding": "MAIL_QUEUE", "queue": "cksc-tickets-staging-mail" }],
+    "consumers": [{ "queue": "cksc-tickets-staging-mail", "max_batch_size": 10, "max_batch_timeout": 1, "max_concurrency": 1, "max_retries": 100 }]
+  },
+  "ratelimits": [{ "name": "ORDER_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  "triggers": { "crons": ["* * * * *"] },
+
+  "env": {
+    "production": {
+      "name": "cksc-tickets",
+      "routes": [{ "pattern": "tickets.cksc.tw", "custom_domain": true }],
+      "workers_dev": false,
+      "vars": {
+        "SITE_URL": "https://tickets.cksc.tw",
+        "TURNSTILE_HOSTNAMES": "tickets.cksc.tw",
+        "ENFORCE_TURNSTILE": "true",
+        "SES_RECIPIENTS_PER_SECOND": "14",
+        "AWS_REGION": "us-east-1"
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "cksc-tickets", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "./migrations" }
+      ],
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "cksc-tickets-media" }],
+      "queues": {
+        "producers": [{ "binding": "MAIL_QUEUE", "queue": "cksc-tickets-mail" }],
+        "consumers": [{ "queue": "cksc-tickets-mail", "max_batch_size": 10, "max_batch_timeout": 1, "max_concurrency": 1, "max_retries": 100 }]
+      },
+      "ratelimits": [{ "name": "ORDER_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }],
+      "triggers": { "crons": ["* * * * *"] }
+    }
+  }
+}
