@@ -1,0 +1,25 @@
+{
+  "name": "cksc-tickets-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:spike": "vitest run --config test/spike/vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.4",
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "~4.1.0",
+    "wrangler": "4"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "better-auth": "^1.7.11",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.13",
+    "mimetext": "^3.0.28",
+    "qrcode": "^1.5.4"
+  }
+}
