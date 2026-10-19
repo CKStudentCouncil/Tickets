@@ -1,9 +1,12 @@
 // The Worker: the API, the lineup images in R2, and the static Astro site
 // (Workers Static Assets): the staff app for /admin URLs, the public app
-// (index.html, the SPA fallback) for every other page. Also the mail queue consumer and the cron sweep.
+// (index.html, the SPA fallback) for every other page. Also the mail queue consumer, the cron sweep
+// and the checkout gate (a Durable Object).
 import { api } from '../server/app'
 import type { Env, MailMessage } from '../server/env'
 import { consumeMailBatch, sweepMail } from '../server/mail/worker'
+
+export { CheckoutGate } from '../server/checkoutGate'
 
 async function serveMedia(env: Env, key: string) {
   const object = await env.MEDIA.get(key)

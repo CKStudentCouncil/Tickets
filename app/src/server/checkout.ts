@@ -1,11 +1,14 @@
 // Checkout (replaces the createOrder callable, functions/lib/orders.js).
 //
 // Prices, names, sale windows, stock and per-person limits all come from the
-// ticket_types table; nothing price-related is trusted from the client. The
-// order, its stock and the buyer's allowance are written in one D1 batch,
-// which is a single transaction: the CHECK constraints on ticket_types.sold
-// and buyer_purchases.quantity make the whole batch fail rather than oversell
-// or exceed a limit, however many checkouts run at once.
+// ticket_types table; nothing price-related is trusted from the client. Once
+// a checkout is valid it goes through the checkout gate (checkoutGate.ts),
+// which turns it away when its tickets are gone and otherwise writes it in a
+// D1 batch with the other orders of that moment. Each order's stock, the
+// buyer's allowance and the order itself are in one transaction, and the
+// CHECK constraints on ticket_types.sold and buyer_purchases.quantity make it
+// fail rather than oversell or exceed a limit, however many checkouts run at
+// once.
 import { ApiError, type ErrorCode } from './errors'
 import { flag, type Env } from './env'
 import { rankOf } from './auth'
@@ -18,14 +21,14 @@ import {
   generateTicketCode,
   getBuyerKey,
   getPurchaseLimit,
-  getStockLimit,
   isValidRequestId,
   sanitizeOrderInput
 } from './domain/orderValidation.js'
 import { CHECKOUT_ACTION, parseHostnames, verifyTurnstile } from './domain/turnstile.js'
 import { listTicketTypeRows } from './data/settings'
 import { ticketTypeFromRow, type TicketTypeConfig, type TicketTypeRow } from './data/rows'
-import { confirmationJobId, mailJobInsert } from './mail/jobs'
+import { confirmationJobId } from './mail/jobs'
+import { checkoutGate, type GateOrder, type GateResult } from './checkoutGate'
 
 const ORDER_ID_ATTEMPTS = 3
 // How long a passed Turnstile check covers retries of the same checkout
@@ -91,10 +94,13 @@ async function resolveRequest(db: D1Database, requestId: string, uid: string) {
 
 // Turnstile tokens are single-use, but the client retries a checkout with the
 // same token and request id when the server was busy or the response was
-// lost. The first pass is remembered per request id, so such a retry gets
-// through while a token replayed on another checkout does not.
+// lost. A retry of a checkout that reached a verdict is answered from
+// order_requests before Turnstile is checked, and one still in the gate joins
+// it; a checkout that failed without a verdict remembers its pass (see
+// rememberTurnstilePass), so its retry gets through while a token replayed on
+// another checkout does not. Returns whether a token was verified.
 async function assertTurnstile(env: Env, input: CheckoutInput, uid: string, requestId: string | null, remoteip: string | null) {
-  if (!flag(env.ENFORCE_TURNSTILE)) return
+  if (!flag(env.ENFORCE_TURNSTILE)) return false
 
   const passed = await verifyTurnstile({
     token: input.turnstileToken,
@@ -103,16 +109,7 @@ async function assertTurnstile(env: Env, input: CheckoutInput, uid: string, requ
     secret: env.TURNSTILE_SECRET?.trim(),
     remoteip
   })
-
-  if (passed) {
-    if (requestId) {
-      await env.DB.prepare(
-        `INSERT INTO turnstile_passes (request_id, user_id, expires_at) VALUES (?1, ?2, ?3)
-         ON CONFLICT (request_id) DO UPDATE SET expires_at = excluded.expires_at WHERE user_id = excluded.user_id`
-      ).bind(requestId, uid, Date.now() + TURNSTILE_PASS_MS).run()
-    }
-    return
-  }
+  if (passed) return true
 
   const pass = requestId
     ? await env.DB.prepare('SELECT user_id, expires_at FROM turnstile_passes WHERE request_id = ?').bind(requestId).first<{ user_id: string; expires_at: number }>()
@@ -120,6 +117,18 @@ async function assertTurnstile(env: Env, input: CheckoutInput, uid: string, requ
   if (pass?.user_id !== uid || pass.expires_at < Date.now()) {
     throw new ApiError('permission-denied', '人機驗證已過期，請重新驗證後再送出')
   }
+  return false
+}
+
+// Written only when a verified checkout ends without a verdict, so a rush of
+// checkouts does not cost D1 a write each
+async function rememberTurnstilePass(env: Env, uid: string, requestId: string) {
+  await env.DB.prepare(
+    `INSERT INTO turnstile_passes (request_id, user_id, expires_at) VALUES (?1, ?2, ?3)
+     ON CONFLICT (request_id) DO UPDATE SET expires_at = excluded.expires_at WHERE user_id = excluded.user_id`
+  ).bind(requestId, uid, Date.now() + TURNSTILE_PASS_MS).run().catch((error) => {
+    console.error('[checkout] could not remember the Turnstile pass', error)
+  })
 }
 
 // The /comingsoon page only hides the shop in the browser, so the same gate
@@ -138,16 +147,6 @@ async function enforceAccountLimit(env: Env, uid: string) {
 }
 
 const soldOutError = (ticketType: TicketTypeConfig) => new ApiError('resource-exhausted', `${ticketType.name}剩餘票量不足`)
-
-// A constraint that failed the batch, read from D1's error message
-function constraintOf(error: unknown) {
-  const message = String((error as Error)?.message || '')
-  if (/CHECK constraint failed: stock_available/.test(message)) return 'stock'
-  if (/CHECK constraint failed: per_person_limit/.test(message)) return 'limit'
-  if (/UNIQUE constraint failed: orders\.id/.test(message)) return 'order-id'
-  if (/UNIQUE constraint failed: order_requests\.request_id/.test(message)) return 'request-id'
-  return null
-}
 
 export async function checkout(
   env: Env,
@@ -180,96 +179,82 @@ export async function checkout(
     if (previous) return previous
   }
 
+  let verified = false
   try {
     const { order, quantities } = sanitizeOrderInput(input?.orderPayload, user.email)
 
-    await assertTurnstile(env, input, uid, requestId, remoteip)
+    verified = await assertTurnstile(env, input, uid, requestId, remoteip)
     assertShopOpen(shops.results[0] as { value: string } | undefined, (roles.results[0] as { role: string | null } | undefined)?.role)
     await enforceAccountLimit(env, uid)
 
     const rows = typeRows.results as TicketTypeRow[]
-    const types = new Map(rows.map((row) => [row.id, { row, type: ticketTypeFromRow(row) }]))
+    const types = new Map(rows.map((row) => [row.id, ticketTypeFromRow(row)]))
     const alreadyBought = new Map((bought.results as { ticket_type_id: string; quantity: number }[]).map((r) => [r.ticket_type_id, r.quantity]))
 
+    // Whether the tickets are still there is the gate's call: its counts are
+    // fresher than this read, and its sold-out verdicts are recorded together.
     const now = new Date()
     const items = [...quantities].map(([id, quantity]) => {
-      const entry = types.get(id)
-      if (!entry) throw new ApiError('invalid-argument', `無效的票種：${id}`)
-      const { row, type } = entry
+      const type = types.get(id)
+      if (!type) throw new ApiError('invalid-argument', `無效的票種：${id}`)
       checkTicketType(type, quantity, { now, school: order.school, email: user.email, alreadyBought: alreadyBought.get(id) || 0 })
-      // An unlocked look so a sold-out type is reported as such; the CHECK in
-      // the batch is what actually prevents overselling.
-      const stock = getStockLimit(type)
-      if (stock !== null && row.sold + quantity > stock) throw soldOutError(type)
-      return {
-        item: { id, ticketTypeId: id, name: String(type.name || ''), price: Number(type.price) || 0, quantity },
-        type,
-        stock,
-        limit: getPurchaseLimit(type)
-      }
+      return { id, name: String(type.name || ''), price: Number(type.price) || 0, quantity, limit: getPurchaseLimit(type) as number | null }
     })
-    const finalTotal = items.reduce((sum, { item }) => sum + item.price * item.quantity, 0)
+    const typeOf = (id: string) => types.get(id)!
+    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const schoolCode = (SCHOOL_CODES as Record<string, string>)[order.school]
     const dateKey = getTaiwanDateKey()
+    const gate = checkoutGate(env)
 
     for (let attempt = 1; ; attempt++) {
       const orderId = generateOrderId(schoolCode, dateKey)
-      const createdAt = Date.now()
       const jobId = confirmationJobId(orderId)
-      const statements = [
-        ...items.flatMap(({ item, limit }) => [
-          // ticket types without a stock limit count their sales too
-          db.prepare('UPDATE ticket_types SET sold = sold + ?1 WHERE id = ?2').bind(item.quantity, item.id),
-          db.prepare(
-            `INSERT INTO buyer_purchases (email_hash, ticket_type_id, quantity, max_quantity, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT DO UPDATE SET quantity = quantity + excluded.quantity,
-               max_quantity = excluded.max_quantity, updated_at = excluded.updated_at`
-          ).bind(buyerKey, item.id, item.quantity, limit, createdAt),
-          db.prepare('INSERT INTO order_items (order_id, ticket_type_id, quantity) VALUES (?, ?, ?)')
-            .bind(orderId, item.id, item.quantity)
-        ]),
-        db.prepare(
-          `INSERT INTO orders (id, user_id, customer_name, customer_email, customer_phone, school, class, number, office,
-             items, original_total, final_total, ticket_code, email_status, email_job_id, email_updated_at, created_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, 'queued', ?13, ?14, ?14)`
-        ).bind(orderId, uid, order.customerName, order.customerEmail, order.customerPhone, order.school,
-          order.class, order.number, order.office, JSON.stringify(items.map(({ item }) => item)), finalTotal,
-          generateTicketCode(), jobId, createdAt),
-        mailJobInsert(db, {
-          id: jobId, kind: 'confirmation', purpose: 'confirmation', orderId, recipientCount: 1, buyerCount: 1, now: createdAt
-        }),
-        ...(requestId
-          ? [db.prepare(`INSERT INTO order_requests (request_id, user_id, order_id, status, created_at) VALUES (?, ?, ?, 'created', ?)`)
-              .bind(requestId, uid, orderId, createdAt)]
-          : [])
-      ]
+      const gateOrder: GateOrder = {
+        id: orderId, requestId, uid, buyerKey, items, total, ticketCode: generateTicketCode(), jobId,
+        customer: {
+          name: order.customerName, email: order.customerEmail, phone: order.customerPhone, school: order.school,
+          class: order.class, number: order.number, office: order.office
+        }
+      }
+      const result: GateResult = await gate.admit(gateOrder)
 
-      try {
-        await db.batch(statements)
-        await env.MAIL_QUEUE.send({ jobId }).catch((error) => {
-          // the cron sweep picks up queued jobs that never reached the queue
-          console.error('[checkout] could not enqueue confirmation', orderId, error)
-        })
-        return { status: 201, id: orderId, emailJobId: jobId }
-      } catch (error) {
-        const constraint = constraintOf(error)
-        if (constraint === 'order-id' && attempt < ORDER_ID_ATTEMPTS) continue
-        if (constraint === 'request-id' && requestId) {
-          // a simultaneous call with the same request id committed first
-          const previous = await resolveRequest(db, requestId, uid)
+      switch (result.kind) {
+        case 'created':
+          if (result.joined) return { status: 200, id: result.orderId }
+          await env.MAIL_QUEUE.send({ jobId }).catch((error) => {
+            // the cron sweep picks up queued jobs that never reached the queue
+            console.error('[checkout] could not enqueue confirmation', orderId, error)
+          })
+          return { status: 201, id: orderId, emailJobId: jobId }
+        case 'sold-out': {
+          const error = soldOutError(typeOf(result.typeId))
+          // the gate already recorded this rejection for the request id
+          if (result.fenced) throw new ApiError(error.code, error.message, { checkoutRejected: true })
+          throw error
+        }
+        case 'order-id':
+          if (attempt < ORDER_ID_ATTEMPTS) continue
+          throw new Error('Could not generate a unique order id')
+        case 'request-id': {
+          // a call with the same request id reached a verdict first
+          const previous = requestId ? await resolveRequest(db, requestId, uid) : null
           if (previous) return previous
+          throw invalidRequest()
         }
-        if (constraint === 'stock') {
+        case 'stock': {
           const fresh = new Map((await listTicketTypeRows(db)).map((row) => [row.id, row]))
-          const gone = items.find(({ item, stock }) => stock !== null && (fresh.get(item.id)?.sold ?? 0) + item.quantity > stock)
-          throw soldOutError((gone || items[0]).type)
+          const gone = items.find((item) => {
+            const row = fresh.get(item.id)
+            return row?.stock != null && row.sold + item.quantity > row.stock
+          })
+          throw soldOutError(typeOf((gone || items[0]).id))
         }
-        if (constraint === 'limit') {
-          const { type, limit } = items.find(({ limit }) => limit !== null) || items[0]
-          throw new ApiError('failed-precondition', `${type.name}超過每人限購 ${limit} 張`)
+        case 'limit': {
+          const { id, limit } = items.find(({ limit }) => limit !== null) || items[0]
+          throw new ApiError('failed-precondition', `${typeOf(id).name}超過每人限購 ${limit} 張`)
         }
-        throw error
+        case 'unknown':
+          throw new Error('The checkout gate could not tell whether the order was written')
       }
     }
   } catch (error) {
@@ -293,6 +278,8 @@ export async function checkout(
     }
     if (error instanceof ApiError) throw error
     console.error('[checkout] unexpected error:', error)
+    // without a verdict, the client retries with the same token and request id
+    if (verified && requestId) await rememberTurnstilePass(env, uid, requestId)
     throw new ApiError('internal', '訂單送出失敗，請稍後再試')
   }
 }

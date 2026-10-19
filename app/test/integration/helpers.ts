@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers'
 import { api } from '../../src/server/app'
 import { authFor } from '../../src/server/context'
 import type { Role } from '../../src/server/auth'
+import { invalidateCheckoutGate } from '../../src/server/checkoutGate'
 
 export const HOUR = 60 * 60 * 1000
 export const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString()
@@ -92,6 +93,7 @@ export async function setTypes(changes: Record<string, Record<string, unknown>> 
        ON CONFLICT (id) DO UPDATE SET config = excluded.config, stock = excluded.stock, active = 1`
     ).bind(type.id, i, JSON.stringify(type), (type as any).unlimitedStock ? null : Number(type.totalTicketQuantity) || 0, now)
   ))
+  await invalidateCheckoutGate(env)
 }
 
 export async function setShopOpenAt(date: Date | string) {
@@ -113,6 +115,8 @@ export async function resetData() {
     .map((table) => db.prepare(`DELETE FROM ${table}`)))
   await db.prepare(`UPDATE mail_control SET next_send_at = 0`).run()
   await db.prepare(`UPDATE user SET role = NULL, staffName = NULL`).run()
+  // the tests write stock and sales directly
+  await invalidateCheckoutGate(env)
 }
 
 export async function rejects(promise: Promise<unknown>, expected: { code: string; checkoutRejected?: boolean }) {

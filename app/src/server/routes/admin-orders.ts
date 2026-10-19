@@ -10,6 +10,7 @@ import { ApiError } from '../errors'
 import { iso, orderFromRow, type OrderRow } from '../data/rows'
 import { ORDER_ID_PATTERN, getBuyerKey } from '../domain/orderValidation.js'
 import { mailJobInsert } from '../mail/jobs'
+import { invalidateCheckoutGate } from '../checkoutGate'
 
 export const ORDER_PAGE_MAX = 251
 
@@ -234,6 +235,8 @@ export const adminOrderRoutes = new Hono<AppEnv>()
          WHERE order_id = ?1 AND status IN ('pending', 'retry') AND ${deleted}`
       ).bind(orderId, token, Date.now())
     ])
+    // the tickets given back are for sale again
+    await invalidateCheckoutGate(c.env)
     return c.json({ ok: true })
   })
   // Each deliberate resend is a new job; a retry of the same action reuses

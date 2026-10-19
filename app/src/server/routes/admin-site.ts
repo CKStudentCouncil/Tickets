@@ -10,6 +10,7 @@ import { ApiError } from '../errors'
 import { iso, ticketTypeFromRow, type TicketTypeRow } from '../data/rows'
 import { lineupFromRow, mediaUrl, storyFromRow, type LineupRow, type StoryRow } from '../data/content'
 import { parseTaipeiDateTime } from '../domain/time.js'
+import { invalidateCheckoutGate } from '../checkoutGate'
 import { getStockLimit, TICKET_TYPE_ID_PATTERN } from '../domain/orderValidation.js'
 
 const MAX_IMAGE_BYTES = 7 * 1024 * 1024
@@ -97,6 +98,7 @@ export const adminSiteRoutes = new Hono<AppEnv>()
         `UPDATE ticket_types SET active = 0, updated_at = ?2 WHERE id NOT IN (SELECT value FROM json_each(?1))`
       ).bind(JSON.stringify([...ids]), now)
     ])
+    await invalidateCheckoutGate(c.env)
     const { results } = await db.prepare('SELECT * FROM ticket_types WHERE active = 1 ORDER BY sort').all<TicketTypeRow>()
     return c.json({ types: results.map(ticketTypeFromRow) })
   })

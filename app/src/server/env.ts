@@ -1,3 +1,5 @@
+import type { CheckoutGate } from './checkoutGate'
+
 // Bindings and settings of the Worker (wrangler.jsonc). Secrets are set with
 // `wrangler secret put`; see DEPLOY.md.
 export interface Env {
@@ -6,6 +8,7 @@ export interface Env {
   MAIL_QUEUE: Queue<MailMessage>
   ASSETS: Fetcher
   ORDER_LIMITER?: RateLimit
+  CHECKOUT_GATE: DurableObjectNamespace<CheckoutGate>
 
   SITE_URL: string
   // Comma-separated hostnames whose Turnstile tokens checkout accepts

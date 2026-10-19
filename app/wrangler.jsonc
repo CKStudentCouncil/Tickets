@@ -34,6 +34,9 @@
   },
   "ratelimits": [{ "name": "ORDER_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
   "triggers": { "crons": ["* * * * *"] },
+  // every checkout passes through one CheckoutGate (src/server/checkoutGate.ts)
+  "durable_objects": { "bindings": [{ "name": "CHECKOUT_GATE", "class_name": "CheckoutGate" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CheckoutGate"] }],
 
   "env": {
     "production": {
@@ -56,7 +59,8 @@
         "consumers": [{ "queue": "cksc-tickets-mail", "max_batch_size": 10, "max_batch_timeout": 1, "max_concurrency": 1, "max_retries": 100 }]
       },
       "ratelimits": [{ "name": "ORDER_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }],
-      "triggers": { "crons": ["* * * * *"] }
+      "triggers": { "crons": ["* * * * *"] },
+      "durable_objects": { "bindings": [{ "name": "CHECKOUT_GATE", "class_name": "CheckoutGate" }] }
     }
   }
 }

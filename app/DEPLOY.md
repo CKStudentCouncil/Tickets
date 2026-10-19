@@ -49,6 +49,8 @@ npx wrangler queues create cksc-tickets-mail
 
 Put each D1 `database_id` that `d1 create` prints into `wrangler.jsonc`, replacing the placeholder ids `00000000-…-000000000000` (staging) and `00000000-…-000000000001` (production). Commit that change.
 
+The checkout gate (a Durable Object, `src/server/checkoutGate.ts`) needs nothing created by hand: the first deploy sets it up. It is placed in APAC next to D1; if a database is ever created in another location, change `GATE_LOCATION` to match.
+
 The first `wrangler deploy` prints the staging address (`https://cksc-tickets-staging.<subdomain>.workers.dev`). Put that host into the staging `SITE_URL` and `TURNSTILE_HOSTNAMES` in `wrangler.jsonc`.
 
 ## 3. Database tables

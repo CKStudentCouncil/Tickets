@@ -22,6 +22,7 @@ export default defineConfig({
               d1Databases: ['DB'],
               r2Buckets: ['MEDIA'],
               queueProducers: { MAIL_QUEUE: 'mail' },
+              durableObjects: { CHECKOUT_GATE: 'CheckoutGate' },
               serviceBindings: { ASSETS: () => new Response('asset', { status: 200 }) },
               bindings: {
                 SITE_URL: 'http://localhost',

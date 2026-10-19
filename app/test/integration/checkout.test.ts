@@ -263,6 +263,57 @@ describe('checkout', () => {
   })
 })
 
+describe('the checkout gate', () => {
+  test('a rush is written in a few batches, and every loser is fenced', async () => {
+    const accounts = await Promise.all(Array.from({ length: 40 }, (_, i) => as(`rush${i}@example.com`)))
+    const results = await Promise.allSettled(accounts.map((account, i) =>
+      createOrder({ ...order([{ id: 'small', quantity: 1 }]), requestId: `req-rush-${String(i).padStart(12, '0')}` }, account)))
+    const won = results.filter((r) => r.status === 'fulfilled')
+    const lost = results.filter((r) => r.status === 'rejected').map((r) => (r as PromiseRejectedResult).reason)
+    assert.equal(won.length, 5)
+    assert.ok(lost.every((error) => error.code === 'resource-exhausted' && error.details?.checkoutRejected === true))
+    assert.equal(await soldOf('small'), 5)
+    assert.equal(await countOrdersOf('small'), 5)
+    const markers = await db.prepare(`SELECT count(*) AS n FROM order_requests WHERE status = 'rejected'`).first<number>('n')
+    assert.equal(markers, 35)
+    // orders written in one batch share its timestamp
+    const batches = await db.prepare('SELECT count(DISTINCT created_at) AS n FROM orders').first<number>('n')
+    assert.ok(batches! < 5, `expected the 5 orders in fewer batches, got ${batches}`)
+  })
+
+  test('simultaneous retries of one checkout get one order', async () => {
+    const account = await as('twice@example.com')
+    const payload = { ...order([{ id: 'open', quantity: 1 }]), requestId: 'req-twice-0123456789' }
+    const [a, b] = await Promise.all([createOrder(payload, account), createOrder(payload, account)])
+    assert.equal(a.id, b.id)
+    assert.equal(await countOrdersOf('open'), 1)
+    assert.equal(await soldOf('open'), 1)
+  })
+
+  test('stale counts in the gate never oversell: D1 has the last word', async () => {
+    await setTypes({ open: { totalTicketQuantity: 10 } })
+    await createOrder(order([{ id: 'open', quantity: 1 }]), await as('before@example.com'))
+    // lowered behind the gate's back: it still believes 9 are left
+    await db.prepare(`UPDATE ticket_types SET stock = 2 WHERE id = 'open'`).run()
+    const accounts = await Promise.all(Array.from({ length: 6 }, (_, i) => as(`stale${i}@example.com`)))
+    const results = await Promise.allSettled(accounts.map((account) => createOrder(order([{ id: 'open', quantity: 1 }]), account)))
+    assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1)
+    assert.ok(results.every((r) => r.status === 'fulfilled' || (r as PromiseRejectedResult).reason.code === 'resource-exhausted'))
+    assert.equal(await soldOf('open'), 2)
+    assert.equal(await countOrdersOf('open'), 2)
+  })
+
+  test('tickets given back by a deleted order are on sale again at once', async () => {
+    await setTypes({ open: { totalTicketQuantity: 1 } })
+    const { id } = await createOrder(order([{ id: 'open', quantity: 1 }]), await as('gives-back@example.com'))
+    await rejects(createOrder(order([{ id: 'open', quantity: 1 }]), await as('waiting@example.com')), { code: 'resource-exhausted' })
+    await deleteOrder(id)
+    const again = await createOrder(order([{ id: 'open', quantity: 1 }]), await as('waiting@example.com'))
+    assert.equal(again.status, 201)
+    assert.equal(await soldOf('open'), 1)
+  })
+})
+
 describe('deleting an order', () => {
   test('returns stock and the buyer allowance exactly once (PARTY-5)', async () => {
     const account = await as('a@example.com')
