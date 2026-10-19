@@ -8,6 +8,9 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // run next to D1 instead of next to the visitor: a checkout makes several
+  // round trips to the database. Inherited by env.production.
+  "placement": { "mode": "smart" },
   "upload_source_maps": true,
   "assets": {
     "directory": "./dist",
