@@ -188,7 +188,9 @@ describe('SES request', () => {
 
 describe('notifications', () => {
   test('freeze recipients in batches of 49, send each batch once, and report progress', async () => {
-    for (let i = 0; i < 59; i++) await createOrder(order([{ id: 'open', quantity: 1 }]), await as(`n${i}@example.com`))
+    // the buyers check out at once, as a rush would
+    const buyers = await Promise.all(Array.from({ length: 59 }, (_, i) => as(`n${i}@example.com`)))
+    await Promise.all(buyers.map((account) => createOrder(order([{ id: 'open', quantity: 1 }]), account)))
     const manager = await as('manager@example.com', { role: 'manager' })
     assert.equal((await call(buyer, 'POST', '/admin/notifications', { type: 'payment', location: 'A' })).status, 403)
     await assert.rejects(ok(call(manager, 'POST', '/admin/notifications', { type: 'payment', location: 'A' })), { code: 'invalid-argument' })
