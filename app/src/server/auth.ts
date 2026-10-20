@@ -56,7 +56,11 @@ export function authOptions(env: Pick<Env, 'DB' | 'SITE_URL' | 'BETTER_AUTH_SECR
       cookieCache: { enabled: true, maxAge: 60 * 60 }
     },
     advanced: {
-      ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] }
+      ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
+      // The schema comes from migrations/0001_auth.sql. Better Auth's own
+      // check reads every table's layout from D1 in each new isolate (about
+      // 25 queries), which a rush pays once for every isolate it starts.
+      database: { validateSchema: false }
     },
     databaseHooks: {
       session: {
