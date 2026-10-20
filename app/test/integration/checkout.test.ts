@@ -1,6 +1,8 @@
 // Checkout against a real (local) D1: the cases of the old createOrder and
 // releaseOrderStock emulator tests (functions/test/emulator/createOrder.test.js).
 import assert from 'node:assert/strict'
+import { env } from 'cloudflare:workers'
+import { api } from '../../src/server/app'
 import { beforeEach, describe, expect, test } from 'vitest'
 import {
   HOUR, TICKET_TYPES, anonymous, as, call, countOrdersOf, createOrder, db, iso, ok, order, rejects, resetData,
@@ -260,6 +262,17 @@ describe('checkout', () => {
     assert.equal((await call(await as('stranger@example.com'), 'GET', `/orders/${id}`)).status, 404)
     assert.equal((await call(await as('door@example.com', { role: 'manager' }), 'GET', `/orders/${id}`)).status, 200)
     assert.equal((await call(anonymous, 'GET', `/orders/${id}`)).status, 401)
+  })
+})
+
+describe('the session cache', () => {
+  test('a visit refreshes the session cache cookie, and checkout works from it alone', async () => {
+    const account = await as('cached@example.com')
+    const res = await api.request('http://localhost/api/me', { headers: { cookie: account.cookie, origin: 'http://localhost' } }, env)
+    const cache = res.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => c.startsWith('better-auth.session_data='))
+    assert.ok(cache, 'expected the session_data cookie')
+    const { id } = await createOrder(order([{ id: 'open', quantity: 1 }]), { ...account, cookie: `${account.cookie}; ${cache}` })
+    assert.ok(id)
   })
 })
 

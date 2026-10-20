@@ -29,7 +29,11 @@ export function authFor(env: Env) {
 export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
   const auth = authFor(c.env)
   c.set('auth', auth)
-  const session = await auth.api.getSession({ headers: c.req.raw.headers }).catch(() => null)
+  // The cookies getSession sets (the session cache, a renewed session) go
+  // back to the browser, so the next requests skip the D1 lookup
+  const result = await auth.api.getSession({ headers: c.req.raw.headers, returnHeaders: true }).catch(() => null)
+  for (const cookie of result?.headers.getSetCookie() ?? []) c.header('set-cookie', cookie, { append: true })
+  const session = result?.response
   const u = session?.user as (Record<string, unknown> & { id: string }) | undefined
   c.set('user', u ? {
     id: u.id,

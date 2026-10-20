@@ -34,7 +34,7 @@ if (!['local', 'staging'].includes(args.target)) {
   process.exit(1)
 }
 const base = (args.base || (args.target === 'local' ? 'http://127.0.0.1:8787' : '')).replace(/\/$/, '')
-if (!base) {
+if (!base && !args.cleanup) {
   console.error('--base is required for staging')
   process.exit(1)
 }
@@ -116,6 +116,19 @@ const payload = (i) => ({
   requestId: randomUUID()
 })
 
+// Buyers open the shop before it opens: that visit (/api/me) sets the
+// session cache cookie the checkout then sends, as a browser would
+console.log(`opening the shop for ${buyers} buyers…`)
+const cookies = new Map()
+for (let i = 0; i < users.length; i += 20) {
+  await Promise.all(users.slice(i, i + 20).map(async (u) => {
+    const res = await fetch(`${base}/api/me`, { headers: { cookie: cookie(u.token), origin: base } })
+    await res.arrayBuffer()
+    const set = res.headers.getSetCookie().map((c) => c.split(';')[0])
+    cookies.set(u.id, [cookie(u.token), ...set.filter((c) => !c.startsWith(`${cookieName}=`))].join('; '))
+  }))
+}
+
 console.log(`firing ${buyers} checkouts at ${base}…`)
 const started = performance.now()
 const results = await Promise.all(users.map(async (u, i) => {
@@ -123,7 +136,7 @@ const results = await Promise.all(users.map(async (u, i) => {
   try {
     const res = await fetch(`${base}/api/orders`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: cookie(u.token), origin: base },
+      headers: { 'content-type': 'application/json', cookie: cookies.get(u.id), origin: base },
       body: JSON.stringify(payload(i))
     })
     const body = await res.json().catch(() => ({}))
