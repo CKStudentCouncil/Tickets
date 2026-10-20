@@ -13,6 +13,8 @@
 // --target accepts only local and staging.
 import { execFileSync } from 'node:child_process'
 import { createHmac, randomUUID } from 'node:crypto'
+import http from 'node:http'
+import https from 'node:https'
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -116,15 +118,33 @@ const payload = (i) => ({
   requestId: randomUUID()
 })
 
+// Every buyer has their own connection, as every browser does (fetch would
+// put all checkouts on one HTTP/2 connection and queue the ones over its
+// stream limit, which is the test client's delay, not the site's)
+const transport = base.startsWith('https://') ? https : http
+function request(agent, method, path, headers, body) {
+  return new Promise((resolve, reject) => {
+    const req = transport.request(`${base}${path}`, { method, agent, headers: { origin: base, ...headers } }, (res) => {
+      const chunks = []
+      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: Buffer.concat(chunks).toString() }))
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.end(body)
+  })
+}
+
 // Buyers open the shop before it opens: that visit (/api/me) sets the
-// session cache cookie the checkout then sends, as a browser would
+// session cache cookie the checkout then sends, and leaves the connection
+// open, as a browser would
 console.log(`opening the shop for ${buyers} buyers…`)
 const cookies = new Map()
+const agents = new Map(users.map((u) => [u.id, new transport.Agent({ keepAlive: true, maxSockets: 1 })]))
 for (let i = 0; i < users.length; i += 20) {
   await Promise.all(users.slice(i, i + 20).map(async (u) => {
-    const res = await fetch(`${base}/api/me`, { headers: { cookie: cookie(u.token), origin: base } })
-    await res.arrayBuffer()
-    const set = res.headers.getSetCookie().map((c) => c.split(';')[0])
+    const res = await request(agents.get(u.id), 'GET', '/api/me', { cookie: cookie(u.token) })
+    const set = [res.headers['set-cookie'] ?? []].flat().map((c) => c.split(';')[0])
     cookies.set(u.id, [cookie(u.token), ...set.filter((c) => !c.startsWith(`${cookieName}=`))].join('; '))
   }))
 }
@@ -134,21 +154,31 @@ const started = performance.now()
 const results = await Promise.all(users.map(async (u, i) => {
   const t0 = performance.now()
   try {
-    const res = await fetch(`${base}/api/orders`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: cookies.get(u.id), origin: base },
-      body: JSON.stringify(payload(i))
-    })
-    const body = await res.json().catch(() => ({}))
-    return { status: res.status, code: body.code, ms: performance.now() - t0 }
+    const res = await request(agents.get(u.id), 'POST', '/api/orders',
+      { 'content-type': 'application/json', cookie: cookies.get(u.id) }, JSON.stringify(payload(i)))
+    let body = {}
+    try { body = JSON.parse(res.text) } catch {}
+    // where the server spent its time: session;dur=12, read;dur=80, gate;dur=300
+    const server = Object.fromEntries(String(res.headers['server-timing'] || '').split(',').filter(Boolean)
+      .map((entry) => { const [name, dur] = entry.trim().split(';dur='); return [name, Number(dur)] }))
+    return { status: res.status, code: body.code, ms: performance.now() - t0, server }
   } catch (error) {
     return { status: 0, code: String(error.cause?.code || error.message), ms: performance.now() - t0 }
   }
 }))
 const wall = performance.now() - started
 
-const latencies = results.map((r) => r.ms).sort((a, b) => a - b)
-const pct = (p) => Math.round(latencies[Math.min(latencies.length - 1, Math.floor((p / 100) * latencies.length))])
+const percentile = (values, p) => {
+  const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b)
+  return sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]) : null
+}
+const latencies = results.map((r) => r.ms)
+const pct = (p) => percentile(latencies, p)
+// p50 / p95 of each server step, from the Server-Timing header
+const serverSteps = Object.fromEntries(['session', 'read', 'gate'].map((step) => {
+  const values = results.map((r) => r.server?.[step])
+  return [step, `${percentile(values, 50)} / ${percentile(values, 95)}`]
+}))
 const byOutcome = {}
 for (const r of results) {
   const k = r.status === 201 ? 'created' : `${r.status} ${r.code || ''}`.trim()
@@ -160,7 +190,7 @@ const created = byOutcome.created || 0
 const expected = Math.min(buyers, Math.floor(stock / quantity))
 const serverErrors = results.filter((r) => r.status >= 500 || r.status === 0).length
 
-console.log(JSON.stringify({ buyers, stock, quantity, wallMs: Math.round(wall), p50: pct(50), p95: pct(95), p99: pct(99), max: pct(100), byOutcome, sold, orders }, null, 2))
+console.log(JSON.stringify({ buyers, stock, quantity, wallMs: Math.round(wall), p50: pct(50), p95: pct(95), p99: pct(99), max: pct(100), serverMs: serverSteps, byOutcome, sold, orders }, null, 2))
 const failures = []
 if (sold > stock) failures.push(`oversold: ${sold} > ${stock}`)
 if (sold !== created * quantity || orders !== created) failures.push(`counts disagree: sold ${sold}, orders ${orders}, created ${created}`)

@@ -17,7 +17,7 @@ const checkoutBody = z.object({
 export const orderRoutes = new Hono<AppEnv>()
   .post('/', valid('json', checkoutBody), async (c) => {
     const user = currentUser(c)
-    const result = await checkout(c.env, user, c.req.valid('json'), { remoteip: c.req.header('cf-connecting-ip') ?? null })
+    const result = await checkout(c.env, user, c.req.valid('json'), { remoteip: c.req.header('cf-connecting-ip') ?? null, timing: c.get('timing') })
     return c.json({ status: result.status, id: result.id }, result.status)
   })
   .get('/', async (c) => {

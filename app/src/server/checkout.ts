@@ -152,7 +152,7 @@ export async function checkout(
   env: Env,
   user: SessionUser,
   input: CheckoutInput,
-  { remoteip = null as string | null } = {}
+  { remoteip = null as string | null, timing = [] as string[] } = {}
 ): Promise<CheckoutResult> {
   if (!user.email || !user.emailVerified) {
     throw new ApiError('failed-precondition', '此帳號的 Email 尚未驗證，請改用 Google 帳號登入')
@@ -163,6 +163,7 @@ export async function checkout(
 
   // Everything the checkout reads, in one round trip to D1
   const buyerKey = await getBuyerKey(user.email)
+  const readStarted = Date.now()
   const [requests, shops, roles, typeRows, bought] = await db.batch([
     requestId ? requestLookup(db, requestId) : db.prepare('SELECT NULL WHERE 0'),
     db.prepare(`SELECT value FROM settings WHERE key = 'shop'`),
@@ -170,6 +171,8 @@ export async function checkout(
     db.prepare('SELECT id, sort, active, config, stock, sold FROM ticket_types WHERE active = 1'),
     db.prepare('SELECT ticket_type_id, quantity FROM buyer_purchases WHERE email_hash = ?').bind(buyerKey)
   ])
+
+  timing.push(`read;dur=${Date.now() - readStarted}`)
 
   // A committed checkout remains recoverable even if the shop is later closed
   // or throttling starts. The batch below also inserts this request id, so
@@ -216,7 +219,9 @@ export async function checkout(
           class: order.class, number: order.number, office: order.office
         }
       }
+      const gateStarted = Date.now()
       const result: GateResult = await gate.admit(gateOrder)
+      timing.push(`gate;dur=${Date.now() - gateStarted}`)
 
       switch (result.kind) {
         case 'created':

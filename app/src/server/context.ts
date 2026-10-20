@@ -15,7 +15,8 @@ export interface SessionUser {
 
 export interface AppEnv {
   Bindings: Env
-  Variables: { auth: Auth; user: SessionUser | null }
+  // Server-Timing entries, sent with the response
+  Variables: { auth: Auth; user: SessionUser | null; timing: string[] }
 }
 
 // One Better Auth instance per isolate and environment
@@ -29,11 +30,15 @@ export function authFor(env: Env) {
 export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
   const auth = authFor(c.env)
   c.set('auth', auth)
+  const timing: string[] = []
+  c.set('timing', timing)
+  const started = Date.now()
   // The cookies getSession sets (the session cache, a renewed session) go
   // back to the browser, so the next requests skip the D1 lookup
   const result = await auth.api.getSession({ headers: c.req.raw.headers, returnHeaders: true }).catch(() => null)
   for (const cookie of result?.headers.getSetCookie() ?? []) c.header('set-cookie', cookie, { append: true })
   const session = result?.response
+  timing.push(`session;dur=${Date.now() - started}`)
   const u = session?.user as (Record<string, unknown> & { id: string }) | undefined
   c.set('user', u ? {
     id: u.id,
@@ -45,6 +50,7 @@ export const loadSession = createMiddleware<AppEnv>(async (c, next) => {
     staffName: (u.staffName as string) || null
   } : null)
   await next()
+  if (timing.length) c.header('Server-Timing', timing.join(', '))
 })
 
 export function currentUser(c: { get(key: 'user'): SessionUser | null }) {
