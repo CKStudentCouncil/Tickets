@@ -7,7 +7,14 @@
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
+  // logs, traces and issues (grouped errors) in the dashboard, for every
+  // request; inherited by env.production
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true, "persist": true },
+    "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true },
+    "issues": { "enabled": true }
+  },
   "upload_source_maps": true,
   "assets": {
     "directory": "./dist",
