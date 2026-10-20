@@ -49,8 +49,11 @@ export function authOptions(env: Pick<Env, 'DB' | 'SITE_URL' | 'BETTER_AUTH_SECR
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
-      // most requests then skip the session lookup; roles are always read fresh
-      cookieCache: { enabled: true, maxAge: 5 * 60 }
+      // Requests within an hour of the last page load skip the session lookup
+      // in D1, so buyers waiting on the shop page check out without it. A
+      // session revoked elsewhere stays usable for up to that hour; roles are
+      // always read fresh.
+      cookieCache: { enabled: true, maxAge: 60 * 60 }
     },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] }
