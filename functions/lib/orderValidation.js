@@ -136,10 +136,13 @@ export function getPurchaseLimit(ticketType) {
 
 // Each ticket type's sales are counted in SHARD_COUNT documents
 // (ticketSales/{typeId}/shards/{k}) so simultaneous checkouts do not all
-// lock one counter (PARTY-28). Raising it is safe; never lower it once
+// lock one counter (PARTY-28). 1,000 buyers at once on 20 shards put about
+// 50 on each and spent most of their wait retrying lost locks, hence 50.
+// Raising it is safe when no sale is open (save the ticket types afterwards
+// so planStockShards plans the caps for the new count); never lower it once
 // tickets have been sold, even between sales: the dropped shards keep their
 // sales but are no longer read, so those tickets would be sold again.
-export const SHARD_COUNT = 20
+export const SHARD_COUNT = 50
 
 // What a type's shards may sell: the stock minus the legacy counter
 export function getAvailable(stock, legacySold) {
@@ -187,16 +190,16 @@ export function allocateStock({ caps, shards, sold, quantity }) {
 // Chooses the shards to lock from an unlocked look at all of them (`sold`,
 // read before the transaction). Returns null when they cannot hold `quantity`
 // (sold out), otherwise one random shard that can hold the whole order or,
-// when none can, random shards with room until they add up. With `spread`
-// (after losing races for the same shards) every shard with room is locked.
-// Shards only fill up (except when an order is deleted), so a shard seen full
-// stays full.
-export function planShards({ caps, sold, quantity, random, spread = false }) {
+// when none can, random shards with room until they add up. A checkout that
+// lost the race for its shards looks again and gets a fresh random pick;
+// locking every shard with room instead would collide with every other
+// checkout. Shards only fill up (except when an order is deleted), so a
+// shard seen full stays full.
+export function planShards({ caps, sold, quantity, random }) {
   const free = (k) => caps[k] - sold[k]
   const open = Array.from({ length: SHARD_COUNT }, (_, k) => k).filter((k) => free(k) > 0)
 
   if (open.reduce((sum, k) => sum + free(k), 0) < quantity) return null
-  if (spread) return open
 
   const whole = open.filter((k) => free(k) >= quantity)
   if (whole.length > 0) return [whole[random(whole.length)]]

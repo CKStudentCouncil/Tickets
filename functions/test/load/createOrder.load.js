@@ -18,7 +18,9 @@ import { HOUR, PROJECT_ID, fft, functions, db, iso, isEmulator } from '../emulat
 import { SHARD_COUNT } from '../../lib/orderValidation.js'
 import { SCENARIOS } from './scenarios.js'
 
-const callCreate = fft.wrap(functions.createOrder)
+// createOrder is a 2nd gen callable: one request carries the data and the auth
+const wrappedCreate = fft.wrap(functions.createOrder)
+const callCreate = (data, context) => wrappedCreate({ data, ...context })
 const callPlan = fft.wrap(functions.planStockShards)
 
 /* ---------- counting Firestore operations ---------- */

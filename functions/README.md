@@ -1,6 +1,6 @@
 # Cloud Functions
 
-Backend for the CK Party Night ticket system (Firebase Functions v1 API, imported from `firebase-functions/v1`, Node 22, region `asia-east1`).
+Backend for the CK Party Night ticket system (Firebase Functions v1 API, imported from `firebase-functions/v1`, Node 22, region `asia-east1`). `createOrder` alone is a 2nd gen function (`firebase-functions/v2/https`), so one instance serves many checkouts at once.
 
 ## Layout
 
@@ -13,7 +13,8 @@ functions/
 │   ├── constants.js             # region, SITE_URL, schools, roles
 │   ├── time.js                  # Taiwan-time parsing
 │   ├── orderValidation.js       # pure order checks (unit-tested)
-│   ├── mailer.js                # AWS SES transporter and sender address
+│   ├── mailSender.js            # sender address and mail secrets
+│   ├── mailer.js                # AWS SES transporter (loaded only when sending)
 │   ├── turnstile.js             # Cloudflare Turnstile siteverify check
 │   ├── orders.js                # checkout, stock release and confirmation enqueue
 │   ├── orderActions.js          # atomic collection/payment updates and audit history
@@ -47,11 +48,13 @@ functions/
 
 Avoid saving the ticket types on the management page during a sale opening: every checkout reads `settings/ticketTypes` in its transaction, so a save then makes them wait.
 
-Stock is counted in 20 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-19}`, so simultaneous checkouts do not all lock one counter. Each shard may sell up to its cap, stored in `ticketSales/{ticketTypeId}.shardCaps` together with the stock it was planned for. The caps add up to the stock and none is below what its shard has already sold, so lowering the stock or limiting a type that sold unlimited never oversells. When the stock changes (a save on the management page, or a deleted order placed before the shards), `planStockShards` plans the caps again from what each shard has sold; a checkout that finds them out of date does the same itself, locking every shard. Before its transaction an order reads the shards and caps without locking them, turns the buyer away if the type is sold out, and otherwise locks one random shard that still has room, looking again if it filled up meanwhile (after a few tries it locks every shard with room). Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}.sold` only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}`, `notificationJobs/{jobId}` and `turnstilePasses/{requestId}`, are only written by the functions (the Firestore rules deny clients).
+Stock is counted in 50 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-49}`, so simultaneous checkouts do not all lock one counter. Each shard may sell up to its cap, stored in `ticketSales/{ticketTypeId}.shardCaps` together with the stock it was planned for. The caps add up to the stock and none is below what its shard has already sold, so lowering the stock or limiting a type that sold unlimited never oversells. When the stock changes (a save on the management page, or a deleted order placed before the shards), `planStockShards` plans the caps again from what each shard has sold; a checkout that finds them out of date plans them first, in a transaction of its own (and its order transaction would still do it, locking every shard, if they went out of date meanwhile). Before its transaction an order reads the shards and caps without locking them, turns the buyer away if the type is sold out, and otherwise locks one random shard that still has room. If that shard filled up meanwhile or another checkout won the lock, it looks again and picks a fresh random shard: the first tries are one transaction attempt each after a short random wait, the later ones let Firestore retry, which waits longer but keeps the checkout's place in the lock queue. It never locks every shard with room, which would collide with every other checkout. Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}.sold` only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}`, `notificationJobs/{jobId}` and `turnstilePasses/{requestId}`, are only written by the functions (the Firestore rules deny clients).
 
 Deleting a sharded order invalidates its type's stored caps in the same release transaction. The next checkout recalculates them under locks, so lowering stock below existing sales cannot create room for new sales merely by deleting an order.
 
-`SHARD_COUNT` (`lib/orderValidation.js`) may be raised but never lowered once tickets have been sold, even between sales: the dropped shards keep their sales but are no longer read, so those tickets would be sold again.
+`SHARD_COUNT` (`lib/orderValidation.js`) may be raised but never lowered once tickets have been sold, even between sales: the dropped shards keep their sales but are no longer read, so those tickets would be sold again. Raise it only when no sale is open (instances on the old and new count would keep planning the caps over each other), then save the ticket types once on the management page so `planStockShards` plans the caps for the new count before the sale opens.
+
+Moving `createOrder` to 2nd gen: Firebase cannot change a deployed function from 1st to 2nd gen in place, so delete the old one first, when no sale is open (checkouts fail until the deploy finishes): `firebase functions:delete createOrder --region asia-east1`, then `firebase deploy --only functions`. The site calls it by name, so the frontend needs no change.
 
 Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open. Until every instance runs the new code, old instances count only the legacy counter and new ones only the shards, so neither sees the other's sales. After deploying, save the ticket types once on the management page so `planStockShards` plans the caps before the sale opens. Do not roll back to a version without the shards once orders have `stockShards`: its `releaseOrderStock` would refund them to the legacy counter.
 
@@ -60,7 +63,7 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 | Name | Default | Meaning |
 |---|---|---|
 | `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
-| `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances; set 2-3 around the sale opening, back to 0 afterwards |
+| `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances, each serving up to 80 checkouts at once; set 5-10 around the sale opening, back to 0 afterwards |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Max orders per signed-in account per 10 minutes (0 = off). Per account because the client IP header can be forged by the caller |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, shared across every email source; BCC batches count the council To recipient too |
 | `ENFORCE_TURNSTILE` | `false` | Reject `createOrder` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |

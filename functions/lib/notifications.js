@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { db, HttpsError, assertRole } from './common.js'
 import { REGION } from './constants.js'
-import { SENDER_EMAIL } from './mailer.js'
+import { SENDER_EMAIL } from './mailSender.js'
 import { enqueueNotificationBatch, MAX_BCC_PER_BATCH } from './mailQueue.js'
 import { notificationProgress } from './mailQueueCore.js'
 

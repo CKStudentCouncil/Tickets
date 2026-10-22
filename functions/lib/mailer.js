@@ -1,15 +1,7 @@
 import nodemailer from 'nodemailer'
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 
-// Must match the IAM policy condition: ses:FromAddress = *@tickets.cksc.tw
-export const SENDER_EMAIL = 'no-reply@tickets.cksc.tw'
-export const SENDER = `"建國中學班聯會" <${SENDER_EMAIL}>`
-
-export const MAIL_SECRETS = [
-  'AWS_ACCESS_KEY_ID',
-  'AWS_SECRET_ACCESS_KEY',
-  'AWS_REGION'
-]
+export { SENDER_EMAIL, SENDER, MAIL_SECRETS } from './mailSender.js'
 
 const DEFAULT_SES_REGION = 'us-east-1'
 

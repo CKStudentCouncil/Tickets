@@ -173,7 +173,7 @@ Update both sides of these shared values together:
 
 ## Backend settings and email
 
-The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-east1`.
+The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-east1`; `createOrder` is a 2nd gen function so that one instance serves many checkouts at once.
 
 `functions/.env` is intentionally tracked for non-secret deploy-time settings. Definitions and defaults are in [functions/lib/params.js](functions/lib/params.js):
 
@@ -210,7 +210,7 @@ The GitHub Pages workflow runs unit, rules, and checkout emulator tests before b
 
 For frontend changes, also check the affected screens in the browser: mobile layout, keyboard navigation, loading/error states, sign-in redirects, and the appropriate buyer/staff role. For checkout UI changes, verify the opening gate, ticket eligibility, order confirmation, and buyer order detail using development data. For QR/PDF changes, inspect the generated output as well as the screen.
 
-Stock changes need particular care: the backend currently uses 20 shards per ticket type. Do not lower `SHARD_COUNT` after sales exist. Every checkout transaction reads `settings/ticketTypes`, so saving that document during a sale opening adds contention. Read the stock migration and deployment notes in `functions/README.md` before changing that design or rolling back a sharded implementation.
+Stock changes need particular care: the backend currently uses 50 shards per ticket type. Do not lower `SHARD_COUNT` after sales exist. Every checkout transaction reads `settings/ticketTypes`, so saving that document during a sale opening adds contention. Read the stock migration and deployment notes in `functions/README.md` before changing that design or rolling back a sharded implementation.
 
 ## Build and deployment
 

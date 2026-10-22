@@ -4,11 +4,13 @@ import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
-import { getBuyerKey, SHARD_COUNT } from '../../lib/orderValidation.js'
+import { getBuyerKey } from '../../lib/orderValidation.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callCreate = fft.wrap(functions.createOrder)
+// createOrder is a 2nd gen callable: one request carries the data and the auth
+const wrappedCreate = fft.wrap(functions.createOrder)
+const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
 const callRelease = fft.wrap(functions.releaseOrderStock)
 const callPlan = fft.wrap(functions.planStockShards)
 
@@ -403,7 +405,7 @@ describe('releaseOrderStock', () => {
     // Seed evenly distributed counted sales to exercise caps planned above a
     // reduced limit without placing sixty unrelated orders in this regression.
     const batch = db.batch()
-    for (let k = 0; k < SHARD_COUNT; k++) {
+    for (let k = 0; k < 20; k++) {
       batch.set(db.doc(`ticketSales/open/shards/${k}`), { sold: 3 })
     }
     const ref = db.doc('orders/CKS202601010101')
