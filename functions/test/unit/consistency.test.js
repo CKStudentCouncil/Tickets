@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -26,6 +26,11 @@ test('school lists match src/data/schools.js', async () => {
 test('ELIGIBLE_IDENTITIES match src/data/ticketTypes.js (PARTY-27)', async () => {
   const frontend = await import(srcFile('data/ticketTypes.js'))
   assert.deepEqual(frontend.ELIGIBLE_IDENTITIES, ELIGIBLE_IDENTITIES)
+})
+
+test('the seller registration limit matches src/data/sellerGuide.js', async () => {
+  const guide = await import(srcFile('data/sellerGuide.js'))
+  assert.equal(guide.MAX_SELLER_TICKETS, MAX_SELLER_TICKETS)
 })
 
 test('client and server parse admin datetimes identically', async () => {

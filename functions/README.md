@@ -20,6 +20,7 @@ functions/
 │   ├── mailQueue.js             # message rendering and scheduled shared worker
 │   ├── mailQueueCore.js         # durable claims, rate reservation and outcomes
 │   ├── notifications.js         # prepareOrderNotification, sendOrderNotification
+│   ├── sellers.js               # registerSellerTickets, releaseSellerStock (學弟登記賣票)
 │   └── lineup.js                # uploadLineupImage, deleteLineupImage
 └── templates/
     ├── shared.js                # escapeHtml, colours, fonts
@@ -42,6 +43,8 @@ functions/
 | `prepareOrderNotification` | callable | manager+ | Validates a payment / pickup / custom notice and saves its recipients (buyers, optionally of one school) as `notificationJobs/{jobId}` without sending; returns the jobId and recipient count |
 | `sendOrderNotification` | callable | manager+ | Enqueues deterministic BCC batches for a prepared job. Repeating the same job ID resumes interrupted enqueue without resetting batches |
 | `getOrderNotificationStatus` | callable | manager+ | Returns queued, accepted, failed and uncertain progress; the frontend polls this separately from enqueue |
+| `registerSellerTickets` | callable | signed-in accounts on `sellers/{email}` | 學弟登記賣票: takes 1–200 tickets of the type in `settings/sellerProgram` (while `enabled`) from its stock shards, locking every shard, and saves `sellerRegistrations/{requestId}`. Ignores the sale window and per-person limit, never the stock. A retried call with the same `requestId` returns the same registration |
+| `releaseSellerStock` | `sellerRegistrations/{id}` deleted | — | Returns a deleted registration's tickets to stock and the shared total (once, via `sellerReleases/{id}`) |
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
 

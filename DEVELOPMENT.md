@@ -111,6 +111,7 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 | `manager` | Open individual orders, mark delivery/check-in, access staff survey views, and prepare/send notifications |
 | `admin` | Manager capabilities plus list all orders, change payment status, delete orders, and resend confirmation emails |
 | `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup |
+| Seller (on `sellers/{email}`) | Not a staff role: register tickets to sell on `/sell` (學弟登記賣票). Super admins keep the list on `/admin/sellers`; admins see registrations there and record pickup and payment |
 
 Route guards control navigation. Firestore rules and backend role checks enforce data access. When changing permissions, keep [src/router/index.js](src/router/index.js), `src/stores/auth.js`, [firestore.rules](firestore.rules), and [functions/lib/common.js](functions/lib/common.js) aligned.
 
@@ -140,6 +141,8 @@ Campus-only tickets require both the school `建國中學` and an account at `@g
 | `partyStories`, `partyLineup` | Scheduled public content |
 | `surveyResponses` | Public survey submissions, subject to rules validation |
 | `ticketSales/{typeId}/shards/{shardId}` | Backend stock counters, with caps on the parent ticket-sales document |
+| `settings/sellerProgram` | Public seller program settings: `enabled`, the ticket type sellers take from (`ticketTypeId`, the 二售 type) and the shared `goal`; written by super admins |
+| `sellers/{email}`, `sellerRegistrations/{id}`, `sellerStats/summary` | Seller list (super admins), registrations created by `registerSellerTickets` (admins flip `delivered` / `paid` or delete; deleting returns the tickets to stock), and the shared registered total |
 | `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl` | Backend-only allowance, recovery, rate-limit, stock-release, campaign and mail-worker bookkeeping |
 
 Create orders through `createOrder`; clients cannot create or update them directly. Staff collection and payment use the expected-state callables in `orderActions.js`, with trusted attribution and atomic audit writes. Order deletion triggers stock and allowance release and invalidates shard caps. Client writes to backend bookkeeping collections are denied.

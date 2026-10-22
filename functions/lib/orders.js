@@ -105,16 +105,17 @@ async function finishRejectedRequest(requestRef, account, error) {
   })
 }
 // Firestore gave up on a transaction after repeated lock contention
-const isContention = (error) => error?.code === 10 || error?.code === 'aborted'
+export const isContention = (error) => error?.code === 10 || error?.code === 'aborted'
 
 const ALL_SHARDS = Array.from({ length: SHARD_COUNT }, (_, k) => k)
-const settingsRef = db.doc('settings/ticketTypes')
-const legacyRef = (ticketTypeId) => db.doc(`ticketSales/${ticketTypeId}`)
-const shardRef = (ticketTypeId, k) => db.doc(`ticketSales/${ticketTypeId}/shards/${k}`)
+// also used by seller registrations (sellers.js), which take from the same stock
+export const settingsRef = db.doc('settings/ticketTypes')
+export const legacyRef = (ticketTypeId) => db.doc(`ticketSales/${ticketTypeId}`)
+export const shardRef = (ticketTypeId, k) => db.doc(`ticketSales/${ticketTypeId}/shards/${k}`)
 const soldOf = (snap) => Number(snap.data()?.sold || 0)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function ticketTypesOf(settingsSnap) {
+export function ticketTypesOf(settingsSnap) {
   return new Map(
     (settingsSnap.data()?.types || [])
       .filter((type) => type?.id)
@@ -122,7 +123,7 @@ function ticketTypesOf(settingsSnap) {
   )
 }
 
-function ticketTypeOf(ticketTypes, id) {
+export function ticketTypeOf(ticketTypes, id) {
   const ticketType = ticketTypes.get(id)
   if (!ticketType) throw new HttpsError('invalid-argument', `無效的票種：${id}`)
   return ticketType
@@ -180,7 +181,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
 // sold; so is a type chooseShards did not plan. Locking every shard makes
 // "sold out" final. Unlimited types read nothing: they add to a random shard,
 // which makes stored caps out of date, so those are dropped.
-async function reserveStock(tx, items, ticketTypes, legacySnaps, chosen) {
+export async function reserveStock(tx, items, ticketTypes, legacySnaps, chosen) {
   const plans = items.map((item, index) => {
     const legacySnap = legacySnaps[index]
     const ticketType = ticketTypes.get(item.id)
@@ -251,8 +252,9 @@ async function assertTurnstile(data, context, account, requestId) {
   }
 }
 
-// Buyers must be signed in; the order email is the account's verified email
-function getBuyerAccount(context) {
+// Buyers must be signed in; the order email is the account's verified email.
+// Sellers (sellers.js) too.
+export function getBuyerAccount(context) {
   const token = context.auth?.token
 
   if (!context.auth?.uid) {

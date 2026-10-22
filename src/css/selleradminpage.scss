@@ -1,0 +1,134 @@
+/* shares the admin shell, panels, buttons and fields of managementpage.scss */
+
+.panel + .panel,
+.page-heading + .panel,
+.page-heading + .empty {
+  margin-top: 24px;
+}
+
+.progress {
+  height: 8px;
+  margin: 0 0 20px;
+  background: var(--line-soft);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    background: var(--ember);
+    transition: width 0.6s ease;
+  }
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  background: var(--field);
+
+  strong {
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+
+  span {
+    font-size: 11.5px;
+    color: var(--lunar);
+  }
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 18px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 41px;
+  font-size: 13.5px;
+}
+
+.search,
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--off-white);
+  font: 500 13.5px 'Manrope', 'Noto Sans TC', sans-serif;
+
+  &:focus {
+    outline: none;
+    border-color: var(--ember);
+  }
+}
+
+.search {
+  max-width: 360px;
+  margin-bottom: 16px;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.add-sellers {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  margin-bottom: 24px;
+
+  .field { width: 100%; }
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th,
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--lunar);
+  }
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+}
