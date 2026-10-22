@@ -166,22 +166,22 @@
                   <input
                     type="checkbox"
                     :checked="item.delivered"
-                    :disabled="busyId === item.id"
+                    :disabled="busyIds.has(item.id)"
                     :aria-label="`${item.sellerName} 已拿票`"
-                    @change="toggle(item, 'delivered', $event.target.checked)"
+                    @change="toggle(item, 'delivered', $event.target)"
                   >
                 </td>
                 <td>
                   <input
                     type="checkbox"
                     :checked="item.paid"
-                    :disabled="busyId === item.id"
+                    :disabled="busyIds.has(item.id)"
                     :aria-label="`${item.sellerName} 已交款`"
-                    @change="toggle(item, 'paid', $event.target.checked)"
+                    @change="toggle(item, 'paid', $event.target)"
                   >
                 </td>
                 <td>
-                  <button type="button" class="btn-outline danger btn-small" :disabled="busyId === item.id" @click="remove(item)">
+                  <button type="button" class="btn-outline danger btn-small" :disabled="busyIds.has(item.id)" @click="remove(item)">
                     刪除
                   </button>
                 </td>
@@ -243,7 +243,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
@@ -256,7 +256,7 @@ import {
   fetchSellerTotal,
   removeSeller,
   saveSellerProgram,
-  setRegistrationFlags
+  setRegistrationFlag
 } from 'src/services/sellerService'
 import { formatDateTime } from 'src/utils/datetime'
 
@@ -273,13 +273,15 @@ const total = ref(0)
 const registrations = ref([])
 const sellers = ref([])
 const searchTerm = ref('')
-const busyId = ref('')
+// registrations with a write in flight
+const busyIds = reactive(new Set())
 
 const newSellersText = ref('')
 const newSellersError = ref('')
 const addingSellers = ref(false)
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// no '/': the email is the seller's document id
+const EMAIL_PATTERN = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/
 
 const amountOf = (item) => (Number(item.price) || 0) * (Number(item.quantity) || 0)
 const ticketTypeName = (id) => ticketTypes.value.find((type) => type.id === id)?.name || ''
@@ -381,24 +383,26 @@ async function saveProgram() {
   }
 }
 
-async function toggle(item, key, value) {
-  busyId.value = item.id
-  const next = { delivered: item.delivered === true, paid: item.paid === true, [key]: value }
+async function toggle(item, key, checkbox) {
+  const value = checkbox.checked
+  busyIds.add(item.id)
   try {
-    await setRegistrationFlags(item.id, next, auth.user.uid)
-    Object.assign(item, next)
+    await setRegistrationFlag(item.id, key, value, auth.user.uid)
+    item[key] = value
   } catch (error) {
     console.error('Update seller registration error:', error)
+    // the box must show what is saved
+    checkbox.checked = item[key] === true
     toast.show('更新失敗，請稍後再試')
   } finally {
-    busyId.value = ''
+    busyIds.delete(item.id)
   }
 }
 
 async function remove(item) {
   if (!window.confirm(`確定要刪除 ${item.sellerName} 登記的 ${item.quantity} 張嗎？這些票會退回庫存。`)) return
 
-  busyId.value = item.id
+  busyIds.add(item.id)
   try {
     await deleteRegistration(item.id)
     registrations.value = registrations.value.filter((r) => r.id !== item.id)
@@ -409,7 +413,7 @@ async function remove(item) {
     console.error('Delete seller registration error:', error)
     toast.show('刪除失敗，請稍後再試')
   } finally {
-    busyId.value = ''
+    busyIds.delete(item.id)
   }
 }
 

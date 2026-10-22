@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from 'src/boot/firebase'
-import { parseDate } from 'src/utils/datetime'
+import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 
 // 學弟登記賣票 (functions/lib/sellers.js). Sellers on the list take tickets
 // of the type chosen in settings/sellerProgram (二售) from its stock to sell
@@ -26,9 +26,6 @@ import { parseDate } from 'src/utils/datetime'
 
 const registerCallable = httpsCallable(functions, 'registerSellerTickets')
 
-// The server may have saved it; the same requestId returns that registration
-const RETRYABLE = ['functions/aborted', 'functions/unavailable', 'functions/deadline-exceeded', 'functions/internal']
-
 export const DEFAULT_SELLER_GOAL = 750
 
 const programRef = () => doc(db, 'settings', 'sellerProgram')
@@ -37,15 +34,6 @@ const sellerRef = (email) => doc(db, 'sellers', email.trim().toLowerCase())
 const registrationRef = (id) => doc(db, 'sellerRegistrations', id)
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
-export function createSellerRequestId() {
-  return crypto.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
-}
-
-function byCreatedAtDesc(a, b) {
-  return (parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)
-}
 
 const toRegistration = (snapshot) => ({ id: snapshot.id, ...snapshot.data() })
 
@@ -91,6 +79,28 @@ export async function fetchMyRegistrations(uid) {
   return snapshot.docs.map(toRegistration).sort(byCreatedAtDesc)
 }
 
+// The requestId of a registration whose outcome is unknown (the response
+// was lost), kept across reloads so sending it again cannot register twice.
+// The registration's document id is its requestId.
+const pendingKey = (uid) => `cksc.sellerRequest.${uid}`
+
+export function getPendingSellerRequest(uid) {
+  try {
+    return window.localStorage.getItem(pendingKey(uid)) || null
+  } catch {
+    return null
+  }
+}
+
+export function setPendingSellerRequest(uid, requestId) {
+  try {
+    if (requestId) window.localStorage.setItem(pendingKey(uid), requestId)
+    else window.localStorage.removeItem(pendingKey(uid))
+  } catch {
+    // without storage a reload loses it; the in-page retry still reuses it
+  }
+}
+
 // Retries a lost or busy call with the same requestId, so it is saved once
 export async function registerSellerTickets({ requestId, quantity, sellerName }) {
   for (let attempt = 1; ; attempt++) {
@@ -116,8 +126,10 @@ export async function fetchAllRegistrations() {
   return snapshot.docs.map(toRegistration)
 }
 
-export function setRegistrationFlags(id, { delivered, paid }, updatedByUid) {
-  return updateDoc(registrationRef(id), { delivered, paid, updatedAt: serverTimestamp(), updatedByUid })
+// key: 'delivered' or 'paid'. Only that field is written, so two admins
+// recording pickup and payment at once do not undo each other.
+export function setRegistrationFlag(id, key, value, updatedByUid) {
+  return updateDoc(registrationRef(id), { [key]: value, updatedAt: serverTimestamp(), updatedByUid })
 }
 
 // releaseSellerStock gives the tickets back to the stock

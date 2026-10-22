@@ -634,6 +634,8 @@ describe('學弟登記賣票', () => {
 
     await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin)))
     await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { paid: true })))
+    // the seller page writes only the box that was ticked
+    await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), { paid: false, updatedAt: serverTimestamp(), updatedByUid: staff.admin.uid }))
     await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), { ...flags(staff.admin), quantity: 1 }))
     await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { paid: 'yes' })))
     await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { updatedByUid: 'someone' })))

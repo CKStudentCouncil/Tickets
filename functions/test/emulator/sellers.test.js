@@ -140,4 +140,16 @@ describe('releaseSellerStock', () => {
     assert.equal(await total(), 0)
     await callRegister(register(10), as(SELLER))
   })
+
+  test('a late retry of a deleted registration does not register it again', async () => {
+    const request = register(4)
+    const { id } = await callRegister(request, as(SELLER))
+    const snap = await db.doc(`sellerRegistrations/${id}`).get()
+    await snap.ref.delete()
+    await callRelease(snap, { params: { registrationId: id } })
+
+    await assert.rejects(callRegister(request, as(SELLER)), { code: 'failed-precondition' })
+    assert.equal(await soldOf('second'), 0)
+    assert.equal(await total(), 0)
+  })
 })

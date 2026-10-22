@@ -30,16 +30,16 @@ const paymentCallable = httpsCallable(functions, 'updateOrderPayment')
 // Errors where the order may or may not have been saved, or the server was
 // just too busy; retrying with the same requestId is safe (the server returns
 // the order that was already created instead of creating a second one).
-const RETRYABLE = ['functions/aborted', 'functions/unavailable', 'functions/deadline-exceeded', 'functions/internal']
+export const RETRYABLE = ['functions/aborted', 'functions/unavailable', 'functions/deadline-exceeded', 'functions/internal']
 
-function createRequestId() {
+export function createRequestId() {
   return crypto.randomUUID?.() ??
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function byCreatedAtDesc(a, b) {
+export function byCreatedAtDesc(a, b) {
   return (parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)
 }
 

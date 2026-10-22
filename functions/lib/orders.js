@@ -252,8 +252,9 @@ async function assertTurnstile(data, context, account, requestId) {
   }
 }
 
-// Buyers must be signed in; the order email is the account's verified email
-function getBuyerAccount(context) {
+// Buyers must be signed in; the order email is the account's verified email.
+// Sellers (sellers.js) too.
+export function getBuyerAccount(context) {
   const token = context.auth?.token
 
   if (!context.auth?.uid) {

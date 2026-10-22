@@ -5,13 +5,13 @@
       <h1>登記賣票</h1>
     </header>
 
-    <div v-if="!auth.isSeller" class="empty-state">
-      <h2>你不在賣票名單中</h2>
-      <p>登記賣票只開放給班聯會名單上的同學。如果你要幫忙賣票，請聯絡總副召把你的 Google 帳號加入名單，再重新登入。</p>
+    <div v-if="loading" class="empty-state" role="status">
+      載入中…
     </div>
 
-    <div v-else-if="loading" class="empty-state" role="status">
-      載入中…
+    <div v-else-if="!auth.isSeller" class="empty-state">
+      <h2>你不在賣票名單中</h2>
+      <p>登記賣票只開放給班聯會名單上的同學。如果你要幫忙賣票，請聯絡總副召把你的 Google 帳號加入名單，再重新整理這頁。</p>
     </div>
 
     <div v-else-if="loadError" class="empty-state" role="alert">
@@ -131,12 +131,14 @@ import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import {
-  createSellerRequestId,
   fetchMyRegistrations,
   fetchSellerEntry,
   fetchSellerProgram,
   fetchSellerTotal,
-  registerSellerTickets
+  getPendingSellerRequest,
+  isOnSellerList,
+  registerSellerTickets,
+  setPendingSellerRequest
 } from 'src/services/sellerService'
 import {
   MAX_SELLER_TICKETS,
@@ -145,6 +147,7 @@ import {
   SELLER_STEPS,
   SELLER_TIPS
 } from 'src/data/sellerGuide'
+import { createRequestId } from 'src/services/orderService'
 import { formatDateTime } from 'src/utils/datetime'
 
 const auth = useAuthStore()
@@ -161,8 +164,6 @@ const sellerName = ref('')
 const quantity = ref(1)
 const submitting = ref(false)
 const submitError = ref('')
-// kept until the registration succeeds, so a retry cannot register twice
-let requestId = createSellerRequestId()
 
 const ticketType = computed(() => ticketTypes.value.find((type) => type.id === program.value.ticketTypeId) || null)
 const myTotal = computed(() => registrations.value.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0))
@@ -193,6 +194,10 @@ async function load() {
     ticketTypes.value = types
     total.value = totalCount
     registrations.value = mine
+    // the registration whose response was lost did go through
+    if (mine.some((item) => item.id === getPendingSellerRequest(auth.user.uid))) {
+      setPendingSellerRequest(auth.user.uid, null)
+    }
     if (!sellerName.value) {
       sellerName.value = entry?.name || mine[0]?.sellerName || auth.user?.displayName || ''
     }
@@ -220,13 +225,19 @@ async function submit() {
   submitting.value = true
   submitError.value = ''
 
+  // An unresolved earlier request is sent again: if it was saved, the server
+  // returns it instead of registering twice (even after a reload)
+  const uid = auth.user.uid
+  const requestId = getPendingSellerRequest(uid) || createRequestId()
+  setPendingSellerRequest(uid, requestId)
+
   try {
     const result = await registerSellerTickets({
       requestId,
       quantity: quantity.value,
       sellerName: sellerName.value.trim()
     })
-    requestId = createSellerRequestId()
+    setPendingSellerRequest(uid, null)
     quantity.value = 1
     toast.show(`已登記 ${result.quantity} 張，請私訊總副召約時間拿票`, 6000)
     await load()
@@ -234,7 +245,7 @@ async function submit() {
     console.error('Register seller tickets error:', error)
     if (REFUSALS.includes(error?.code)) {
       // nothing was saved: the next try is a new registration
-      requestId = createSellerRequestId()
+      setPendingSellerRequest(uid, null)
       submitError.value = error.message
     } else {
       submitError.value = '登記失敗，請稍後再試（再按一次不會重複登記）'
@@ -244,7 +255,10 @@ async function submit() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // the look at sign-in may have failed, or the seller was added since
+  if (!auth.isSeller && (await isOnSellerList(auth.email))) await auth.refresh()
+
   if (auth.isSeller) load()
   else loading.value = false
 })

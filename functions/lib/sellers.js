@@ -3,8 +3,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
 import { MAX_SELLER_TICKETS, REGION } from './constants.js'
-import { isValidRequestId } from './orderValidation.js'
+import { TICKET_TYPE_ID_PATTERN, isValidRequestId } from './orderValidation.js'
 import {
+  getBuyerAccount,
   isContention,
   legacyRef,
   reserveStock,
@@ -31,19 +32,7 @@ const programRef = db.doc('settings/sellerProgram')
 const summaryRef = db.doc('sellerStats/summary')
 const sellerRef = (email) => db.doc(`sellers/${email}`)
 const registrationRef = (id) => db.doc(`sellerRegistrations/${id}`)
-
-function getSellerAccount(context) {
-  const token = context.auth?.token
-
-  if (!context.auth?.uid) {
-    throw new HttpsError('unauthenticated', '請先登入')
-  }
-  if (!token?.email || token.email_verified !== true) {
-    throw new HttpsError('failed-precondition', '此帳號的 Email 尚未驗證，請改用 Google 帳號登入')
-  }
-
-  return { uid: context.auth.uid, email: String(token.email).toLowerCase() }
-}
+const releaseRef = (id) => db.doc(`sellerReleases/${id}`)
 
 export function sanitizeSellerInput(data) {
   const quantity = Number(data?.quantity)
@@ -75,14 +64,15 @@ const resultOf = (id, registration) => ({
 export const registerSellerTickets = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
-    const account = getSellerAccount(context)
+    const account = getBuyerAccount(context)
     const { requestId, quantity, sellerName } = sanitizeSellerInput(data)
     const ref = registrationRef(requestId)
 
     try {
       return await db.runTransaction(async (tx) => {
-        const [requestSnap, sellerSnap, programSnap, settingsSnap] = await tx.getAll(
+        const [requestSnap, releasedSnap, sellerSnap, programSnap, settingsSnap] = await tx.getAll(
           ref,
+          releaseRef(requestId),
           sellerRef(account.email),
           programRef,
           settingsRef
@@ -95,6 +85,10 @@ export const registerSellerTickets = functions
           }
           return resultOf(requestSnap.id, requestSnap.data())
         }
+        // an admin deleted it: a late retry must not register it again
+        if (releasedSnap.exists) {
+          throw new HttpsError('failed-precondition', '這筆登記已被刪除，請重新整理後再登記')
+        }
 
         if (!sellerSnap.exists) {
           throw new HttpsError('permission-denied', '你不在賣票名單中，請聯絡總副召')
@@ -102,7 +96,7 @@ export const registerSellerTickets = functions
 
         const program = programSnap.data() || {}
         const ticketTypeId = String(program.ticketTypeId || '')
-        if (program.enabled !== true || !ticketTypeId) {
+        if (program.enabled !== true || !TICKET_TYPE_ID_PATTERN.test(ticketTypeId)) {
           throw new HttpsError('failed-precondition', '目前尚未開放登記賣票')
         }
 
@@ -170,7 +164,7 @@ export const releaseSellerStock = functions
     const quantity = Number(registration.quantity)
     if (!Number.isInteger(quantity) || quantity <= 0) return
 
-    const markerRef = db.doc(`sellerReleases/${context.params.registrationId}`)
+    const markerRef = releaseRef(context.params.registrationId)
 
     await db.runTransaction(async (tx) => {
       if ((await tx.get(markerRef)).exists) return
