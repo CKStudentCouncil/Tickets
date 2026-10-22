@@ -293,6 +293,15 @@
               >
                 {{ salePeriodSummary(ticketType).text }}
               </p>
+
+              <label class="hide-until-sale">
+                <input
+                  v-model="ticketType.hideUntilSale"
+                  type="checkbox"
+                >
+
+                <span>開賣前隱藏此票種（取消勾選則提前顯示並倒數）</span>
+              </label>
             </div>
 
             <label class="field">
@@ -490,6 +499,7 @@ function createEmptyTicketType() {
     eligibleBuyerIdentity: 'campus_students',
     salesStartTime: '',
     salesEndTime: '',
+    hideUntilSale: true,
     price: 0,
     // blank on purpose: the admin must enter a total or tick 不限量 (PARTY-18)
     totalTicketQuantity: null,
@@ -736,6 +746,7 @@ async function saveTicketTypeSettings() {
         // stored with an explicit +08:00 so the server reads the same instant
         salesStartTime: toStoredDateTime(ticketType.salesStartTime),
         salesEndTime: toStoredDateTime(ticketType.salesEndTime),
+        hideUntilSale: ticketType.hideUntilSale !== false,
         price: Number(ticketType.price) || 0,
         totalTicketQuantity: ticketType.unlimitedStock
           ? null

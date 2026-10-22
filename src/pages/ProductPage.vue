@@ -225,7 +225,8 @@ import {
   ELIGIBLE_IDENTITIES,
   fetchTicketTypes,
   getPurchaseLimit,
-  getTicketStatus
+  getTicketStatus,
+  isTicketTypeListed
 } from 'src/services/ticketTypeService'
 import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
@@ -243,12 +244,19 @@ const ticketTypes = ref([])
 const loading = ref(true)
 const loadError = ref(false)
 
-const ticketType = computed(() =>
-  ticketTypes.value.find((type) => type.id === route.params.id) || null
-)
-
 // ticks every second so the buy button appears the moment sales open (PARTY-24)
 const now = useNow(1000)
+
+// a type hidden until sales open reads as 找不到 until then; ended types
+// stay reachable so old links explain that sales are over
+const ticketType = computed(() => {
+  const type = ticketTypes.value.find((t) => t.id === route.params.id)
+  if (!type) return null
+
+  return isTicketTypeListed(type, now.value) || getTicketStatus(type, now.value).state === 'ended'
+    ? type
+    : null
+})
 
 const status = computed(() =>
   ticketType.value ? getTicketStatus(ticketType.value, now.value) : null
