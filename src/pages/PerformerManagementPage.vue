@@ -222,7 +222,10 @@
               {{ item.name }}
             </p>
 
-            <p class="lineup-excerpt">
+            <p
+              v-if="item.content"
+              class="lineup-excerpt"
+            >
               {{ getExcerpt(item.content) }}
             </p>
 
@@ -528,7 +531,7 @@
         <label class="field">
 
           <span>
-            五、介紹內容
+            五、介紹內容（選填）
           </span>
 
           <textarea
@@ -708,7 +711,7 @@
               v-if="previewParagraphs.length === 0"
               class="preview-placeholder"
             >
-              介紹內容會顯示於此
+              介紹內容會顯示於此（未填寫則前台不顯示）
             </p>
 
           </div>
@@ -1237,16 +1240,6 @@ async function saveItem() {
   ) {
     toast.show(
       '請輸入標題。'
-    )
-
-    return
-  }
-
-  if (
-    !form.value.content.trim()
-  ) {
-    toast.show(
-      '請輸入介紹內容。'
     )
 
     return

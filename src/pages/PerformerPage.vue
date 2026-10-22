@@ -84,7 +84,10 @@
                   {{ item.name }}
                 </p>
 
-                <div class="item-content">
+                <div
+                  v-if="getParagraphs(item.content).length > 0"
+                  class="item-content"
+                >
                   <p
                     v-for="(paragraph, index) in getParagraphs(item.content)"
                     :key="index"
@@ -162,7 +165,10 @@
                   {{ item.name }}
                 </p>
 
-                <div class="item-content">
+                <div
+                  v-if="getParagraphs(item.content).length > 0"
+                  class="item-content"
+                >
                   <p
                     v-for="(paragraph, index) in getParagraphs(item.content)"
                     :key="index"
