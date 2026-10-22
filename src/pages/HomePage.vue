@@ -117,7 +117,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { fetchTicketTypes, getTicketStatus } from 'src/services/ticketTypeService'
+import { fetchTicketTypes, getTicketStatus, isTicketTypeListed } from 'src/services/ticketTypeService'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
 import { useNow } from 'src/composables/useNow'
 
@@ -134,7 +134,7 @@ function statusOf(ticketType) {
 }
 
 const availableTicketTypes = computed(() =>
-  ticketTypes.value.filter((ticketType) => statusOf(ticketType).state !== 'ended')
+  ticketTypes.value.filter((ticketType) => isTicketTypeListed(ticketType, now.value))
 )
 
 function scrollToCollection() {

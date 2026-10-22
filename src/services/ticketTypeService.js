@@ -39,6 +39,17 @@ export function getTicketStatus(ticketType, now = new Date()) {
   return { state: 'selling', label: '販售中', className: 'selling' }
 }
 
+// Hidden from the storefront until sales open, unless the admin unticked
+// 開賣前隱藏 (hideUntilSale: false). A missing flag counts as hidden.
+export function isTicketTypeListed(ticketType, now = new Date()) {
+  const { state } = getTicketStatus(ticketType, now)
+
+  if (state === 'ended') return false
+  if (state === 'selling') return true
+
+  return ticketType.hideUntilSale === false
+}
+
 export function getPurchaseLimit(ticketType) {
   return ticketType.unlimited ? null : Number(ticketType.purchaseLimitPerPerson) || null
 }
