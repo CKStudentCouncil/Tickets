@@ -60,6 +60,15 @@
             <div class="nav-divider" role="separator" />
 
             <router-link
+              v-if="auth.isSeller"
+              to="/sell"
+              active-class="is-active"
+              @click="menuOpen = false"
+            >
+              登記賣票
+            </router-link>
+
+            <router-link
               v-if="auth.isManager"
               to="/admin/scan"
               @click="menuOpen = false"
@@ -89,6 +98,14 @@
               @click="menuOpen = false"
             >
               票務管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isAdmin"
+              to="/admin/sellers"
+              @click="menuOpen = false"
+            >
+              學弟賣票管理
             </router-link>
 
             <router-link

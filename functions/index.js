@@ -3,3 +3,4 @@ export { prepareOrderNotification, sendOrderNotification, getOrderNotificationSt
 export { uploadLineupImage, deleteLineupImage } from './lib/lineup.js'
 export { processMailQueue } from './lib/mailQueue.js'
 export { updateOrderDelivery, updateOrderPayment } from './lib/orderActions.js'
+export { registerSellerTickets, releaseSellerStock } from './lib/sellers.js'

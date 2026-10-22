@@ -548,3 +548,104 @@ describe('surveyResponses (PARTY-23)', () => {
     await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r1')))
   })
 })
+
+describe('學弟登記賣票', () => {
+  const seller = { uid: 'seller-uid', email: 's1001@gl.ck.tp.edu.tw' }
+  const other = { uid: 'other-uid', email: 's1002@gl.ck.tp.edu.tw' }
+  const registration = (who, extra = {}) => ({
+    sellerUid: who.uid,
+    sellerEmail: who.email,
+    sellerName: '王小明',
+    ticketTypeId: 'second',
+    quantity: 5,
+    delivered: false,
+    paid: false,
+    ...extra
+  })
+  const program = (who, fields = {}) => ({
+    enabled: true,
+    ticketTypeId: 'second',
+    goal: 750,
+    updatedAt: serverTimestamp(),
+    updatedByUid: who.uid,
+    ...fields
+  })
+  const flags = (who, fields = {}) => ({ delivered: true, paid: false, updatedAt: serverTimestamp(), updatedByUid: who.uid, ...fields })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'sellers', seller.email), { email: seller.email, name: '王小明' })
+      await setDoc(doc(db, 'sellerRegistrations', 'r1'), registration(seller))
+      await setDoc(doc(db, 'sellerRegistrations', 'r2'), registration(other))
+      await setDoc(doc(db, 'sellerStats', 'summary'), { total: 10 })
+    })
+  })
+
+  test('only super admins save the program settings, the way the seller page does', async () => {
+    const programDoc = (who) => doc(as(who), 'settings', 'sellerProgram')
+    await assertSucceeds(getDoc(doc(anon(), 'settings', 'sellerProgram')))
+    for (const who of [seller, staff.manager, staff.admin]) {
+      await assertFails(setDoc(programDoc(who), program(who)))
+    }
+    await assertSucceeds(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin)))
+    for (const fields of [{ goal: -1 }, { goal: 7.5 }, { goal: '750' }, { enabled: 'yes' }, { ticketTypeId: 3 }, { updatedByUid: staff.admin.uid }, { note: 'x' }]) {
+      await assertFails(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin, fields)))
+    }
+  })
+
+  test('a seller reads only their own list entry; admins list it; super admins edit it', async () => {
+    await assertSucceeds(getDoc(doc(as(seller), 'sellers', seller.email)))
+    await assertFails(getDoc(doc(as(seller, false), 'sellers', seller.email)))
+    await assertFails(getDoc(doc(as(other), 'sellers', seller.email)))
+    await assertFails(getDocs(collection(as(seller), 'sellers')))
+    await assertFails(getDocs(collection(as(staff.manager), 'sellers')))
+    await assertSucceeds(getDocs(collection(as(staff.admin), 'sellers')))
+
+    // nobody puts themselves on the list
+    await assertFails(setDoc(doc(as(other), 'sellers', other.email), { email: other.email }))
+    await assertFails(setDoc(doc(as(staff.admin), 'sellers', other.email), { email: other.email }))
+    await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'sellers', other.email), { email: other.email, name: '李同學', createdAt: serverTimestamp() }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellers', 'Upper@example.com'), { email: 'Upper@example.com' }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellers', 'x@example.com'), { email: 'y@example.com' }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellers', 'x@example.com'), { email: 'x@example.com', role: 'admin' }))
+    await assertFails(deleteDoc(doc(as(staff.admin), 'sellers', seller.email)))
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'sellers', seller.email)))
+  })
+
+  test('sellers read their own registrations, with a sellerUid filter; nobody creates them', async () => {
+    await assertSucceeds(getDoc(doc(as(seller), 'sellerRegistrations', 'r1')))
+    await assertFails(getDoc(doc(as(seller), 'sellerRegistrations', 'r2')))
+    await assertSucceeds(getDocs(query(collection(as(seller), 'sellerRegistrations'), where('sellerUid', '==', seller.uid))))
+    await assertFails(getDocs(collection(as(seller), 'sellerRegistrations')))
+    await assertFails(getDocs(collection(as(staff.manager), 'sellerRegistrations')))
+    await assertSucceeds(getDocs(collection(as(staff.admin), 'sellerRegistrations')))
+
+    for (const who of [seller, staff.admin, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'sellerRegistrations', 'new'), registration(seller)))
+    }
+  })
+
+  test('sellers cannot change or return a registration; admins record pickup and payment only', async () => {
+    await assertFails(updateDoc(doc(as(seller), 'sellerRegistrations', 'r1'), { quantity: 1 }))
+    await assertFails(updateDoc(doc(as(seller), 'sellerRegistrations', 'r1'), flags(seller)))
+    await assertFails(deleteDoc(doc(as(seller), 'sellerRegistrations', 'r1')))
+    await assertFails(updateDoc(doc(as(staff.manager), 'sellerRegistrations', 'r1'), flags(staff.manager)))
+
+    await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin)))
+    await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { paid: true })))
+    await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), { ...flags(staff.admin), quantity: 1 }))
+    await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { paid: 'yes' })))
+    await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { updatedByUid: 'someone' })))
+    await assertSucceeds(deleteDoc(doc(as(staff.admin), 'sellerRegistrations', 'r2')))
+  })
+
+  test('the shared total is for sellers and admins; release markers for nobody', async () => {
+    await assertSucceeds(getDoc(doc(as(seller), 'sellerStats', 'summary')))
+    await assertSucceeds(getDoc(doc(as(staff.admin), 'sellerStats', 'summary')))
+    await assertFails(getDoc(doc(as(other), 'sellerStats', 'summary')))
+    await assertFails(getDoc(doc(as(staff.manager), 'sellerStats', 'summary')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellerStats', 'summary'), { total: 750 }))
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'sellerReleases', 'r1')))
+  })
+})

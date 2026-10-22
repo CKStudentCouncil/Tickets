@@ -45,6 +45,10 @@ export const ELIGIBLE_IDENTITIES = {
 
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 
+// 學弟登記賣票: tickets one registration may take (a seller sold 120 last
+// year). Keep in sync with src/data/sellerGuide.js
+export const MAX_SELLER_TICKETS = 200
+
 // The buyer's order page; they sign in with the account they ordered with
 export function getBuyerOrderUrl(orderId) {
   return `${SITE_URL}/orders/${encodeURIComponent(orderId)}`

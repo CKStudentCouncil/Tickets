@@ -72,6 +72,13 @@ const routes = [
         component: () => import('pages/AboutPage.vue')
       },
       {
+        // 學弟登記賣票; the page itself tells those not on the list
+        path: 'sell',
+        name: 'sell',
+        component: () => import('pages/SellerPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'comingsoon',
         name: 'comingsoon',
         component: () => import('pages/ComingSoonPage.vue')
@@ -134,6 +141,14 @@ const routes = [
         component: () => import('pages/AccountPage.vue'),
         meta: {
           requiresSuperAdmin: true
+        }
+      },
+      {
+        path: 'sellers',
+        name: 'admin-sellers',
+        component: () => import('pages/SellerAdminPage.vue'),
+        meta: {
+          requiresAdmin: true
         }
       },
       {

@@ -160,8 +160,9 @@ service cloud.firestore {
     }
 
     // Buyers never update or delete orders. ticketSales, buyerPurchases,
-    // orderRequests, rateLimits, stockReleases and notificationJobs are only
-    // touched by Cloud Functions and fall through to the deny-all rule below.
+    // orderRequests, rateLimits, stockReleases, notificationJobs and
+    // sellerReleases are only touched by Cloud Functions and fall through to
+    // the deny-all rule below.
 
     // =========================
     // Ticket types & public content
@@ -212,6 +213,74 @@ service cloud.firestore {
     match /partyLineup/{itemId} {
       allow read: if isSuperAdmin() || isPublishedNow();
       allow write: if isSuperAdmin();
+    }
+
+    // =========================
+    // 學弟登記賣票 (functions/lib/sellers.js)
+    // =========================
+
+    function sellerPath(email) {
+      return /databases/$(database)/documents/sellers/$(email);
+    }
+
+    // on the seller list kept by super admins, signed in with that email
+    function isSeller() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && exists(sellerPath(signedInEmail()));
+    }
+
+    // Which ticket type sellers take from and the shared goal; public like
+    // every settings document, also read by registerSellerTickets.
+    match /settings/sellerProgram {
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['enabled', 'ticketTypeId', 'goal', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.enabled is bool
+        && isShortString(request.resource.data.ticketTypeId, 100)
+        && request.resource.data.goal is int
+        && request.resource.data.goal >= 0
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if isSuperAdmin();
+    }
+
+    // The seller list, keyed by lower-case email. A seller can read only
+    // their own entry (to see the registration page).
+    match /sellers/{email} {
+      allow get: if isAdmin() || (
+        signedIn()
+        && request.auth.token.email_verified == true
+        && signedInEmail() == email
+      );
+      allow list: if isAdmin();
+
+      allow create, update: if isSuperAdmin()
+        && email == email.lower()
+        && request.resource.data.email == email
+        && request.resource.data.keys().hasOnly(['email', 'name', 'createdAt'])
+        && isShortString(request.resource.data.get('name', ''), 50);
+      allow delete: if isSuperAdmin();
+    }
+
+    // Created only by registerSellerTickets, which takes the tickets from
+    // stock. Sellers read their own (lists must filter on sellerUid); admins
+    // record ticket pickup and payment, and may delete a mistaken one
+    // (releaseSellerStock gives the tickets back).
+    match /sellerRegistrations/{registrationId} {
+      allow get, list: if isAdmin() || (signedIn() && resource.data.sellerUid == request.auth.uid);
+      allow create: if false;
+      allow update: if isAdmin()
+        && onlyChanges(['delivered', 'paid', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.delivered is bool
+        && request.resource.data.paid is bool
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Tickets registered by everyone, for the goal progress
+    match /sellerStats/summary {
+      allow get: if isAdmin() || isSeller();
     }
 
     // =========================
