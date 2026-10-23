@@ -107,7 +107,7 @@
 
           <div v-else class="ticket-state">
             <h3>目前尚無開放購買的票種</h3>
-            <p>票券資訊將於開放販售後顯示。</p>
+            <p>票券資訊將於開放販售後顯示</p>
           </div>
         </div>
       </div>
