@@ -52,6 +52,7 @@
                 <img
                   :src="item.imageUrl"
                   :alt="item.title || item.name"
+                  :style="cropStyle(item.imageCrop)"
                   loading="lazy"
                 >
               </div>
@@ -133,6 +134,7 @@
                 <img
                   :src="item.imageUrl"
                   :alt="item.title || item.name"
+                  :style="cropStyle(item.imageCrop)"
                   loading="lazy"
                 >
               </div>
@@ -217,7 +219,9 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchPublishedLineup } from 'src/services/contentService'
-import { formatLongDate as formatDate, parseDate } from 'src/utils/datetime'
+import { formatLongDate as formatDate } from 'src/utils/datetime'
+import { cropStyle } from 'src/utils/imageCrop'
+import { compareLineupOrder } from 'src/utils/lineupOrder'
 import { splitParagraphs as getParagraphs } from 'src/utils/text'
 
 // Unpublished items are no longer readable at all (PARTY-16), so newly
@@ -230,11 +234,11 @@ const loading = ref(true)
 let refreshTimer = null
 
 const clubs = computed(() =>
-  items.value.filter((item) => item.type === 'club').sort(sortByPublishDate)
+  items.value.filter((item) => item.type === 'club').sort(compareLineupOrder)
 )
 
 const artists = computed(() =>
-  items.value.filter((item) => item.type === 'artist').sort(sortByPublishDate)
+  items.value.filter((item) => item.type === 'artist').sort(compareLineupOrder)
 )
 
 onMounted(async () => {
@@ -254,10 +258,6 @@ async function loadItems() {
   } finally {
     loading.value = false
   }
-}
-
-function sortByPublishDate(a, b) {
-  return (parseDate(a.publishAt)?.getTime() || 0) - (parseDate(b.publishAt)?.getTime() || 0)
 }
 </script>
 

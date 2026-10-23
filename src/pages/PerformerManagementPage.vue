@@ -132,6 +132,13 @@
             }}
           </p>
 
+          <p
+            v-if="currentItems.length > 1"
+            class="sort-hint"
+          >
+            拖曳左側把手可調整前台顯示順序
+          </p>
+
         </div>
 
         <button
@@ -177,24 +184,61 @@
 
       <div
         v-else
+        ref="lineupList"
         class="lineup-list"
+        :class="{
+          sorting: !!sort
+        }"
       >
 
         <article
-          v-for="item in currentItems"
+          v-for="(item, index) in currentItems"
           :key="item.id"
+          :data-id="item.id"
           class="lineup-card"
+          :class="{
+            dragging: sort?.id === item.id
+          }"
+          :style="getSortStyle(index)"
         >
 
-          <div
-            v-if="item.imageUrl"
-            class="list-thumbnail"
+          <button
+            type="button"
+            class="drag-handle"
+            :disabled="currentItems.length < 2"
+            :aria-label="`第 ${index + 1} 位：${item.title || item.name}，按上下鍵調整順序`"
+            title="拖曳調整順序"
+            @pointerdown="startSort($event, index)"
+            @keydown.up.prevent="moveByKey(index, -1)"
+            @keydown.down.prevent="moveByKey(index, 1)"
           >
+            <span class="order-number">
+              {{ String(index + 1).padStart(2, '0') }}
+            </span>
+
+            <GripVertical
+              :size="16"
+              :stroke-width="1.75"
+              aria-hidden="true"
+            />
+          </button>
+
+          <div class="list-thumbnail">
             <img
+              v-if="item.imageUrl"
               :src="item.imageUrl"
               :alt="item.title || item.name"
+              :style="cropStyle(item.imageCrop)"
               loading="lazy"
+              draggable="false"
             >
+
+            <span
+              v-else
+              class="thumbnail-empty"
+            >
+              無圖片
+            </span>
           </div>
 
           <div class="lineup-card-main">
@@ -397,7 +441,134 @@
             四、介紹圖片
           </span>
 
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            hidden
+            @change="handleFileChange"
+          >
+
           <div
+            v-if="form.imageUrl"
+            class="crop-editor"
+            :class="{
+              dragging: isDragging
+            }"
+            @dragover.prevent="isDragging = true"
+            @dragleave.prevent="isDragging = false"
+            @drop.prevent="handleDrop"
+          >
+
+            <div class="crop-frames">
+
+              <figure class="crop-view desktop">
+
+                <div
+                  ref="cropFrame"
+                  class="crop-frame"
+                  :class="{
+                    panning: !!pan
+                  }"
+                  tabindex="0"
+                  aria-label="調整圖片位置：拖曳或按方向鍵移動，Shift 加快"
+                  @pointerdown="startPan"
+                  @pointermove="movePan"
+                  @pointerup="endPan"
+                  @pointercancel="endPan"
+                  @lostpointercapture="endPan"
+                  @keydown="nudgeCrop"
+                  @wheel="zoomByWheel"
+                >
+                  <img
+                    ref="cropImage"
+                    :src="form.imageUrl"
+                    :style="cropStyle(form.imageCrop)"
+                    alt=""
+                    draggable="false"
+                  >
+
+                  <span class="crop-hint">
+                    拖曳調整位置
+                  </span>
+                </div>
+
+                <figcaption>
+                  電腦版 4:3
+                </figcaption>
+
+              </figure>
+
+              <figure class="crop-view mobile">
+
+                <div class="crop-frame">
+                  <img
+                    :src="form.imageUrl"
+                    :style="cropStyle(form.imageCrop)"
+                    alt=""
+                    draggable="false"
+                  >
+                </div>
+
+                <figcaption>
+                  手機版 16:10
+                </figcaption>
+
+              </figure>
+
+            </div>
+
+
+            <div class="crop-toolbar">
+
+              <label class="crop-zoom">
+
+                <span>
+                  縮放
+                </span>
+
+                <input
+                  type="range"
+                  :min="MIN_ZOOM"
+                  :max="MAX_ZOOM"
+                  step="0.01"
+                  :value="form.imageCrop.zoom"
+                  @input="setZoom($event.target.value)"
+                >
+
+                <output>
+                  {{ form.imageCrop.zoom.toFixed(2) }}×
+                </output>
+
+              </label>
+
+              <div class="crop-actions">
+
+                <button
+                  type="button"
+                  class="btn-outline"
+                  @click="resetCrop"
+                >
+                  重設位置
+                </button>
+
+                <button
+                  type="button"
+                  class="btn-outline"
+                  :disabled="saving || uploading"
+                  @click="openFilePicker"
+                >
+                  更換圖片
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <div
+            v-else
             class="image-upload"
             :class="{
               dragging: isDragging
@@ -408,55 +579,25 @@
             @click="openFilePicker"
           >
 
-            <input
-              ref="fileInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-              @change="handleFileChange"
-            >
+            <div class="upload-placeholder">
 
-            <template v-if="form.imageUrl">
-
-              <img
-                class="image-preview"
-                :src="form.imageUrl"
-                :alt="form.title || form.name"
-              >
-
-              <div class="image-overlay">
-
-                <span>
-                  更換圖片
-                </span>
-
+              <div class="upload-icon">
+                +
               </div>
 
-            </template>
+              <strong>
+                選擇圖片
+              </strong>
 
-            <template v-else>
+              <span>
+                JPG、PNG 或 WEBP
+              </span>
 
-              <div class="upload-placeholder">
+              <small>
+                也可以直接將圖片拖曳至此
+              </small>
 
-                <div class="upload-icon">
-                  +
-                </div>
-
-                <strong>
-                  選擇圖片
-                </strong>
-
-                <span>
-                  JPG、PNG 或 WEBP
-                </span>
-
-                <small>
-                  也可以直接將圖片拖曳至此
-                </small>
-
-              </div>
-
-            </template>
+            </div>
 
           </div>
 
@@ -520,7 +661,7 @@
 
 
           <small class="field-hint">
-            建議使用橫式圖片，最大 7 MB
+            建議使用橫式圖片，最大 7 MB。上傳後可拖曳圖片、調整縮放，讓主角落在框內最佳位置
           </small>
 
         </div>
@@ -664,6 +805,7 @@
             <img
               :src="form.imageUrl"
               :alt="form.title || form.name"
+              :style="cropStyle(form.imageCrop)"
             >
           </div>
 
@@ -765,10 +907,10 @@ import {
   deleteField,
   doc,
   serverTimestamp,
-  setDoc,
-  updateDoc
+  writeBatch
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
+import { GripVertical } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { db, functions } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
@@ -783,6 +925,8 @@ import {
   toDateTimeInputValue
 } from 'src/utils/datetime'
 import { excerpt as getExcerpt, splitParagraphs } from 'src/utils/text'
+import { MAX_ZOOM, MIN_ZOOM, cropStyle, dragCrop, normalizeCrop } from 'src/utils/imageCrop'
+import { compareLineupOrder, moveItem, orderUpdates } from 'src/utils/lineupOrder'
 import {
   LINEUP,
   fetchAllContent,
@@ -811,13 +955,23 @@ const editingId = ref(null)
 
 const fileInput = ref(null)
 const editorSection = ref(null)
+const lineupList = ref(null)
+const cropFrame = ref(null)
+const cropImage = ref(null)
 
 const selectedFile = ref(null)
 
 const isDragging = ref(false)
 
+// list reordering and photo panning in progress
+const sort = ref(null)
+const pan = ref(null)
+
+let sortFrame = 0
+
 const oldImageUrl = ref('')
 const oldImageStoragePath = ref('')
+const oldImageCrop = ref(normalizeCrop())
 
 const localPreviewUrl = ref('')
 
@@ -832,7 +986,7 @@ const clubItems = computed(() =>
       item =>
         item.type === 'club'
     )
-    .sort(sortItems)
+    .sort(compareLineupOrder)
 )
 
 const artistItems = computed(() =>
@@ -841,7 +995,7 @@ const artistItems = computed(() =>
       item =>
         item.type === 'artist'
     )
-    .sort(sortItems)
+    .sort(compareLineupOrder)
 )
 
 const currentItems = computed(() =>
@@ -896,6 +1050,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   revokeLocalPreview()
+  stopSort()
 })
 
 function createEmptyForm(type = 'club') {
@@ -905,6 +1060,7 @@ function createEmptyForm(type = 'club') {
     title: '',
     content: '',
     imageUrl: '',
+    imageCrop: normalizeCrop(),
     publishAt: ''
   }
 }
@@ -929,6 +1085,7 @@ function startCreate() {
 
   oldImageUrl.value = ''
   oldImageStoragePath.value = ''
+  oldImageCrop.value = normalizeCrop()
 
   revokeLocalPreview()
 
@@ -955,6 +1112,11 @@ function editItem(item) {
     item.imageFileId ||
     ''
 
+  oldImageCrop.value =
+    normalizeCrop(
+      item.imageCrop
+    )
+
   revokeLocalPreview()
 
   form.value = {
@@ -977,6 +1139,9 @@ function editItem(item) {
     imageUrl:
       item.imageUrl ||
       '',
+
+    imageCrop:
+      oldImageCrop.value,
 
     publishAt:
       normalizePublishAt(
@@ -1001,6 +1166,9 @@ function cancelEdit() {
 
   oldImageUrl.value = ''
   oldImageStoragePath.value = ''
+  oldImageCrop.value = normalizeCrop()
+
+  pan.value = null
 
   form.value =
     createEmptyForm(
@@ -1098,6 +1266,10 @@ function selectFile(file) {
 
   form.value.imageUrl =
     localPreviewUrl.value
+
+  // a new photo starts centred
+  form.value.imageCrop =
+    normalizeCrop()
 }
 
 function clearSelectedFile() {
@@ -1108,9 +1280,125 @@ function clearSelectedFile() {
   form.value.imageUrl =
     oldImageUrl.value || ''
 
+  form.value.imageCrop =
+    oldImageCrop.value
+
   if (fileInput.value) {
     fileInput.value.value = ''
   }
+}
+
+function startPan(event) {
+  const image = cropImage.value
+
+  if (
+    event.button !== 0 ||
+    !image?.naturalWidth
+  ) {
+    return
+  }
+
+  event.preventDefault()
+
+  cropFrame.value.focus({ preventScroll: true })
+  cropFrame.value.setPointerCapture(event.pointerId)
+
+  const rect =
+    cropFrame.value.getBoundingClientRect()
+
+  pan.value = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    crop: form.value.imageCrop,
+    sizes: {
+      frameW: rect.width,
+      frameH: rect.height,
+      imageW: image.naturalWidth,
+      imageH: image.naturalHeight
+    }
+  }
+}
+
+function movePan(event) {
+  if (
+    pan.value?.pointerId !==
+    event.pointerId
+  ) {
+    return
+  }
+
+  // measured from where the drag began, so rounding never accumulates
+  form.value.imageCrop =
+    dragCrop(
+      pan.value.crop,
+      {
+        dx: event.clientX - pan.value.startX,
+        dy: event.clientY - pan.value.startY
+      },
+      pan.value.sizes
+    )
+}
+
+function endPan() {
+  pan.value = null
+}
+
+// arrow keys move the photo the way a drag would
+function nudgeCrop(event) {
+  const step =
+    event.shiftKey ? 10 : 2
+
+  const moves = {
+    ArrowLeft: [step, 0],
+    ArrowRight: [-step, 0],
+    ArrowUp: [0, step],
+    ArrowDown: [0, -step]
+  }
+
+  const move = moves[event.key]
+
+  if (!move) {
+    return
+  }
+
+  event.preventDefault()
+
+  const crop = form.value.imageCrop
+
+  form.value.imageCrop =
+    normalizeCrop({
+      ...crop,
+      x: crop.x + move[0],
+      y: crop.y + move[1]
+    })
+}
+
+// trackpad pinch arrives as a ctrl + wheel event; plain scrolling is left alone
+function zoomByWheel(event) {
+  if (!event.ctrlKey) {
+    return
+  }
+
+  event.preventDefault()
+
+  setZoom(
+    form.value.imageCrop.zoom -
+    event.deltaY * 0.01
+  )
+}
+
+function setZoom(zoom) {
+  form.value.imageCrop =
+    normalizeCrop({
+      ...form.value.imageCrop,
+      zoom: Number(zoom)
+    })
+}
+
+function resetCrop() {
+  form.value.imageCrop =
+    normalizeCrop()
 }
 
 function revokeLocalPreview() {
@@ -1292,16 +1580,39 @@ async function saveItem() {
       publishAt: toPublishTimestamp(form.value.publishAt),
       imageUrl: imageUrl && !imageUrl.startsWith('blob:') ? imageUrl : '',
       imageStoragePath: imageStoragePath || '',
+      // where the photo sits in its frame (src/utils/imageCrop.js)
+      imageCrop: normalizeCrop(form.value.imageCrop),
       updatedAt: serverTimestamp(),
       // uid only: the lineup is public, names/emails must not leak (PARTY-26)
       updatedByUid: auth.user.uid
     }
 
+    // New items, and items moved to the other type, go to the end of their
+    // list. The rest of that list is numbered in the same batch, so items
+    // saved before ordering existed stay ahead of the new one.
+    const previousType = items.value.find((item) => item.id === editingId.value)?.type
+    const joinsList = !editingId.value || previousType !== form.value.type
+    const siblings = joinsList
+      ? items.value
+          .filter((item) => item.type === form.value.type && item.id !== itemRef.id)
+          .sort(compareLineupOrder)
+      : []
+
+    if (joinsList) payload.order = siblings.length
+
+    const batch = writeBatch(db)
+
     if (editingId.value) {
-      await updateDoc(itemRef, { ...payload, updatedBy: deleteField(), createdBy: deleteField() })
+      batch.update(itemRef, { ...payload, updatedBy: deleteField(), createdBy: deleteField() })
     } else {
-      await setDoc(itemRef, { ...payload, createdAt: serverTimestamp(), createdByUid: auth.user.uid })
+      batch.set(itemRef, { ...payload, createdAt: serverTimestamp(), createdByUid: auth.user.uid })
     }
+
+    for (const [item, order] of orderUpdates(siblings)) {
+      batch.update(doc(db, LINEUP, item.id), { order })
+    }
+
+    await batch.commit()
 
     uploadedPath = '' // saved: the document now owns the new image
 
@@ -1453,8 +1764,218 @@ async function deleteImageByStoragePath(
   }
 }
 
-function sortItems(a, b) {
-  return (parseDate(b.publishAt)?.getTime() || 0) - (parseDate(a.publishAt)?.getTime() || 0)
+// While a card is dragged the list keeps its DOM order: the dragged card
+// follows the pointer and the cards it passes slide aside by its height. The
+// new order is committed on release.
+function startSort(event, index) {
+  if (
+    event.button !== 0 ||
+    sort.value ||
+    currentItems.value.length < 2
+  ) {
+    return
+  }
+
+  event.preventDefault()
+
+  const rects = [
+    ...lineupList.value.children
+  ].map(card => card.getBoundingClientRect())
+
+  const first = rects[0]
+  const last = rects[rects.length - 1]
+  const dragged = rects[index]
+
+  // page coordinates, so the list may scroll during the drag
+  sort.value = {
+    id: currentItems.value[index].id,
+    from: index,
+    to: index,
+    dy: 0,
+    shift: dragged.height,
+    minDy: first.top - dragged.top,
+    maxDy: last.bottom - dragged.bottom,
+    mids: rects.map(rect => rect.top + window.scrollY + rect.height / 2),
+    startY: event.clientY + window.scrollY,
+    pointerY: event.clientY
+  }
+
+  window.addEventListener('pointermove', onSortMove)
+  window.addEventListener('pointerup', endSort)
+  window.addEventListener('pointercancel', stopSort)
+
+  sortFrame = requestAnimationFrame(autoScroll)
+}
+
+function onSortMove(event) {
+  if (!sort.value) {
+    return
+  }
+
+  sort.value.pointerY = event.clientY
+
+  updateSort()
+}
+
+function updateSort() {
+  const state = sort.value
+
+  state.dy = Math.min(
+    state.maxDy,
+    Math.max(
+      state.minDy,
+      state.pointerY + window.scrollY - state.startY
+    )
+  )
+
+  const center = state.mids[state.from] + state.dy
+
+  let to = state.from
+
+  state.mids.forEach((mid, index) => {
+    if (index < state.from && center < mid) to = Math.min(to, index)
+    if (index > state.from && center > mid) to = Math.max(to, index)
+  })
+
+  state.to = to
+}
+
+// scrolls the page while the pointer is held near the top or bottom edge
+function autoScroll() {
+  const state = sort.value
+
+  if (!state) {
+    return
+  }
+
+  const edge = 80
+  const bottomEdge = window.innerHeight - edge
+
+  const speed =
+    state.pointerY < edge
+      ? (state.pointerY - edge) / 4
+      : state.pointerY > bottomEdge
+        ? (state.pointerY - bottomEdge) / 4
+        : 0
+
+  if (speed) {
+    window.scrollBy(0, speed)
+    updateSort()
+  }
+
+  sortFrame = requestAnimationFrame(autoScroll)
+}
+
+function endSort() {
+  const state = sort.value
+
+  stopSort()
+
+  if (state && state.to !== state.from) {
+    saveOrder(
+      moveItem(currentItems.value, state.from, state.to)
+    )
+  }
+}
+
+function stopSort() {
+  window.removeEventListener('pointermove', onSortMove)
+  window.removeEventListener('pointerup', endSort)
+  window.removeEventListener('pointercancel', stopSort)
+
+  cancelAnimationFrame(sortFrame)
+
+  sort.value = null
+}
+
+function getSortStyle(index) {
+  const state = sort.value
+
+  if (!state) {
+    return null
+  }
+
+  if (index === state.from) {
+    return { transform: `translateY(${state.dy}px)` }
+  }
+
+  if (index > state.from && index <= state.to) {
+    return { transform: `translateY(${-state.shift}px)` }
+  }
+
+  if (index < state.from && index >= state.to) {
+    return { transform: `translateY(${state.shift}px)` }
+  }
+
+  return null
+}
+
+async function moveByKey(index, delta) {
+  const to = index + delta
+
+  if (
+    sort.value ||
+    to < 0 ||
+    to >= currentItems.value.length
+  ) {
+    return
+  }
+
+  const { id } = currentItems.value[index]
+
+  const pending = saveOrder(
+    moveItem(currentItems.value, index, to)
+  )
+
+  // moving the card in the DOM drops focus; give it back to its handle
+  await nextTick()
+
+  lineupList.value
+    ?.querySelector(`[data-id="${CSS.escape(id)}"] .drag-handle`)
+    ?.focus()
+
+  await pending
+}
+
+// Writes the new positions of one type's list. The list re-sorts right away
+// and goes back if the write fails.
+async function saveOrder(list) {
+  const updates = orderUpdates(list)
+
+  if (updates.length === 0) {
+    return
+  }
+
+  const previous = updates.map(([item]) => [item, item.order])
+
+  updates.forEach(([item, order]) => {
+    item.order = order
+  })
+
+  try {
+    const batch = writeBatch(db)
+
+    for (const [item, order] of updates) {
+      batch.update(doc(db, LINEUP, item.id), { order })
+    }
+
+    await batch.commit()
+
+    toast.show('順序已更新。')
+  } catch (error) {
+    previous.forEach(([item, order]) => {
+      item.order = order
+    })
+
+    console.error(
+      'Failed to save lineup order:',
+      error
+    )
+
+    toast.show(
+      '順序儲存失敗，請稍後再試。'
+    )
+  }
 }
 
 function getStatus(item) {
