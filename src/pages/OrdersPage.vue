@@ -1,8 +1,14 @@
 <template>
   <div class="orders-page">
     <header class="page-header">
-      <p class="eyebrow">{{ auth.email }}</p>
-      <h1>購票紀錄</h1>
+      <div class="header-copy" style="margin-top: -80px">
+        <p class="eyebrow"><span /> CK PARTY NIGHT / MY TICKETS</p>
+        <h1>購票紀錄</h1>
+      </div>
+      <div class="account-chip">
+        <span class="account-dot" aria-hidden="true" />
+        <span>{{ auth.email }}</span>
+      </div>
     </header>
 
     <div v-if="loadError" class="empty-state" role="alert">
@@ -19,18 +25,36 @@
 
     <div
       v-else-if="!loadError && orders.length === 0"
-      class="empty-state"
+      class="no-tickets"
     >
-      <h2>No Tickets Found</h2>
-      <p>這個帳號還沒有訂單。如果是用其他 Google 帳號購票，請登出後改用該帳號登入。</p>
-      <br />
+      <div class="no-tickets-copy">
+        <p class="no-tickets-label"><span /> NO TICKETS FOUND</p>
+        <h2>還沒有購票紀錄</h2>
+        <p>這個帳號還沒有訂單。如果是用其他 Google 帳號購票，請登出後改用該帳號登入</p>
 
-      <router-link
-        to="/"
-        class="primary-button"
-      >
-        探索舞會門票
-      </router-link>
+        <router-link
+          to="/"
+          class="no-tickets-button"
+        >
+          <span>探索舞會門票</span>
+          <span aria-hidden="true">→</span>
+        </router-link>
+      </div>
+
+      <!-- an empty ticket, waiting to be filled in -->
+      <div class="ghost-ticket" aria-hidden="true">
+        <div class="ghost-main">
+          <span class="ghost-index">No. 00</span>
+          <span class="ghost-bar" />
+          <span class="ghost-bar short" />
+          <span class="ghost-total">TOTAL &nbsp;NT$ —</span>
+        </div>
+        <span class="ghost-perforation" />
+        <div class="ghost-stub">
+          <span class="ghost-qr">?</span>
+          <small>ADMIT</small>
+        </div>
+      </div>
     </div>
 
     <div v-if="orders.length > 0" class="order-list" :aria-busy="loading">
