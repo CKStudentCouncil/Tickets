@@ -101,14 +101,6 @@
             </router-link>
 
             <router-link
-              v-if="auth.isAdmin"
-              to="/admin/sellers"
-              @click="menuOpen = false"
-            >
-              學弟賣票管理
-            </router-link>
-
-            <router-link
               v-if="auth.isSuperAdmin"
               to="/admin/account"
               @click="menuOpen = false"
@@ -122,6 +114,14 @@
               @click="menuOpen = false"
             >
               問卷管理
+            </router-link>
+
+            <router-link
+              v-if="auth.isAdmin"
+              to="/admin/sellers"
+              @click="menuOpen = false"
+            >
+              學弟賣票管理
             </router-link>
 
             <router-link
@@ -202,7 +202,7 @@
             <span>建中舞會購票系統</span>
           </div>
           <p class="footer-meta">Taipei Municipal Chien Kuo High School Student Council</p>
-          <p class="footer-meta">Developed by Chris Sun and Jim Tang</p>
+          <p class="footer-meta">Developed by Chris Sun, Jim Tang and Dong Chen</p>
         </div>
       </div>
       <div class="footer-bottom text-center">
