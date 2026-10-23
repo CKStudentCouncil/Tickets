@@ -1,7 +1,9 @@
 :root {
   --ink: #1d1d1f;
   --muted: #6e6e73;
-  --canvas: #f5f5f7;
+  /* page edges and iOS overscroll show this, so it matches the dark site
+     (and the theme-color meta) instead of flashing white */
+  --canvas: #050608;
   --surface: #ffffff;
   --line: #e5e5e7;
   --link: #06c;
@@ -47,3 +49,10 @@ select:focus-visible {
   background: rgba(0, 102, 204, 0.18);
 }
 
+/* phones: the page behind the open menu drawer stays put (MainLayout) */
+@media (max-width: 640px) {
+  html.menu-open,
+  html.menu-open body {
+    overflow: hidden;
+  }
+}

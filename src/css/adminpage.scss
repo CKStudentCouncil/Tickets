@@ -1268,11 +1268,18 @@ textarea::placeholder {
     background-color .2s ease;
 }
 
-/* 保留 Safari / iPadOS 原生 date & time 控制項 */
+/* iOS / iPadOS Safari keeps native date & time inputs at content-box,
+   even against box-sizing: border-box !important, so width: 100% plus the
+   padding and border ran past the field and the whole page slid sideways.
+   Without the native appearance they size like every other input, and
+   tapping one still opens the system picker. line-height centres the value
+   in the 44px box (same fix as intromanagementpage.scss). */
 .time-inputs > input[type="date"],
 .time-inputs > input[type="time"] {
-  appearance: auto;
-  -webkit-appearance: auto;
+  -webkit-appearance: none;
+  appearance: none;
+  color-scheme: dark;
+  line-height: 42px;
 
   font-family: 'Manrope', 'Noto Sans TC', sans-serif;
   font-size: 13px;

@@ -1,29 +1,74 @@
-.orders-page {
-  --void: #050608;
-  --charcoal: #14171c;
-  --charcoal-light: #1b1f25;
-  --lunar: #9aa3ac;
-  --white: #f5f7f8;
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --muted: #707983;
-  --ember: #e7b47b;
+/* =========================================================
+   My tickets: every order is printed as a COSMOS admission
+   ticket (poster art, the poster's | LABEL | lines, a torn
+   QR stub). The header is the seller page's (sellerpage.scss).
+   ========================================================= */
 
-  width: min(1180px, calc(100% - 40px));
-  margin: 0 auto;
-  padding: 72px 0 100px;
-  color: var(--white);
+.orders-page,
+.qr-modal {
+  --void: #050608; /* the app shell; also shows through the ticket notches */
+  --surface: #0d1015;
+  --lunar: #a4aaaf;
+  --off-white: #f2eee5;
+  --ember: #e7b47b;
+  --ember-hover: #f1c897;
+  --line: rgba(242, 238, 229, 0.12);
+  --line-strong: rgba(242, 238, 229, 0.22);
+  --serif: 'Times New Roman', serif;
 }
 
-/* same header as the seller page (sellerpage.scss) */
+.orders-page {
+  width: min(1120px, calc(100% - clamp(32px, 8vw, 120px)));
+  margin: 0 auto;
+  padding: clamp(112px, 14vw, 178px) 0 120px;
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--ember);
+    outline-offset: 4px;
+  }
+}
+
+.svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- header (same as the seller page) ---------- */
+
 .page-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 40px;
-  margin: clamp(40px, 7vw, 96px) 0 48px;
+  margin-bottom: 56px;
   padding-bottom: 32px;
   border-bottom: 1px solid var(--line);
+}
+
+.header-copy {
+  min-width: 0;
 
   .eyebrow {
     display: flex;
@@ -35,20 +80,46 @@
     font-weight: 700;
     letter-spacing: 0.2em;
 
-    span {
-      width: 30px;
-      height: 1px;
-      background: currentColor;
-    }
+    span { width: 30px; height: 1px; background: currentColor; }
   }
 
   h1 {
     margin: 0;
     font-size: clamp(42px, 7vw, 86px);
-    line-height: 0.98;
     font-weight: 500;
     letter-spacing: -0.06em;
+    line-height: 0.98;
   }
+}
+
+.header-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.header-count {
+  margin: 0;
+  color: var(--lunar);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+
+  strong {
+    margin-right: 4px;
+    color: var(--off-white);
+    font-family: var(--serif);
+    font-size: 34px;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+}
+
+.header-count-sep {
+  margin: 0 8px;
+  color: var(--line-strong);
 }
 
 .account-chip {
@@ -71,39 +142,9 @@
   }
 }
 
-/* No tickets: copy beside an empty, dashed ticket */
+/* ---------- shared bits ---------- */
 
-.no-tickets {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
-  align-items: center;
-  gap: clamp(32px, 6vw, 88px);
-  padding: clamp(32px, 5vw, 64px);
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(circle at 0 0, rgba(231, 180, 123, 0.09), transparent 40%),
-    linear-gradient(120deg, rgba(231, 180, 123, 0.03), rgba(255, 255, 255, 0.01)),
-    var(--charcoal);
-  animation: ticket-in 0.55s ease both;
-
-  h2 {
-    margin: 0;
-    font-size: clamp(28px, 4vw, 44px);
-    font-weight: 500;
-    line-height: 1.2;
-    letter-spacing: -0.03em;
-  }
-
-  p:not(.no-tickets-label) {
-    max-width: 40ch;
-    margin: 16px 0 0;
-    color: var(--lunar);
-    font-size: 13.5px;
-    line-height: 1.8;
-  }
-}
-
-.no-tickets-label {
+.state-label {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -113,14 +154,11 @@
   font-weight: 700;
   letter-spacing: 0.2em;
 
-  span {
-    width: 24px;
-    height: 1px;
-    background: currentColor;
-  }
+  span { width: 24px; height: 1px; background: currentColor; }
 }
 
-.no-tickets-button {
+.primary-button,
+.outline-button {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
@@ -130,53 +168,141 @@
   margin-top: 32px;
   padding: 0 18px 0 22px;
   border: 1px solid var(--ember);
-  background: var(--ember);
-  color: #17110b;
+  border-radius: 0;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-decoration: none;
-  transition: background-color 0.2s ease;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
 
-  span:last-child {
-    transition: transform 0.2s ease;
+  svg { flex: none; transition: transform 0.2s ease; }
+  &:hover svg { transform: translateX(3px); }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+}
+
+.primary-button {
+  background: var(--ember);
+  color: #17110b;
+
+  &:hover { background: var(--ember-hover); }
+}
+
+.outline-button {
+  background: transparent;
+  color: var(--ember);
+
+  &:hover:not(:disabled) { background: rgba(231, 180, 123, 0.08); }
+}
+
+/* ---------- error ---------- */
+
+.state-panel {
+  margin-bottom: 22px;
+  padding: clamp(28px, 4vw, 44px);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 0 0, rgba(231, 180, 123, 0.08), transparent 40%),
+    var(--surface);
+
+  h2 {
+    margin: 0;
+    font-size: clamp(24px, 3vw, 32px);
+    font-weight: 500;
+    letter-spacing: -0.02em;
   }
 
-  &:hover {
-    background: #f1c897;
-
-    span:last-child {
-      transform: translateX(3px);
-    }
+  p:not(.state-label) {
+    max-width: 44ch;
+    margin: 12px 0 0;
+    color: var(--lunar);
+    font-size: 13.5px;
+    line-height: 1.8;
   }
 
-  &:focus-visible {
-    outline: 2px solid var(--ember);
-    outline-offset: 4px;
+  .outline-button { margin-top: 26px; }
+}
+
+/* ---------- no tickets: copy beside an empty ticket ---------- */
+
+.no-tickets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  align-items: center;
+  gap: clamp(32px, 6vw, 88px);
+  padding: clamp(32px, 5vw, 64px);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 0 0, rgba(231, 180, 123, 0.09), transparent 40%),
+    linear-gradient(120deg, rgba(231, 180, 123, 0.03), rgba(255, 255, 255, 0.01)),
+    var(--surface);
+  animation: ticket-in 0.6s cubic-bezier(0.16, 0.7, 0.3, 1) backwards;
+
+  h2 {
+    margin: 0;
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+  }
+
+  p:not(.state-label) {
+    max-width: 40ch;
+    margin: 16px 0 0;
+    color: var(--lunar);
+    font-size: 13.5px;
+    line-height: 1.8;
   }
 }
 
 .ghost-ticket {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 1px 92px;
+  grid-template-rows: auto 1fr;
   border: 1px dashed var(--line-strong);
   color: var(--lunar);
   transform: rotate(-3deg);
 }
 
-.ghost-main {
+.ghost-art {
+  position: relative;
+  grid-column: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 74px;
+  padding: 14px 18px;
+  overflow: hidden;
+  isolation: isolate;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  white-space: nowrap;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: url('/poster.jpg') 50% 21% / cover no-repeat;
+    opacity: 0.22;
+    filter: grayscale(1);
+  }
+}
+
+.ghost-serial {
+  color: rgba(231, 180, 123, 0.6);
+  font-family: var(--serif);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.ghost-body {
+  grid-column: 1;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 22px;
-}
-
-.ghost-index {
-  margin-bottom: 6px;
-  color: rgba(231, 180, 123, 0.6);
-  font-family: 'Times New Roman', serif;
-  font-size: 15px;
-  letter-spacing: 0.04em;
+  padding: 18px;
 }
 
 .ghost-bar {
@@ -184,13 +310,11 @@
   height: 8px;
   background: rgba(242, 238, 229, 0.08);
 
-  &.short {
-    width: 52%;
-  }
+  &.short { width: 52%; }
 }
 
 .ghost-total {
-  margin-top: 12px;
+  margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
   font-size: 10px;
@@ -198,24 +322,20 @@
 }
 
 .ghost-perforation {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   background:
     repeating-linear-gradient(to bottom, var(--line-strong) 0 5px, transparent 5px 10px)
     center / 1px calc(100% - 24px) no-repeat;
 }
 
 .ghost-stub {
+  grid-column: 3;
+  grid-row: 1 / span 2;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   padding: 16px 12px;
-
-  small {
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: 0.22em;
-  }
 }
 
 .ghost-qr {
@@ -226,17 +346,850 @@
   height: 56px;
   border: 1px dashed var(--line-strong);
   color: rgba(242, 238, 229, 0.3);
-  font-family: 'Times New Roman', serif;
+  font-family: var(--serif);
   font-size: 22px;
+}
+
+/* =========================================================
+   Ticket
+   ========================================================= */
+
+.order-list {
+  display: grid;
+  gap: 24px;
+}
+
+.ticket {
+  --stub: 216px;
+  --notch: 11px;
+  --edge: var(--line);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1px var(--stub);
+  min-width: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(90% 120% at 100% 100%, rgba(231, 180, 123, 0.06), transparent 55%),
+    linear-gradient(120deg, rgba(231, 180, 123, 0.03), rgba(255, 255, 255, 0.012)),
+    var(--surface);
+  /* drawn inside, so the notches can cut through it */
+  box-shadow: inset 0 0 0 1px var(--edge);
+  animation: ticket-in 0.6s cubic-bezier(0.16, 0.7, 0.3, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 80ms);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+  &:hover {
+    --edge: rgba(231, 180, 123, 0.45);
+    transform: translateY(-2px);
+  }
+}
+
+.ticket-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ---------- poster band ---------- */
+
+.ticket-art {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 22px;
+  min-height: 142px;
+  padding: 18px 28px 20px;
+  overflow: hidden;
+  background: #07090c;
+
+  /* the poster's black hole */
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background: url('/poster.jpg') 50% 22% / cover no-repeat;
+    transition: transform 0.9s cubic-bezier(0.16, 0.7, 0.3, 1), filter 0.4s ease;
+  }
+
+  /* darkened toward the lettering and the body below */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(90deg, rgba(5, 6, 8, 0.78) 0%, rgba(5, 6, 8, 0.2) 52%, rgba(5, 6, 8, 0.5) 100%),
+      linear-gradient(0deg, var(--surface) 0%, rgba(13, 16, 21, 0) 55%);
+  }
+}
+
+.ticket:hover .ticket-art::before {
+  transform: scale(1.04);
+}
+
+.is-collected .ticket-art::before {
+  filter: grayscale(0.85) brightness(0.8);
+}
+
+.art-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: rgba(242, 238, 229, 0.82);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+}
+
+.art-serial {
+  color: var(--ember);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.ticket-wordmark {
+  display: block;
+  width: min(300px, 62%);
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 1px 10px rgba(0, 0, 0, 0.6));
+}
+
+.wordmark-orbit {
+  fill: none;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---------- body ---------- */
+
+.ticket-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+  padding: 22px 28px 26px;
+}
+
+.ticket-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid rgba(231, 180, 123, 0.42);
+  color: var(--ember);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 10px rgba(231, 180, 123, 0.75);
+  }
+
+  &.status-collected {
+    border-color: var(--line-strong);
+    color: var(--lunar);
+
+    .status-dot { box-shadow: none; }
+  }
+}
+
+.ticket-count {
+  color: var(--lunar);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.ticket-items {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 18px;
+    min-width: 0;
+  }
+}
+
+.item-name {
+  min-width: 0;
+  font-size: clamp(19px, 2.2vw, 24px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.item-qty {
+  flex: none;
+  color: var(--ember);
+  font-family: var(--serif);
+  font-size: 21px;
+  letter-spacing: 0.04em;
+}
+
+.item-empty {
+  color: var(--lunar);
+  font-size: 13.5px;
+}
+
+/* | DATE | 2026.12.13   | LOCATION | 建中明道樓後停車場, as on the poster */
+.ticket-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 18px 0 0;
+  border-top: 1px dashed var(--line);
+}
+
+.fact-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 32px;
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+
+  dt {
+    flex: none;
+    padding: 0 9px;
+    border-inline: 1px solid var(--line-strong);
+    color: var(--lunar);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    line-height: 1.25;
+  }
+
+  dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.is-event dd {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+.is-event time {
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.is-order dd {
+  color: rgba(242, 238, 229, 0.72);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.order-id {
+  letter-spacing: 0.1em;
+}
+
+/* ---------- progress: order → pay on site → collect ---------- */
+
+.ticket-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 600px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    color: var(--lunar);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+
+    /* line to the next step */
+    &:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      top: 4px;
+      left: 14px;
+      right: 4px;
+      height: 1px;
+      background: var(--line-strong);
+    }
+
+    &.track-done::before {
+      background: linear-gradient(90deg, var(--ember), rgba(231, 180, 123, 0.4));
+    }
+
+    &.done { color: var(--off-white); }
+    &.current { color: var(--ember); }
+  }
+}
+
+.step-dot {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+
+  .done & {
+    border-color: var(--ember);
+    background: var(--ember);
+    box-shadow: 0 0 12px rgba(231, 180, 123, 0.55);
+  }
+
+  .current & {
+    border-color: var(--ember);
+    box-shadow: 0 0 0 4px rgba(231, 180, 123, 0.14);
+    animation: step-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+.step-label {
+  overflow-wrap: anywhere;
+}
+
+.ticket-hint {
+  margin: -6px 0 0;
+  color: var(--lunar);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+/* ---------- total + detail ---------- */
+
+.ticket-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.ticket-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  white-space: nowrap;
+
+  .total-label {
+    margin-right: 6px;
+    color: var(--lunar);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+  }
+
+  .currency {
+    color: var(--lunar);
+    font-size: 11px;
+  }
+
+  strong {
+    font-size: 30px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+}
+
+.detail-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--off-white);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  transition: border-color 0.25s ease;
+
+  svg {
+    color: var(--ember);
+    transition: transform 0.25s ease;
+  }
+
+  &:hover {
+    border-color: var(--ember);
+
+    svg { transform: translate(2px, -2px); }
+  }
+}
+
+/* ---------- perforation with die-cut notches ---------- */
+
+.perforation {
+  position: relative;
+  background:
+    repeating-linear-gradient(to bottom, var(--line-strong) 0 6px, transparent 6px 12px)
+    center / 1px calc(100% - var(--notch) * 2 - 12px) no-repeat;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    width: calc(var(--notch) * 2);
+    height: calc(var(--notch) * 2);
+    border-radius: 50%;
+    background: var(--void);
+    box-shadow: inset 0 0 0 1px var(--edge);
+    transform: translate(-50%, -50%);
+    transition: box-shadow 0.3s ease;
+  }
+
+  &::before { top: 0; }
+  &::after { top: 100%; }
+}
+
+/* ---------- QR stub ---------- */
+
+.ticket-stub {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 28px 20px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+
+  &:focus-visible {
+    outline-offset: -10px;
+  }
+}
+
+/* ember scanner corners around the white code */
+.qr-frame {
+  --corner: 14px;
+  --stroke: 1.5px;
+
+  position: relative;
+  display: block;
+  flex: none;
+  padding: 10px;
+  background:
+    linear-gradient(var(--ember), var(--ember)) left top / var(--corner) var(--stroke),
+    linear-gradient(var(--ember), var(--ember)) left top / var(--stroke) var(--corner),
+    linear-gradient(var(--ember), var(--ember)) right top / var(--corner) var(--stroke),
+    linear-gradient(var(--ember), var(--ember)) right top / var(--stroke) var(--corner),
+    linear-gradient(var(--ember), var(--ember)) left bottom / var(--corner) var(--stroke),
+    linear-gradient(var(--ember), var(--ember)) left bottom / var(--stroke) var(--corner),
+    linear-gradient(var(--ember), var(--ember)) right bottom / var(--corner) var(--stroke),
+    linear-gradient(var(--ember), var(--ember)) right bottom / var(--stroke) var(--corner);
+  background-repeat: no-repeat;
+  transition: transform 0.3s ease;
+}
+
+.qr-thumb {
+  display: block;
+  width: 116px;
+  height: 116px;
+  padding: 6px;
+  background: #fff;
+  image-rendering: pixelated;
+  transition: opacity 0.3s ease;
+}
+
+.ticket-stub:hover .qr-frame {
+  transform: scale(1.04);
+}
+
+.stub-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stub-label {
+  color: var(--ember);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.stub-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lunar);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.is-collected .qr-thumb {
+  opacity: 0.5;
+}
+
+/* a collected ticket gets stamped across its code */
+.stub-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 14px 7px;
+  border: 1.5px solid rgba(231, 180, 123, 0.9);
+  outline: 1px solid rgba(231, 180, 123, 0.35);
+  outline-offset: 3px;
+  background: rgba(13, 16, 21, 0.84);
+  color: var(--ember);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  pointer-events: none;
+
+  small {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.32em;
+  }
+}
+
+/* ---------- loading ---------- */
+
+.is-skeleton {
+  animation: none;
+
+  &:hover { transform: none; }
+
+  .ticket-art {
+    &::before { opacity: 0.18; filter: grayscale(1); }
+  }
+
+  .ticket-body { gap: 14px; }
+}
+
+.skeleton-bar,
+.skeleton-qr {
+  display: block;
+  background: linear-gradient(90deg, rgba(242, 238, 229, 0.05), rgba(242, 238, 229, 0.11), rgba(242, 238, 229, 0.05));
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-bar {
+  width: 46%;
+  height: 10px;
+
+  &.wide { width: 68%; height: 18px; }
+  &.short { width: 28%; }
+}
+
+.skeleton-qr {
+  width: 116px;
+  height: 116px;
+}
+
+.loading-copy {
+  display: flex;
+  align-items: center;
+  margin: 4px 0 0;
+  color: var(--lunar);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.loading-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: var(--ember);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* =========================================================
+   QR dialog (rendered outside .orders-page, so it repeats
+   the tokens above)
+   ========================================================= */
+
+.qr-modal {
+  position: relative;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 32px 26px 26px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(231, 180, 123, 0.11), transparent 62%),
+    var(--surface);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  color: var(--off-white);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  text-align: center;
+  -webkit-font-smoothing: antialiased;
+
+  .outline-button {
+    min-width: 0;
+    margin: 0 auto 18px;
+  }
+}
+
+.qr-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--off-white);
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 0.2s ease, color 0.2s ease;
+
+  &:hover {
+    border-color: var(--ember);
+    color: var(--ember);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ember);
+    outline-offset: 2px;
+  }
+}
+
+.qr-eyebrow {
+  margin: 0 0 12px;
+  color: var(--ember);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+
+.qr-title {
+  margin: 0 auto;
+  max-width: 28ch;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.qr-order {
+  margin: 8px 0 0;
+  color: var(--lunar);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+
+  span {
+    margin-left: 6px;
+    color: rgba(242, 238, 229, 0.78);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    overflow-wrap: anywhere;
+  }
+}
+
+.qr-frame.is-large {
+  --corner: 22px;
+  --stroke: 2px;
+
+  width: max-content;
+  margin: 26px auto 22px;
+  padding: 14px;
+}
+
+.qr-modal-canvas {
+  display: block;
+  width: min(248px, 64vw);
+  height: min(248px, 64vw);
+  padding: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+
+.qr-error {
+  margin: 0 0 14px;
+  color: #e2645a;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.qr-status {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--line-strong);
+    color: var(--lunar);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+
+    &.done {
+      border-color: rgba(231, 180, 123, 0.42);
+      color: var(--ember);
+    }
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+  }
+
+  .done .status-dot {
+    background: currentColor;
+  }
+}
+
+.qr-hint {
+  margin: 0;
+  color: rgba(242, 238, 229, 0.78);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.qr-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  color: var(--lunar);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+
+  svg { color: var(--ember); }
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .ticket { --stub: 188px; }
+
+  .qr-thumb,
+  .skeleton-qr {
+    width: 104px;
+    height: 104px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* the stub tears off along the bottom */
+  .ticket {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .perforation {
+    height: 1px;
+    background:
+      repeating-linear-gradient(to right, var(--line-strong) 0 6px, transparent 6px 12px)
+      center / calc(100% - var(--notch) * 2 - 12px) 1px no-repeat;
+
+    &::before,
+    &::after {
+      top: 50%;
+    }
+
+    &::before { left: 0; }
+    &::after { left: 100%; }
+  }
+
+  .ticket-stub {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 22px;
+    padding: 22px 24px 24px;
+    text-align: left;
+  }
+
+  .stub-copy {
+    align-items: flex-start;
+  }
+
 }
 
 @media (max-width: 720px) {
   .page-header {
     display: block;
+    margin-bottom: 44px;
   }
 
-  .account-chip {
-    margin-top: 24px;
+  .header-side {
+    align-items: flex-start;
+    margin-top: 26px;
   }
 
   .no-tickets {
@@ -245,517 +1198,121 @@
 
   .ghost-ticket {
     order: -1;
-    width: min(100%, 300px);
+    width: min(100%, 320px);
     margin: 8px 0 4px;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .no-tickets {
-    animation: none;
-  }
-}
-
-.empty-state {
-  min-height: 260px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(20, 23, 28, 0.72);
-  text-align: center;
-
-  h2 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-  }
-
-  p {
-    max-width: 36ch;
-    margin: 10px 0 0;
-    font-size: 13.5px;
-    line-height: 1.7;
-    color: var(--lunar);
-  }
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0 22px;
-  border-radius: 999px;
-  background: var(--white);
-  color: var(--void);
-  font-size: 14px;
-  font-weight: 700;
-  text-decoration: none;
-  transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
-
-  &:hover {
-    transform: translateY(-2px);
-    opacity: 0.9;
-  }
-}
-
-.order-list {
-  display: grid;
-  gap: 18px;
-}
-
-.ticket {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background:
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.035),
-      rgba(255, 255, 255, 0.01)
-    ),
-    var(--charcoal);
-  overflow: hidden;
-  opacity: 0;
-  animation: ticket-in 0.55s ease forwards;
-  animation-delay: calc(var(--i) * 70ms);
-}
-
-.ticket-main {
-  min-width: 0;
-  padding: 28px 30px;
-}
-
-.ticket-progress {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  max-width: 180px;
-  margin-bottom: 24px;
-
-  .step {
-    position: relative;
-    z-index: 2;
-    width: 8px;
-    height: 8px;
-    flex: 0 0 8px;
-    border-radius: 50%;
-    background: var(--muted);
-  }
-
-  .track {
-    width: 100%;
-    height: 1px;
-    background: var(--line-strong);
-  }
-
-  &.done {
-    .step {
-      background: var(--white);
-    }
-
-    .track {
-      background: rgba(255, 255, 255, 0.35);
-    }
-  }
-}
-
-.ticket-status {
-  position: absolute;
-  top: 14px;
-  left: 0;
-  margin: 0;
-  color: var(--lunar);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.ticket-date {
-  margin: 0 0 8px;
-  color: var(--lunar);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-}
-
-.ticket-id {
-  margin: 0;
-  color: var(--white);
-  font-size: clamp(22px, 3vw, 32px);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-}
-
-.item-summary {
-  margin: 10px 0 26px;
-  color: var(--lunar);
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.ticket-footer {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
-
-.price {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  white-space: nowrap;
-
-  .currency {
-    color: var(--lunar);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .num {
-    color: var(--white);
-    font-size: 22px;
-    font-weight: 700;
-  }
-}
-
-.ticket-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-
-  a,
-  button {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--white);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: opacity 0.2s ease;
-  }
-
-  a:hover,
-  button:hover {
-    opacity: 0.65;
-  }
-
-  p {
-    margin: 0;
-    color: var(--muted);
-  }
-
-}
-
-.num {
-  font-variant-numeric: tabular-nums;
-}
-
-/* QR 區域 */
-
-.perforation {
-  width: 1px;
-  margin: 16px 0;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      var(--line-strong) 0,
-      var(--line-strong) 7px,
-      transparent 7px,
-      transparent 13px
-    );
-}
-
-.ticket-stub {
-  width: auto;
-  min-width: 112px;
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 18px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  appearance: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.qr-thumb {
-  display: block;
-  width: 88px;
-  height: 88px;
-  max-width: 88px;
-  max-height: 88px;
-  flex: 0 0 88px;
-  padding: 0;
-  background: #fff;
-  border-radius: 6px;
-  image-rendering: pixelated;
-}
-
-/* QR Modal */
-
-.qr-modal {
-  position: relative;
-  width: min(320px, calc(100vw - 32px));
-  padding: 32px 24px 28px;
-  box-sizing: border-box;
-  background: #14171c;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-  color: #fff;
-  text-align: center;
-  overflow: hidden;
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #9aa3ac;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  h3 {
-    margin: 0;
-    color: #fff;
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-}
-
-.qr-modal-canvas {
-  display: block;
-  width: 220px;
-  height: 220px;
-  max-width: 100%;
-  margin: 24px auto 18px;
-  padding: 10px;
-  box-sizing: border-box;
-  background: #fff;
-  border-radius: 10px;
-  image-rendering: pixelated;
-}
-
-.qr-modal-hint {
-  margin: 0;
-  color: #9aa3ac;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.qr-modal-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  cursor: pointer;
-  appearance: none;
-  transition:
-    background 0.2s ease,
-    opacity 0.2s ease;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.14);
-  }
-}
-
-/* Tablet */
-
-@media (max-width: 700px) {
+@media (max-width: 480px) {
   .orders-page {
-    width: min(100% - 28px, 600px);
-    padding-top: 52px;
+    width: min(100% - 32px, 1120px);
+    padding-top: 96px;
   }
 
-  .ticket {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .order-list { gap: 20px; }
+
+  .ticket { --notch: 10px; }
+
+  .ticket-art {
+    min-height: 128px;
+    padding: 16px 20px 18px;
+
+    &::before { background-position: 50% 17%; }
   }
 
-  .ticket-main {
-    padding: 24px;
+  .art-top { font-size: 8.5px; letter-spacing: 0.22em; }
+  .art-serial { font-size: 14px; }
+  .ticket-wordmark { width: min(260px, 86%); }
+
+  .ticket-body {
+    gap: 20px;
+    padding: 18px 20px 22px;
   }
+
+  .item-name { font-size: 19px; }
+  .item-qty { font-size: 19px; }
+
+  .fact-row { gap: 10px 24px; }
+  .is-event time { font-size: 19px; }
+  .is-event dd { font-size: 14px; }
+
+  .ticket-steps li { font-size: 11px; letter-spacing: 0.02em; }
+
+  .ticket-total strong { font-size: 26px; }
 
   .ticket-stub {
-    min-width: 104px;
-    padding: 14px;
-  }
-
-  .qr-thumb {
-    width: 80px;
-    height: 80px;
-    max-width: 80px;
-    max-height: 80px;
-    flex-basis: 80px;
-  }
-
-  .ticket-footer {
-    gap: 16px;
-  }
-
-  .ticket-actions {
-    gap: 9px;
-  }
-}
-
-/* Mobile */
-
-@media (max-width: 560px) {
-  .orders-page {
-    width: calc(100% - 24px);
-    padding: 42px 0 72px;
-  }
-
-  .page-header {
-    margin: 56px 0 32px;
-    padding-bottom: 26px;
-  }
-
-  .ticket {
-    grid-template-columns: 1fr;
-    border-radius: 16px;
-  }
-
-  .ticket-main {
-    padding: 22px 20px;
-  }
-
-  .ticket-progress {
-    margin-bottom: 24px;
-  }
-
-  .ticket-id {
-    font-size: 25px;
-  }
-
-  .ticket-footer {
-    align-items: flex-start;
-    flex-direction: column;
     gap: 18px;
+    padding: 20px;
   }
 
-  .ticket-actions {
-    width: 100%;
-    flex-wrap: wrap;
+  .qr-thumb,
+  .skeleton-qr {
+    width: 96px;
+    height: 96px;
   }
 
-  .perforation {
-    width: auto;
-    height: 1px;
-    margin: 0 16px;
-    background:
-      repeating-linear-gradient(
-        to right,
-        var(--line-strong) 0,
-        var(--line-strong) 7px,
-        transparent 7px,
-        transparent 13px
-      );
-  }
-
-  .ticket-stub {
-    width: 100%;
-    min-width: 0;
-    min-height: 116px;
-    height: 116px;
-    padding: 14px;
-  }
-
-  .qr-thumb {
-    width: 88px;
-    height: 88px;
-    max-width: 88px;
-    max-height: 88px;
-    flex-basis: 88px;
-  }
+  .stub-stamp { font-size: 14px; }
 
   .qr-modal {
-    width: calc(100vw - 28px);
-    padding: 30px 18px 24px;
-    border-radius: 16px;
-  }
-
-  .qr-modal-canvas {
-    width: min(220px, 68vw);
-    height: min(220px, 68vw);
-    margin-top: 22px;
+    padding: 30px 18px 22px;
   }
 }
 
-/* Very small screens */
+@media (max-width: 360px) {
+  .ticket-art { padding-inline: 16px; }
+  .ticket-body { padding-inline: 16px; }
+  .ticket-total .total-label { display: none; }
+  .ticket-stub { padding-inline: 16px; }
 
-@media (max-width: 380px) {
-  .orders-page {
-    width: calc(100% - 20px);
+  .qr-thumb,
+  .skeleton-qr {
+    width: 84px;
+    height: 84px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket,
+  .no-tickets,
+  .step-dot,
+  .skeleton-bar,
+  .skeleton-qr,
+  .loading-dot {
+    animation: none !important;
   }
 
-  .ticket-main {
-    padding: 20px 17px;
+  .ticket,
+  .ticket-art::before,
+  .qr-frame,
+  .detail-link svg {
+    transition: none;
   }
 
-  .ticket-stub {
-    min-height: 108px;
-    height: 108px;
-  }
-
-  .qr-thumb {
-    width: 82px;
-    height: 82px;
-    max-width: 82px;
-    max-height: 82px;
-    flex-basis: 82px;
-  }
-
-  .qr-modal {
-    width: calc(100vw - 24px);
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-
-  .qr-modal-canvas {
-    width: min(220px, 68vw);
-    height: min(220px, 68vw);
+  .ticket:hover,
+  .ticket:hover .ticket-art::before,
+  .ticket-stub:hover .qr-frame {
+    transform: none;
   }
 }
 
 @keyframes ticket-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(14px);
   }
+}
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes step-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(231, 180, 123, 0.14); }
+  50% { box-shadow: 0 0 0 7px rgba(231, 180, 123, 0.04); }
+}
+
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
