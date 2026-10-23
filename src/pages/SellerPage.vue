@@ -1,8 +1,14 @@
 <template>
   <div class="seller-page">
     <header class="page-header">
-      <p class="eyebrow">{{ auth.email }}</p>
-      <h1>登記賣票</h1>
+      <div class="header-copy">
+        <p class="eyebrow"><span /> CK PARTY NIGHT / SELLER PROGRAM</p>
+        <h1>賣票登記</h1>
+      </div>
+      <div class="account-chip">
+        <span class="account-dot" aria-hidden="true" />
+        <span>{{ auth.email }}</span>
+      </div>
     </header>
 
     <div v-if="loading" class="empty-state" role="status">
@@ -11,19 +17,26 @@
 
     <div v-else-if="!auth.isSeller" class="empty-state">
       <h2>你不在賣票名單中</h2>
-      <p>登記賣票只開放給班聯會名單上的同學。如果你要幫忙賣票，請聯絡總副召把你的 Google 帳號加入名單，再重新整理這頁。</p>
+      <p>登記賣票只開放給班聯會儲備幹部；如果你要幫忙賣票，請聯絡總副召把你的 Google 帳號加入名單，再重新整理這頁</p>
     </div>
 
     <div v-else-if="loadError" class="empty-state" role="alert">
       <h2>目前無法載入</h2>
-      <p>連線可能暫時中斷，請重試。</p>
+      <p>連線可能暫時中斷，請重試</p>
       <button type="button" class="primary-button" @click="load">重新載入</button>
     </div>
 
     <template v-else>
       <section class="card goal-card" aria-labelledby="goal-title">
+        <div class="goal-topline">
+          <p class="section-label">01 / OUR COLLECTIVE GOAL</p>
+          <p class="goal-status"><span /> {{ goalPercent >= 100 ? 'GOAL REACHED' : 'IN PROGRESS' }}</p>
+        </div>
         <div class="goal-head">
-          <h2 id="goal-title">共同目標</h2>
+          <div>
+            <h2 id="goal-title">共同目標<em>{{ program.goal.toLocaleString() }}</em> 張</h2>
+            <p class="muted">不會強制每個人賣到特定張數，賣特別多的之後會有獎勵！</p>
+          </div>
           <p class="goal-numbers">
             <strong class="num">{{ total.toLocaleString() }}</strong>
             <span class="num"> / {{ program.goal.toLocaleString() }} 張</span>
@@ -39,71 +52,82 @@
         >
           <span :style="{ width: `${goalPercent}%` }" />
         </div>
-        <p class="muted">
-          {{ SELLER_LAST_YEAR }}，今年目標先定 {{ program.goal.toLocaleString() }} 張。
-          不會強制每個人賣到特定張數，賣特別多的之後會有獎勵！
-        </p>
-        <p class="mine">
-          你已登記 <strong class="num">{{ myTotal }}</strong> 張
-        </p>
+        <div class="goal-footer">
+          <p class="goal-note">{{ SELLER_LAST_YEAR }}，今年目標先定 {{ program.goal.toLocaleString() }} 張</p>
+          <p class="mine"><strong class="num">{{ myTotal }}</strong> <span>你已登記的票券</span></p>
+        </div>
       </section>
 
-      <section class="card" aria-labelledby="form-title">
-        <h2 id="form-title">登記拿票</h2>
+      <div class="action-grid">
+        <section class="card registration-card" aria-labelledby="form-title">
+          <div class="card-heading">
+            <p class="section-label">02 / GET YOUR TICKETS</p>
+            <span class="card-index">02</span>
+          </div>
+          <h2 id="form-title">登記拿票</h2>
 
-        <p v-if="!program.enabled || !ticketType" class="notice">
-          目前尚未開放登記，開放後就能在這裡登記。
-        </p>
-
-        <form v-else class="register-form" @submit.prevent="submit">
-          <p class="muted">
-            票種：{{ ticketType.name }}・每張 NT$ <span class="num">{{ Number(ticketType.price || 0).toLocaleString() }}</span>
+          <p v-if="!program.enabled || !ticketType" class="notice">
+            目前尚未開放登記，開放後就能在這裡登記
           </p>
 
-          <label class="field">
-            <span>姓名</span>
-            <input v-model="sellerName" type="text" maxlength="50" autocomplete="name" required>
-          </label>
+          <form v-else class="register-form" @submit.prevent="submit">
+            <div class="ticket-meta">
+              <span>{{ ticketType.name }}</span>
+              <strong>NT$ <span class="num">{{ Number(ticketType.price || 0).toLocaleString() }}</span> <small>/ 張</small></strong>
+            </div>
 
-          <label class="field">
-            <span>要拿幾張票</span>
-            <input
-              v-model.number="quantity"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              :max="MAX_SELLER_TICKETS"
-              step="1"
-              required
-            >
-          </label>
+            <label class="field">
+              <span>姓名</span>
+              <input v-model="sellerName" type="text" maxlength="50" autocomplete="name" required>
+            </label>
 
-          <p class="warning">
-            登記後會直接從二售票扣除，拿票之後就一定要賣掉，不能退回。
-          </p>
+            <label class="field">
+              <span>要拿幾張票 <small>最多 {{ MAX_SELLER_TICKETS }} 張</small></span>
+              <input
+                v-model.number="quantity"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                :max="MAX_SELLER_TICKETS"
+                step="1"
+                required
+              >
+            </label>
 
-          <p v-if="submitError" class="error" role="alert">{{ submitError }}</p>
+            <p class="warning"><span aria-hidden="true">!</span> 登記後會直接從二售票扣除，拿票之後就一定要賣掉，不能退回</p>
 
-          <button type="submit" class="primary-button" :disabled="submitting || !canSubmit">
-            {{ submitting ? '登記中…' : '確認登記' }}
-          </button>
-        </form>
-      </section>
+            <p v-if="submitError" class="error" role="alert">{{ submitError }}</p>
 
-      <section class="card" aria-labelledby="guide-title">
-        <h2 id="guide-title">怎麼賣</h2>
-        <ol class="steps">
-          <li v-for="step in SELLER_STEPS" :key="step">{{ step }}</li>
-        </ol>
+            <button type="submit" class="primary-button" :disabled="submitting || !canSubmit">
+              <span>{{ submitting ? '登記中…' : '確認登記' }}</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </form>
+        </section>
 
-        <h3>宣傳方式</h3>
-        <ul class="tips">
-          <li v-for="tip in SELLER_TIPS" :key="tip">{{ tip }}</li>
-        </ul>
-        <a :href="SELLER_INSTAGRAM_URL" target="_blank" rel="noopener" class="text-link">CK Party Night Instagram</a>
-      </section>
+        <section class="card guide-card" aria-labelledby="guide-title">
+          <div class="card-heading">
+            <p class="section-label">03 / MAKE IT COUNT</p>
+            <span class="card-index">03</span>
+          </div>
+          <h2 id="guide-title">怎麼賣</h2>
+          <ol class="steps">
+            <li v-for="(step, index) in SELLER_STEPS" :key="step"><span>0{{ index + 1 }}</span>{{ step }}</li>
+          </ol>
+
+          <h3>宣傳方式</h3>
+          <ul class="tips">
+            <li v-for="tip in SELLER_TIPS" :key="tip">{{ tip }}</li>
+          </ul>
+          <a :href="SELLER_INSTAGRAM_URL" target="_blank" rel="noopener" class="text-link">CK Party Night Instagram <span aria-hidden="true">↗</span></a>
+        </section>
+      </div>
 
       <section class="card" aria-labelledby="history-title">
+        <div class="card-heading">
+          <p class="section-label">04 / YOUR ACTIVITY</p>
+          <span class="card-index">04</span>
+        </div>
         <h2 id="history-title">我的登記紀錄</h2>
         <p v-if="registrations.length === 0" class="muted">還沒有登記紀錄</p>
         <ul v-else class="history">
