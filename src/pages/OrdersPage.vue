@@ -1,7 +1,7 @@
 <template>
   <div class="orders-page">
     <header class="page-header">
-      <div class="header-copy" style="margin-top: -80px">
+      <div class="header-copy">
         <p class="eyebrow"><span /> CK PARTY NIGHT / MY TICKETS</p>
         <h1>購票紀錄</h1>
       </div>
