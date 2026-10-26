@@ -181,12 +181,14 @@
         </div>
         <div class="stack">
           <ChartCard
-            title="銷售趨勢"
-            :subtitle="periodChartSubtitle"
+            v-for="metric in variants(METRICS, periodMetric)"
+            :key="metric.id"
+            :title="variantTitle('銷售趨勢', metric.label)"
+            :subtitle="periodChartSubtitleOf(metric)"
             :legend="periodLegend"
             legend-shape="line"
-            :table="periodTable"
-            :empty="periodEmpty"
+            :table="periodTableOf(metric)"
+            :empty="isFlat(periodChartSeriesOf(metric.key))"
           >
             <template #controls>
               <div class="segmented small" role="group" aria-label="趨勢指標">
@@ -215,13 +217,13 @@
               </div>
             </template>
             <LineChart
-              :series="periodChartSeries"
-              :label="`${periodChartSubtitle}折線圖`"
-              :format="periodMetric.format"
-              :axis-format="periodMetric.axis"
+              :series="periodChartSeriesOf(metric.key)"
+              :label="`${periodChartSubtitleOf(metric)}折線圖`"
+              :format="metric.format"
+              :axis-format="metric.axis"
               :x-label="periodXLabel"
               :tooltip-title="periodTitle"
-              :integer="['orders', 'tickets'].includes(periodMetricKey)"
+              :integer="['orders', 'tickets'].includes(metric.key)"
               area
             />
           </ChartCard>
@@ -245,53 +247,58 @@
           </div>
         </div>
         <div class="stack">
-          <ChartCard
-            :title="`${timelineMode === 'cumulative' ? '累積' : '每日'}營收`"
-            :subtitle="report.sameTime ? `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}營收，${previous.year} 年只算到同一時間` : `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}營收`"
-            :legend="legend"
-            legend-shape="line"
-            :table="revenueTimelineTable"
-            :empty="timelineEmpty"
-          >
-            <LineChart
-              :series="revenueTimelineSeries"
-              :label="`${timelineMode === 'cumulative' ? '累積' : '每日'}營收折線圖`"
-              :format="formatCurrency"
-              :axis-format="formatCompact"
-              :x-label="dayTick"
-              :tooltip-title="dayTitle"
-              :x-step-offset="1"
-              area
-            />
-          </ChartCard>
+          <template v-for="mode in variants(TIMELINE_MODES, timelineModeOption)" :key="mode.id">
+            <ChartCard
+              :title="`${mode.label}營收`"
+              :subtitle="timelineSubtitle(mode, '營收')"
+              :legend="legend"
+              legend-shape="line"
+              :table="seriesTable(revenueTimelineSeriesOf(mode.key), formatCurrency)"
+              :empty="timelineEmpty"
+            >
+              <LineChart
+                :series="revenueTimelineSeriesOf(mode.key)"
+                :label="`${mode.label}營收折線圖`"
+                :format="formatCurrency"
+                :axis-format="formatCompact"
+                :x-label="dayTick"
+                :tooltip-title="dayTitle"
+                :x-step-offset="1"
+                area
+              />
+            </ChartCard>
 
-          <ChartCard
-            :title="`${timelineMode === 'cumulative' ? '累積' : '每日'}售出張數`"
-            :subtitle="report.sameTime ? `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}售出張數，${previous.year} 年只算到同一時間` : `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}售出張數`"
-            :legend="legend"
-            legend-shape="line"
-            :table="ticketTimelineTable"
-            :empty="timelineEmpty"
-          >
-            <LineChart
-              :series="ticketTimelineSeries"
-              :label="`${timelineMode === 'cumulative' ? '累積' : '每日'}售出張數折線圖`"
-              :format="formatCount"
-              :axis-format="formatCount"
-              :x-label="dayTick"
-              :tooltip-title="dayTitle"
-              :x-step-offset="1"
-              integer
-              area
-            />
-          </ChartCard>
+            <ChartCard
+              :title="`${mode.label}售出張數`"
+              :subtitle="timelineSubtitle(mode, '售出張數')"
+              :legend="legend"
+              legend-shape="line"
+              :table="seriesTable(ticketTimelineSeriesOf(mode.key), formatCount)"
+              :empty="timelineEmpty"
+            >
+              <LineChart
+                :series="ticketTimelineSeriesOf(mode.key)"
+                :label="`${mode.label}售出張數折線圖`"
+                :format="formatCount"
+                :axis-format="formatCount"
+                :x-label="dayTick"
+                :tooltip-title="dayTitle"
+                :x-step-offset="1"
+                integer
+                area
+              />
+            </ChartCard>
+          </template>
 
+          <!-- the PDF has the daily revenue and tickets above already -->
           <ChartCard
-            title="每日表現"
-            :subtitle="`開賣後每天的${slotMetric.label}`"
+            v-for="metric in variants(METRICS.filter((item) => !['revenue', 'tickets'].includes(item.key)), slotMetric)"
+            :key="metric.id"
+            :title="variantTitle('每日表現', metric.label)"
+            :subtitle="`開賣後每天的${metric.label}`"
             :legend="legend"
             legend-shape="line"
-            :table="slotTable"
+            :table="seriesTable(timeSeries(metric.key), metric.format)"
             :empty="timelineEmpty"
           >
             <template #controls>
@@ -309,14 +316,14 @@
               </div>
             </template>
             <LineChart
-              :series="slotSeries"
-              :label="`每日${slotMetric.label}折線圖`"
-              :format="slotMetric.format"
-              :axis-format="slotMetric.axis"
+              :series="timeSeries(metric.key)"
+              :label="`每日${metric.label}折線圖`"
+              :format="metric.format"
+              :axis-format="metric.axis"
               :x-label="dayTick"
               :tooltip-title="dayTitle"
               :x-step-offset="1"
-              :integer="['orders', 'tickets'].includes(slotMetricKey)"
+              :integer="['orders', 'tickets'].includes(metric.key)"
             />
           </ChartCard>
 
@@ -388,25 +395,27 @@
           </ChartCard>
         </div>
         <div class="card-grid">
-          <ChartCard
-            title="各校／身分購票張數"
-            :subtitle="`依訂購時選擇的學校／身分，比較${groupMetric.label}`"
-            :legend="legend"
-            :table="identityTable"
-            :empty="!report.identities.length"
-          >
-            <BarList :rows="identityRows" :colors="colors" :series-labels="seriesLabels" :format="groupMetric.format" />
-          </ChartCard>
+          <template v-for="metric in variants(METRICS, groupMetric)" :key="metric.id">
+            <ChartCard
+              :title="exporting ? `各校／身分（${metric.label}）` : '各校／身分購票張數'"
+              :subtitle="`依訂購時選擇的學校／身分，比較${metric.label}`"
+              :legend="legend"
+              :table="identityTable"
+              :empty="!report.identities.length"
+            >
+              <BarList :rows="groupBarRows(report.identities, metric.key)" :colors="colors" :series-labels="seriesLabels" :format="metric.format" />
+            </ChartCard>
 
-          <ChartCard
-            title="建中學生年級"
-            :subtitle="`學校為建國中學的訂單，依班級判斷年級，比較${groupMetric.label}`"
-            :legend="legend"
-            :table="gradeTable"
-            :empty="!report.grades.length"
-          >
-            <BarList :rows="gradeRows" :colors="colors" :series-labels="seriesLabels" :format="groupMetric.format" />
-          </ChartCard>
+            <ChartCard
+              :title="variantTitle('建中學生年級', metric.label)"
+              :subtitle="`學校為建國中學的訂單，依班級判斷年級，比較${metric.label}`"
+              :legend="legend"
+              :table="gradeTable"
+              :empty="!report.grades.length"
+            >
+              <BarList :rows="groupBarRows(report.grades, metric.key)" :colors="colors" :series-labels="seriesLabels" :format="metric.format" />
+            </ChartCard>
+          </template>
         </div>
       </section>
 
@@ -445,11 +454,13 @@
           </ChartCard>
 
           <ChartCard
-            title="每筆訂單張數"
-            :subtitle="unitMode.subtitle"
+            v-for="mode in variants(UNIT_MODES, unitMode)"
+            :key="mode.id"
+            :title="variantTitle('每筆訂單張數', mode.label)"
+            :subtitle="mode.subtitle"
             :legend="legend"
-            :table="unitTable"
-            :empty="isEmptyShares(unitShares)"
+            :table="shareTable('每筆張數', unitSharesOf(mode.key), mode.unit)"
+            :empty="isEmptyShares(unitSharesOf(mode.key))"
           >
             <template #controls>
               <div class="segmented small" role="group" aria-label="訂單或張數占比">
@@ -465,7 +476,7 @@
                 </button>
               </div>
             </template>
-            <BarList :rows="unitRows" :colors="colors" :series-labels="seriesLabels" :format="formatPercent" />
+            <BarList :rows="barRows(unitSharesOf(mode.key), (entry) => entry.share)" :colors="colors" :series-labels="seriesLabels" :format="formatPercent" />
           </ChartCard>
         </div>
       </section>
@@ -750,6 +761,14 @@ const groupMetric = computed(() => METRICS.find((metric) => metric.key === group
 
 const exporting = ref(false)
 const palette = computed(() => (exporting.value ? PRINT_PALETTE : SCREEN_PALETTE))
+
+// A chart with a toggle shows the chosen option on screen; the PDF has every
+// option, each named in its title. On screen `id` stays the same, so
+// switching options keeps the card (and its table view) instead of a new one.
+const variants = (options, chosen) => (exporting.value
+  ? options.map((option) => ({ ...option, id: option.key }))
+  : [{ ...chosen, id: 'chosen' }])
+const variantTitle = (title, label) => (exporting.value ? `${title}（${label}）` : title)
 provide('chartPalette', palette)
 // Chart cards hide their buttons too.
 provide('exportingPdf', exporting)
@@ -874,12 +893,18 @@ function timeSeries(metric) {
 }
 
 const timelineMode = ref('cumulative')
-const revenueTimelineSeries = computed(() => timeSeries(timelineMode.value === 'cumulative' ? 'cumulative' : 'revenue'))
-const ticketTimelineSeries = computed(() => timeSeries(timelineMode.value === 'cumulative' ? 'cumulativeTickets' : 'tickets'))
-const slotSeries = computed(() => timeSeries(slotMetricKey.value))
-const timelineEmpty = computed(() =>
-  !revenueTimelineSeries.value.some((series) => series.values.some((value) => value > 0))
-)
+const timelineModeOption = computed(() => TIMELINE_MODES.find((mode) => mode.key === timelineMode.value))
+const revenueTimelineSeriesOf = (mode) => timeSeries(mode === 'cumulative' ? 'cumulative' : 'revenue')
+const ticketTimelineSeriesOf = (mode) => timeSeries(mode === 'cumulative' ? 'cumulativeTickets' : 'tickets')
+
+function timelineSubtitle(mode, measure) {
+  const text = `開賣後每天的${mode.key === 'cumulative' ? '累積' : ''}${measure}`
+  return report.value.sameTime ? `${text}，${previous.value.year} 年只算到同一時間` : text
+}
+
+// no line rises above 0
+const isFlat = (series) => !series.some((item) => item.values.some((value) => value > 0))
+const timelineEmpty = computed(() => isFlat(timeSeries('revenue')))
 
 // ---- Shares (hours, order values, tickets per order) ----
 
@@ -926,14 +951,12 @@ function barRows(rows, pick) {
   }))
 }
 
-const identityRows = computed(() => barRows(report.value.identities, (summary) => summary[groupMetricKey.value]))
-const gradeRows = computed(() => barRows(report.value.grades, (summary) => summary[groupMetricKey.value]))
+const groupBarRows = (rows, key) => barRows(rows, (summary) => summary[key])
 const valueRows = computed(() => barRows(report.value.values, (entry) => entry.share))
 
 const unitModeKey = ref('orders')
 const unitMode = computed(() => UNIT_MODES.find((mode) => mode.key === unitModeKey.value))
-const unitShares = computed(() => (unitModeKey.value === 'orders' ? report.value.units : report.value.unitTickets))
-const unitRows = computed(() => barRows(unitShares.value, (entry) => entry.share))
+const unitSharesOf = (key) => (key === 'orders' ? report.value.units : report.value.unitTickets)
 
 const ticketTypeLists = computed(() => {
   const list = (label, color, types) => ({
@@ -1052,14 +1075,13 @@ const periodTiles = computed(() => {
 const periodPoints = computed(() => periodSeries(current.value.rows, periodRange.value, periodGranularity.value, now.value.getTime()))
 const periodXLabel = (i) => periodPoints.value[i]?.label ?? ''
 const periodTitle = (i) => periodPoints.value[i]?.title ?? ''
-const periodChartSubtitle = computed(() =>
-  `${{ hour: '每小時', day: '每日', month: '每月' }[periodGranularity.value]}的${periodMetric.value.label}`)
+const periodChartSubtitleOf = (metric) =>
+  `${{ hour: '每小時', day: '每日', month: '每月' }[periodGranularity.value]}的${metric.label}`
 const periodLegend = computed(() => [
   { label: '本期', color: palette.value.current },
   ...(periodRange.value.previous ? [{ label: periodComparison.value, color: palette.value.previous }] : [])
 ])
-const periodChartSeries = computed(() => {
-  const key = periodMetricKey.value
+function periodChartSeriesOf(key) {
   const series = [{
     key: 'current',
     label: '本期',
@@ -1076,8 +1098,7 @@ const periodChartSeries = computed(() => {
     })
   }
   return series
-})
-const periodEmpty = computed(() => !periodChartSeries.value.some((series) => series.values.some((value) => value > 0)))
+}
 
 // ---- 行銷 ----
 
@@ -1183,14 +1204,10 @@ function groupTable(header, rows) {
   }
 }
 
-const revenueTimelineTable = computed(() => seriesTable(revenueTimelineSeries.value, formatCurrency))
-const ticketTimelineTable = computed(() => seriesTable(ticketTimelineSeries.value, formatCount))
-const slotTable = computed(() => seriesTable(slotSeries.value, slotMetric.value.format))
 const hourTable = computed(() => shareTable('時段', hourRows.value, '筆'))
 const identityTable = computed(() => groupTable('學校／身分', report.value.identities))
 const gradeTable = computed(() => groupTable('年級', report.value.grades))
 const valueTable = computed(() => shareTable('訂單金額（NT$）', report.value.values, '筆'))
-const unitTable = computed(() => shareTable('每筆張數', unitShares.value, unitMode.value.unit))
 const stageTable = computed(() => shareTable('階段', report.value.stages, '張'))
 const weekdayTable = computed(() => shareTable('星期', report.value.weekdays, '筆'))
 
@@ -1210,9 +1227,7 @@ const ticketTypeTable = computed(() => {
   }
 })
 
-const periodTable = computed(() => {
-  const key = periodMetricKey.value
-  const format = periodMetric.value.format
+function periodTableOf({ key, format }) {
   const compared = Boolean(periodRange.value.previous)
   return {
     columns: ['時間', '本期', ...(compared ? [periodComparison.value] : [])],
@@ -1222,7 +1237,7 @@ const periodTable = computed(() => {
       ...(compared ? [point.previous ? `${format(point.previous[key])}（${point.previous.title}）` : '—'] : [])
     ])
   }
-})
+}
 
 const groupShareTable = computed(() => ({
   columns: ['身分', ...groupShareBars.value.flatMap((bar) => [`${bar.label}營收`, `${bar.label}占比`])],
