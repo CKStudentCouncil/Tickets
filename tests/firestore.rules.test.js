@@ -651,3 +651,134 @@ describe('學弟登記賣票', () => {
     await assertFails(getDoc(doc(as(staff.superAdmin), 'sellerReleases', 'r1')))
   })
 })
+
+describe('清除所有訂單 (salesArchives, orderPurges, systemLogs)', () => {
+  const paths = [
+    ['salesArchives', '2026'],
+    ['salesArchives', '2026', 'archivedOrders', ORDER_ID],
+    ['salesArchives', '2026', 'rows', '000'],
+    ['orderPurges', 'purge-1'],
+    ['systemLogs', 'purge_purge-1']
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'salesArchives', '2026'), { year: 2026, orderCount: 1, revenue: 700 })
+      await setDoc(doc(db, 'salesArchives', '2026', 'archivedOrders', ORDER_ID), { ...ORDER, archive: { purgeId: 'purge-1' } })
+      await setDoc(doc(db, 'salesArchives', '2026', 'rows', '000'), { rows: [{ t: 1, v: 700, p: false, d: false, s: '建國中學', g: 0, i: [] }] })
+      await setDoc(doc(db, 'orderPurges', 'purge-1'), { stage: 'done', total: 1 })
+      await setDoc(doc(db, 'systemLogs', 'purge_purge-1'), { type: 'orders.purge', actorUid: staff.superAdmin.uid })
+    })
+  })
+
+  test('only super admins read the archives, purge progress and log', async () => {
+    for (const path of paths) {
+      await assertSucceeds(getDoc(doc(as(staff.superAdmin), ...path)))
+      for (const who of [staff.admin, staff.manager, buyer]) {
+        await assertFails(getDoc(doc(as(who), ...path)))
+      }
+      await assertFails(getDoc(doc(anon(), ...path)))
+    }
+    // the analytics page lists the summaries; the admin page looks for an unfinished purge
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'salesArchives')))
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'orderPurges'), where('stage', 'in', ['archive', 'delete']))))
+    await assertFails(getDocs(collection(as(staff.admin), 'salesArchives')))
+    await assertFails(getDocs(collection(as(staff.admin), 'systemLogs')))
+  })
+
+  test('nobody can write them, not even super admins', async () => {
+    for (const path of paths) {
+      await assertFails(setDoc(doc(as(staff.superAdmin), ...path), { forged: true }))
+      await assertFails(updateDoc(doc(as(staff.superAdmin), ...path), { forged: true }))
+      await assertFails(deleteDoc(doc(as(staff.superAdmin), ...path)))
+    }
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'systemLogs', 'forged'), { type: 'orders.purge' }))
+  })
+})
+
+describe('公關票 (guestRegistrations)', () => {
+  const guest = { uid: 'guest-uid', email: 'Guest@Example.com' }
+  const other = { uid: 'other-uid', email: 'other@example.com' }
+  // what GuestPage.vue saves (saveGuestRegistration)
+  const details = (fields = {}) => ({
+    name: '陳小華',
+    email: 'guest@example.com',
+    relation: 'alumni',
+    relationDetail: '80 屆 主席',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    ...fields
+  })
+  const mine = (who = guest) => doc(as(who), 'guestRegistrations', guest.uid)
+  const sent = () => ({ orderId: 'PR20261026K7Q2MX', invitedAt: Timestamp.now(), invitedByUid: staff.superAdmin.uid })
+
+  test('a guest registers once under their uid, with their own verified email', async () => {
+    await assertFails(setDoc(doc(anon(), 'guestRegistrations', guest.uid), details()))
+    await assertFails(setDoc(mine(other), details({ email: other.email })))
+    await assertFails(setDoc(doc(as(guest, false), 'guestRegistrations', guest.uid), details()))
+    await assertFails(setDoc(mine(), details({ email: other.email })))
+    await assertSucceeds(setDoc(mine(), details({ relation: 'friend', relationDetail: '班聯會 王小明' })))
+  })
+
+  test('malformed details are rejected', async () => {
+    const bad = [
+      { name: '  ' },
+      { name: 'x'.repeat(51) },
+      { name: 3 },
+      { relation: 'vip' },
+      { relationDetail: '' },
+      { relationDetail: 'x'.repeat(51) },
+      { createdAt: Timestamp.fromMillis(0) },
+      { updatedAt: Timestamp.fromMillis(0) },
+      // only the function records what was sent
+      { orderId: 'PR20261026K7Q2MX' },
+      { note: 'x' }
+    ]
+    for (const fields of bad) {
+      await assertFails(setDoc(mine(), details(fields)))
+    }
+  })
+
+  test('a guest changes their details until a ticket is sent, never after', async () => {
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'guestRegistrations', guest.uid), details({ createdAt: Timestamp.fromMillis(1000), updatedAt: Timestamp.fromMillis(1000) }))
+    )
+    const createdAt = Timestamp.fromMillis(1000)
+    await assertSucceeds(setDoc(mine(), details({ createdAt, relationDetail: '81 屆 秘書長' })))
+    // createdAt cannot move
+    await assertFails(setDoc(mine(), details()))
+    await assertFails(setDoc(mine(other), details({ createdAt, email: other.email })))
+
+    await env.withSecurityRulesDisabled((context) =>
+      updateDoc(doc(context.firestore(), 'guestRegistrations', guest.uid), sent())
+    )
+    await assertFails(setDoc(mine(), details({ createdAt })))
+    await assertFails(updateDoc(mine(), { name: '改名', updatedAt: serverTimestamp() }))
+    await assertFails(deleteDoc(mine()))
+  })
+
+  test('guests read only their own; super admins read, list and delete them all', async () => {
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'guestRegistrations', guest.uid), details({ createdAt: Timestamp.now(), updatedAt: Timestamp.now() }))
+    )
+    await assertSucceeds(getDoc(mine()))
+    await assertFails(getDoc(mine(other)))
+    await assertFails(getDocs(collection(as(guest), 'guestRegistrations')))
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(getDoc(mine(who)))
+      await assertFails(getDocs(collection(as(who), 'guestRegistrations')))
+      await assertFails(deleteDoc(mine(who)))
+    }
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'guestRegistrations')))
+    // super admins send through sendGuestInvitation, not by writing here
+    await assertFails(updateDoc(mine(staff.superAdmin), sent()))
+    await assertSucceeds(deleteDoc(mine(staff.superAdmin)))
+  })
+
+  test('super admins list the 公關票 orders; invitation markers are for nobody', async () => {
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'orders'), where('complimentary', '==', true))))
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'invitationRequests', 'guest-request-00000001')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'invitationRequests', 'guest-request-00000001'), { orderId: ORDER_ID }))
+  })
+})

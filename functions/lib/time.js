@@ -15,6 +15,11 @@ export function parseTaipeiDateTime(value) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+// Calendar year in Taiwan time (UTC+8, no daylight saving)
+export function getTaiwanYear(date = new Date()) {
+  return new Date(date.getTime() + 8 * 60 * 60 * 1000).getUTCFullYear()
+}
+
 // "YYYYMMDD" in Taiwan time
 export function getTaiwanDateKey(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {

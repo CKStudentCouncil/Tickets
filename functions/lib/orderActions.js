@@ -15,7 +15,7 @@ function actionInput(data, field, expectedField) {
   return { orderId: data.orderId, value: data[field], expected: data[expectedField] }
 }
 
-function staffName(profile, context) {
+export function staffName(profile, context) {
   // The client cannot choose attribution. Prefer the administrator-assigned
   // staff name, then the stored Google profile / signed token for legacy users.
   for (const candidate of [profile.name, profile.displayName, context.auth.token?.name]) {

@@ -39,7 +39,7 @@
           </div>
         </div>
         <p class="panel-copy">
-          學弟登記的票會直接從「{{ ticketTypeName(savedProgram.ticketTypeId) || '未設定票種' }}」的庫存扣除，前台剩餘數量會跟著減少。
+          學弟登記的票會直接從「{{ ticketTypeName(savedProgram.ticketTypeId) || '未設定票種' }}」的庫存扣除，前台剩餘數量會跟著減少
         </p>
 
         <div class="progress" role="progressbar" :aria-valuenow="total" aria-valuemin="0" :aria-valuemax="savedProgram.goal" aria-label="共同目標進度">
@@ -65,8 +65,8 @@
           </div>
         </div>
         <p class="panel-copy">
-          開放後，名單上的學弟登入就會在選單看到「登記賣票」。登記不受票種販售時段與每人限購限制，但不會超過票券總量。
-          <template v-if="!auth.isSuperAdmin">只有系統管理員可以修改。</template>
+          開放後，名單上的學弟登入就會在選單看到「登記賣票」；登記不受票種販售時段與每人限購限制，但不會超過票券總量
+          <template v-if="!auth.isSuperAdmin">只有系統管理員可以修改</template>
         </p>
 
         <div class="settings-grid">
@@ -99,7 +99,7 @@
         <div class="notify-header">
           <h2>業績排行</h2>
         </div>
-        <p class="panel-copy">依登記張數排序；金額以登記當時的票價計算。</p>
+        <p class="panel-copy">依登記張數排序；金額以登記當時的票價計算</p>
 
         <p v-if="leaderboard.length === 0" class="empty">還沒有人登記</p>
         <div v-else class="table-wrap">
@@ -135,7 +135,7 @@
           <h2>登記紀錄</h2>
         </div>
         <p class="panel-copy">
-          學弟拿票、交款後在這裡勾選。學弟不能退票；刪除只用於修正登記錯誤，票會退回庫存。
+          學弟拿票、交款後在這裡勾選；學弟不能退票；刪除只用於修正登記錯誤，票會退回庫
         </p>
 
         <input v-model="searchTerm" type="search" class="search" placeholder="搜尋姓名或 Email">
@@ -196,7 +196,7 @@
           <h2>賣票名單</h2>
         </div>
         <p class="panel-copy">
-          只有名單上的 Google 帳號可以登記賣票。學弟加入名單後需重新登入才會看到「登記賣票」。
+          只有名單上的 Google 帳號可以登記賣票；學弟加入名單後需重新登入才會看到「登記賣票」
         </p>
 
         <div v-if="auth.isSuperAdmin" class="add-sellers">

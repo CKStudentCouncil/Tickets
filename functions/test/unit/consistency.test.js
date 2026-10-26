@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS, GUEST_RELATIONS, MAX_GUEST_TICKETS, guestRelationText } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -13,6 +13,26 @@ test('SITE_URL and the default opening time match src/config/app.js', async () =
   const app = await import(srcFile('config/app.js'))
   assert.equal(app.SITE_URL, SITE_URL)
   assert.equal(app.SHOP_OPEN_AT.getTime(), SHOP_OPEN_AT.getTime())
+})
+
+test('the analytics page and the archive derive grades and sale rows alike', async () => {
+  const analytics = await import(srcFile('utils/salesAnalytics.js'))
+  const salesImport = await import(srcFile('utils/salesImport.js'))
+  const archive = await import('../../lib/salesArchive.js')
+  for (const className of ['329', '329/三數', '１０５', '205班', '三數', '高二', '', '數資', '4012']) {
+    assert.equal(analytics.gradeOf('建國中學', className), archive.gradeOf('建國中學', className), className)
+  }
+  const order = {
+    createdAt: '2025-11-05T04:03:00.000Z', finalTotal: 1800, paid: true, delivered: false, school: '建國中學', class: '205',
+    items: [{ ticketTypeId: 'open', name: '一階票', price: 900, quantity: 2 }]
+  }
+  assert.deepEqual(salesImport.compactRowOf({ ...order, at: Date.parse(order.createdAt) }), archive.saleRowOf(order))
+})
+
+test('the purge confirmation phrase matches src/config/app.js', async () => {
+  const app = await import(srcFile('config/app.js'))
+  const { PURGE_CONFIRM_PHRASE } = await import('../../lib/orderPurge.js')
+  assert.equal(app.PURGE_CONFIRM_PHRASE, PURGE_CONFIRM_PHRASE)
 })
 
 test('school lists match src/data/schools.js', async () => {
@@ -31,6 +51,22 @@ test('ELIGIBLE_IDENTITIES match src/data/ticketTypes.js (PARTY-27)', async () =>
 test('the seller registration limit matches src/data/sellerGuide.js', async () => {
   const guide = await import(srcFile('data/sellerGuide.js'))
   assert.equal(guide.MAX_SELLER_TICKETS, MAX_SELLER_TICKETS)
+})
+
+test('公關票 relations, ticket limit and relation text match src/data/guests.js', async () => {
+  const guests = await import(srcFile('data/guests.js'))
+  assert.deepEqual(guests.GUEST_RELATIONS.map((option) => option.value), GUEST_RELATIONS)
+  assert.equal(guests.MAX_GUEST_TICKETS, MAX_GUEST_TICKETS)
+  for (const guest of [
+    { relation: 'alumni', relationDetail: '78 屆' },
+    { relation: 'friend', relationDetail: ' 王小明 ' },
+    { relation: 'alumni' },
+    { relation: 'friend', relationDetail: '' },
+    {},
+    null
+  ]) {
+    assert.equal(guests.guestRelationText(guest), guestRelationText(guest), JSON.stringify(guest))
+  }
 })
 
 test('client and server parse admin datetimes identically', async () => {

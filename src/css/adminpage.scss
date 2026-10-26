@@ -315,7 +315,7 @@ textarea::placeholder {
 }
 
 .btn-outline {
-  padding: 10px 18px;
+  padding: 12px 20px;
 
   border: 1px solid var(--line);
   background: transparent;
@@ -1540,3 +1540,255 @@ textarea::placeholder {
 }
 
 .stats-row { flex-wrap: wrap; gap: 24px; }
+
+.analytics-link {
+  margin-left: 10px;
+}
+
+/* ---------- 清除所有訂單 ---------- */
+
+.danger-zone {
+  margin-top: 90px;
+  border-top-color: rgba(201, 120, 120, 0.35);
+}
+
+.danger-zone .panel-copy {
+  max-width: 640px;
+}
+
+.danger-zone .btn-outline.danger {
+  flex: none;
+}
+
+.danger-eyebrow {
+  margin: 0 0 12px;
+
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.purge-unfinished {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  margin: 22px 0 0;
+  padding: 14px 16px;
+
+  border: 1px solid rgba(201, 120, 120, 0.3);
+  background: rgba(201, 120, 120, 0.06);
+
+  color: rgba(242, 240, 233, 0.78);
+  font-size: 12.5px;
+}
+
+.btn.danger-btn {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #1a0d0d;
+}
+
+.btn.danger-btn:hover:not(:disabled) {
+  border-color: #d89090;
+  background: #d89090;
+}
+
+.purge-modal h2 {
+  margin-bottom: 22px;
+}
+
+.purge-warning {
+  margin: 0;
+
+  color: rgba(242, 240, 233, 0.82);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.purge-warning strong {
+  color: var(--off-white);
+  font-size: 15px;
+}
+
+.purge-steps {
+  margin: 20px 0 0;
+  padding: 14px 0 14px 22px;
+
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+
+  color: rgba(242, 240, 233, 0.6);
+  font-size: 12.5px;
+  line-height: 2;
+}
+
+.purge-modal > .panel-copy {
+  margin-top: 14px;
+}
+
+.purge-confirm {
+  margin-top: 22px;
+}
+
+.purge-confirm code {
+  padding: 2px 6px;
+
+  border: 1px solid rgba(201, 120, 120, 0.35);
+
+  color: var(--off-white);
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.purge-confirm input {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  letter-spacing: 0.06em;
+}
+
+.purge-error {
+  margin: 18px 0 0;
+
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.purge-progress {
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.purge-stage {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 14px;
+
+  padding: 16px 0;
+
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.stage-icon {
+  display: flex;
+  padding-top: 1px;
+
+  color: rgba(242, 240, 233, 0.3);
+}
+
+.purge-stage.running .stage-icon {
+  color: var(--ember);
+}
+
+.purge-stage.done .stage-icon {
+  color: #9bbda3;
+}
+
+.purge-stage.failed .stage-icon,
+.purge-stage.failed .stage-label {
+  color: var(--danger);
+}
+
+.stage-label {
+  margin: 0;
+
+  color: rgba(242, 240, 233, 0.5);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.purge-stage.running .stage-label,
+.purge-stage.done .stage-label {
+  color: var(--off-white);
+}
+
+.stage-detail {
+  margin: 4px 0 0;
+
+  color: var(--lunar);
+  font-size: 11.5px;
+}
+
+.stage-track {
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+
+  background: rgba(242, 240, 233, 0.08);
+}
+
+.stage-fill {
+  height: 100%;
+
+  background: var(--ember);
+
+  transition: width .4s ease;
+}
+
+.spin {
+  animation: purge-spin 1s linear infinite;
+}
+
+@keyframes purge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.purge-result {
+  margin-top: 22px;
+
+  color: rgba(242, 240, 233, 0.78);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.purge-result p {
+  margin: 0 0 6px;
+}
+
+.purge-result strong {
+  color: var(--off-white);
+}
+
+.purge-link {
+  display: inline-block;
+  margin-top: 10px;
+
+  color: var(--ember);
+  font-size: 12.5px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+
+  .stage-fill {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .danger-zone .btn-outline.danger {
+    width: 100%;
+  }
+}

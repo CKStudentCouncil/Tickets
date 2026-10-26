@@ -29,6 +29,7 @@
       <p class="eyebrow">後台管理</p>
       <h1>{{ canManageOrders ? '後台管理' : '通知管理' }}</h1>
       <router-link :to="{ name: 'admin-scan' }" class="btn scan-link">掃描票券 QR Code</router-link>
+      <router-link v-if="canPurge" :to="{ name: 'super-admin-analytics' }" class="btn-outline scan-link analytics-link">銷售報表</router-link>
     </div>
 
     <div
@@ -423,6 +424,145 @@
       </div>
       <p v-if="!loading && !loadError && !fromCache && currentOrders.length === 0" class="empty">尚無符合條件的訂單</p>
     </div>
+
+    <section
+      v-if="canPurge"
+      class="panel danger-zone"
+      aria-labelledby="purge-title"
+    >
+      <div class="notify-header">
+        <div>
+          <p class="danger-eyebrow">Danger zone</p>
+          <h2 id="purge-title">清除所有訂單</h2>
+          <p class="panel-copy">
+            活動結束、準備新一年度時使用；系統會先下載 Excel 完整備份，再把訂單封存到 Firestore 的 salesArchives（銷售報表的歷年比較），兩者都成功後才刪除訂單、退回庫存與購買額度，並寫入系統紀錄
+          </p>
+        </div>
+        <button type="button" class="btn-outline danger" @click="openPurge">清除所有訂單…</button>
+      </div>
+      <p v-if="unfinishedPurge" class="purge-unfinished" role="status">
+        有一次清除尚未完成：已刪除 <span class="num">{{ unfinishedPurge.deletedCount || 0 }} / {{ unfinishedPurge.total }}</span> 筆
+        <button type="button" class="btn-sm" @click="openResume">查看並繼續</button>
+      </p>
+    </section>
+
+    <q-dialog
+      v-if="canPurge"
+      v-model="purgeOpen"
+      :persistent="purgeBusy"
+      aria-labelledby="purge-dialog-title"
+      @hide="closePurge"
+    >
+      <div class="modal notify-modal purge-modal">
+        <p class="danger-eyebrow">Danger zone</p>
+        <h2 id="purge-dialog-title">{{ purgeResuming ? '繼續清除訂單' : '清除所有訂單' }}</h2>
+
+        <template v-if="purgePhase === 'confirm'">
+          <p v-if="purgeResuming" class="purge-warning">
+            這次清除已封存 <strong class="num">{{ purgeRun?.archivedCount || 0 }}</strong> 筆、刪除 <strong class="num">{{ purgeRun?.deletedCount || 0 }} / {{ purgeRun?.total }}</strong> 筆；繼續後會刪除其餘已備份的訂單
+          </p>
+          <p v-else class="purge-warning">
+            將刪除目前全部
+            <strong class="num">{{ orderCount ?? '…' }}</strong>
+            筆訂單與購買者資料，刪除後無法在後台復原
+          </p>
+          <p v-if="!purgeResuming && orderCountError" class="purge-error" role="alert">{{ orderCountError }}</p>
+          <ol class="purge-steps">
+            <li>下載 Excel 完整備份（含所有欄位）</li>
+            <li>封存到 Firestore 的 salesArchives，保留年度摘要與原始訂單</li>
+            <li>以上都成功後才刪除訂單，並退回庫存與每人購買額度</li>
+            <li>把這次清除寫入 systemLogs</li>
+          </ol>
+          <p class="panel-copy">只會刪除備份中的訂單；開始後才送出的新訂單會保留</p>
+          <label class="field purge-confirm">
+            <span>請輸入 <code>{{ PURGE_CONFIRM_PHRASE }}</code> 確認</span>
+            <input
+              v-model="purgeTyped"
+              type="text"
+              autocomplete="off"
+              autocapitalize="characters"
+              autocorrect="off"
+              spellcheck="false"
+              @keydown.enter="startPurge"
+            >
+          </label>
+          <p v-if="purgeError" class="purge-error" role="alert">{{ purgeError }}</p>
+          <div class="notify-actions">
+            <button
+              type="button"
+              class="btn danger-btn"
+              :disabled="!purgePhraseMatches"
+              @click="startPurge"
+            >
+              {{ purgeResuming ? '繼續清除' : '備份並清除' }}
+            </button>
+            <button type="button" class="btn-outline" @click="closePurge">取消</button>
+          </div>
+        </template>
+
+        <template v-else>
+          <ol class="purge-progress">
+            <li
+              v-for="stage in purgeStages"
+              :key="stage.key"
+              class="purge-stage"
+              :class="stage.status"
+            >
+              <span class="stage-icon" aria-hidden="true">
+                <CircleCheck v-if="stage.status === 'done'" :size="18" :stroke-width="1.75" />
+                <CircleX v-else-if="stage.status === 'failed'" :size="18" :stroke-width="1.75" />
+                <LoaderCircle v-else-if="stage.status === 'running'" class="spin" :size="18" :stroke-width="1.75" />
+                <Circle v-else :size="18" :stroke-width="1.75" />
+              </span>
+              <div class="stage-body">
+                <p class="stage-label">
+                  {{ stage.label }}
+                  <span class="sr-only">（{{ STAGE_STATUS[stage.status] }}）</span>
+                </p>
+                <p v-if="stage.detail" class="stage-detail num">{{ stage.detail }}</p>
+                <div
+                  v-if="stage.progress !== null"
+                  class="stage-track"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-valuenow="Math.round(stage.progress * 100)"
+                  :aria-label="stage.label"
+                >
+                  <div class="stage-fill" :style="{ width: `${stage.progress * 100}%` }" />
+                </div>
+              </div>
+            </li>
+          </ol>
+
+          <div v-if="purgePhase === 'done'" class="purge-result" role="status">
+            <p>
+              已清除 <strong class="num">{{ purgeRun?.deletedCount || 0 }}</strong> 筆訂單，封存於
+              <span class="mono">salesArchives/{{ (purgeRun?.years || []).join('、') }}</span>
+            </p>
+            <p v-if="purgeRun?.missingCount">另有 <span class="num">{{ purgeRun.missingCount }}</span> 筆在清除前已被刪除，未列入封存</p>
+            <p v-if="purgeRemaining">目前還有 <span class="num">{{ purgeRemaining }}</span> 筆在備份之後才送出的訂單，沒有被清除</p>
+            <router-link :to="{ name: 'super-admin-analytics' }" class="purge-link">前往銷售報表查看歷年比較</router-link>
+          </div>
+          <p v-if="purgeError" class="purge-error" role="alert">{{ purgeError }}</p>
+
+          <div class="notify-actions">
+            <button
+              v-if="purgePhase === 'failed' || purgeWaiting"
+              type="button"
+              class="btn danger-btn"
+              :disabled="purgeBusy"
+              @click="retryPurge"
+            >
+              {{ purgeRun ? '繼續清除' : '重新開始' }}
+            </button>
+            <button type="button" class="btn-outline" :disabled="purgeBusy" @click="closePurge">
+              {{ purgePhase === 'done' ? '完成' : '關閉' }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </q-dialog>
   </div>
 </template>
 
@@ -430,10 +570,12 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { httpsCallable } from 'firebase/functions'
+import { Circle, CircleCheck, CircleX, LoaderCircle } from 'lucide-vue-next'
 import { functions } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { useAdminOrders } from 'src/composables/useAdminOrders'
+import { useOrderPurge } from 'src/composables/useOrderPurge'
 import { fetchOrder, resendOrderEmail } from 'src/services/orderService'
 import { shouldPollNotification, needsNotificationEnqueue, canClearNotification } from 'src/utils/notificationProgress'
 
@@ -441,9 +583,37 @@ const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 
-// Managers only get the notification tools; admins also manage orders
+// Managers only get the notification tools; admins also manage orders;
+// super admins may also purge every order (purgeOrders checks this too)
 const canAccessAdmin = computed(() => auth.isManager)
 const canManageOrders = computed(() => auth.isAdmin)
+const canPurge = computed(() => auth.isSuperAdmin)
+
+const STAGE_STATUS = { pending: '等待中', running: '進行中', done: '完成', failed: '失敗' }
+
+const {
+  PURGE_CONFIRM_PHRASE,
+  open: purgeOpen,
+  phase: purgePhase,
+  typed: purgeTyped,
+  phraseMatches: purgePhraseMatches,
+  busy: purgeBusy,
+  orderCount,
+  countError: orderCountError,
+  unfinished: unfinishedPurge,
+  resuming: purgeResuming,
+  stages: purgeStages,
+  run: purgeRun,
+  waiting: purgeWaiting,
+  error: purgeError,
+  remaining: purgeRemaining,
+  checkUnfinished,
+  openPurge,
+  openResume,
+  close: closePurge,
+  start: startPurge,
+  retry: retryPurge
+} = useOrderPurge({ showToast: toast.show, staffName: () => auth.displayName })
 
 const DEFAULT_NOTIFY_MESSAGE = '請出示 QR Code 給工作人員，以完成繳費或領票。'
 
@@ -497,6 +667,7 @@ const notifyTargetSchoolLabel = computed(() =>
 // notification tools only
 onMounted(() => {
   if (canManageOrders.value) fetchOrders()
+  if (canPurge.value) checkUnfinished()
 })
 
 const exactOrderId = ref('')

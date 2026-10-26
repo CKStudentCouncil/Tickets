@@ -286,11 +286,13 @@ const navGroups = computed(() => {
 
   const staff = [
     auth.isManager && { to: '/admin/scan', label: '掃描票券' },
+    auth.isSuperAdmin && { to: '/super_admin/analytics', label: '銷售報表' },
     auth.isManager && !auth.isAdmin && { to: '/admin', label: '通知管理' },
     auth.isAdmin && { to: '/admin', label: '後台管理' },
     auth.isSuperAdmin && { to: '/admin/management', label: '票務管理' },
     auth.isSuperAdmin && { to: '/admin/account', label: '帳號管理' },
     auth.isManager && { to: '/admin/survey', label: '問卷管理' },
+    auth.isSuperAdmin && { to: '/super_admin/guests', label: '公關票管理' },
     auth.isAdmin && { to: '/admin/sellers', label: '學弟賣票管理' },
     auth.isSuperAdmin && { to: '/admin/intromanagement', label: '舞會介紹管理' },
     auth.isSuperAdmin && { to: '/admin/performer', label: '社團與藝人管理' }

@@ -489,68 +489,108 @@ export const createOrder = functions
     }
   })
 
+export const stockReleaseRef = (orderId) => db.doc(`stockReleases/${orderId}`)
+
+// What deleting an order gives back to the stock and to the buyer's
+// per-person allowance, or null when it gives back nothing.
+export function stockReleaseOf(order) {
+  // orders created before the counters existed were never counted
+  if (order?.stockCounted !== true) return null
+
+  const quantities = new Map()
+
+  ;(Array.isArray(order.items) ? order.items : []).forEach((item) => {
+    const id = String(item?.ticketTypeId || item?.id || '')
+    const quantity = Number(item?.quantity)
+    if (id && Number.isInteger(quantity) && quantity > 0) {
+      quantities.set(id, (quantities.get(id) || 0) + quantity)
+    }
+  })
+
+  if (quantities.size === 0) return null
+
+  return {
+    quantities,
+    // orders placed before the shards were counted in the legacy counter
+    stockShards: order.stockShards && typeof order.stockShards === 'object' ? order.stockShards : null,
+    buyerKey: order.customerEmail ? getBuyerKey(order.customerEmail) : null
+  }
+}
+
+// Writes the releases of one or more deleted orders in a transaction, adding
+// them up first so each counter is written once (purgeOrders releases many
+// orders together). The caller checks and creates their stockReleases markers.
+export function applyStockReleases(tx, releases) {
+  const shardSold = new Map() // ticketTypeId -> Map(shard -> tickets)
+  const legacy = new Map() // ticketTypeId -> { sold, dropCaps }
+  const buyers = new Map() // buyerKey -> Map(ticketTypeId -> tickets)
+  const legacyOf = (id) => legacy.get(id) || legacy.set(id, { sold: 0, dropCaps: false }).get(id)
+
+  releases.forEach(({ quantities, stockShards, buyerKey }) => {
+    if (stockShards) {
+      Object.entries(stockShards).forEach(([id, allocation]) => {
+        const sold = shardSold.get(id) || shardSold.set(id, new Map()).get(id)
+        Object.entries(allocation || {}).forEach(([k, n]) => {
+          if (Number.isInteger(n) && n > 0) sold.set(k, (sold.get(k) || 0) + n)
+        })
+        // Caps can exceed the configured stock when it was lowered below
+        // existing sales. Reusing a refunded cap would then sell tickets
+        // above that limit; recalculate against the remaining sales first.
+        legacyOf(id).dropCaps = true
+      })
+    } else {
+      // this changes the stock left for the shards, so their caps are planned again
+      quantities.forEach((quantity, id) => {
+        legacyOf(id).sold += quantity
+      })
+    }
+
+    if (buyerKey) {
+      const bought = buyers.get(buyerKey) || buyers.set(buyerKey, new Map()).get(buyerKey)
+      quantities.forEach((quantity, id) => bought.set(id, (bought.get(id) || 0) + quantity))
+    }
+  })
+
+  shardSold.forEach((sold, id) => {
+    sold.forEach((n, k) => tx.set(shardRef(id, k), { sold: FieldValue.increment(-n) }, { merge: true }))
+  })
+
+  legacy.forEach(({ sold, dropCaps }, id) => {
+    tx.set(legacyRef(id), {
+      ...(sold ? { sold: FieldValue.increment(-sold) } : {}),
+      ...(dropCaps ? { shardCaps: FieldValue.delete() } : {})
+    }, { merge: true })
+  })
+
+  buyers.forEach((bought, buyerKey) => {
+    tx.set(
+      db.doc(`buyerPurchases/${buyerKey}`),
+      {
+        quantities: Object.fromEntries([...bought].map(([id, quantity]) => [id, FieldValue.increment(-quantity)])),
+        updatedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    )
+  })
+}
+
 // When an admin deletes an order, give its tickets back to the stock and to
 // the buyer's per-person allowance. The marker document makes this safe if
-// the trigger is delivered more than once.
+// the trigger is delivered more than once, and lets purgeOrders release the
+// orders it deletes itself.
 export const releaseOrderStock = functions
   .region(REGION)
   .runWith({ failurePolicy: true }) // retried on failure; the marker keeps it idempotent
   .firestore.document('orders/{orderId}')
   .onDelete(async (snap, context) => {
-    const order = snap.data() || {}
-    // orders created before the counters existed were never counted
-    if (order.stockCounted !== true) return
+    const release = stockReleaseOf(snap.data())
+    if (!release) return
 
-    const quantities = new Map()
-
-    ;(Array.isArray(order.items) ? order.items : []).forEach((item) => {
-      const id = String(item?.ticketTypeId || item?.id || '')
-      const quantity = Number(item?.quantity)
-      if (id && Number.isInteger(quantity) && quantity > 0) {
-        quantities.set(id, (quantities.get(id) || 0) + quantity)
-      }
-    })
-
-    if (quantities.size === 0) return
-
-    const markerRef = db.doc(`stockReleases/${context.params.orderId}`)
+    const markerRef = stockReleaseRef(context.params.orderId)
 
     await db.runTransaction(async (tx) => {
       if ((await tx.get(markerRef)).exists) return
-
-      // orders placed before the shards were counted in the legacy counter
-      if (order.stockShards && typeof order.stockShards === 'object') {
-        Object.entries(order.stockShards).forEach(([id, allocation]) => {
-          Object.entries(allocation || {}).forEach(([k, n]) => {
-            if (Number.isInteger(n) && n > 0) {
-              tx.set(shardRef(id, k), { sold: FieldValue.increment(-n) }, { merge: true })
-            }
-          })
-          // Caps can exceed the configured stock when it was lowered below
-          // existing sales. Reusing a refunded cap would then sell tickets
-          // above that limit; recalculate against the remaining sales first.
-          tx.set(legacyRef(id), { shardCaps: FieldValue.delete() }, { merge: true })
-        })
-      } else {
-        // this changes the stock left for the shards, so their caps are planned again
-        quantities.forEach((quantity, id) => {
-          tx.set(legacyRef(id), { sold: FieldValue.increment(-quantity) }, { merge: true })
-        })
-      }
-
-      if (order.customerEmail) {
-        tx.set(
-          db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`),
-          {
-            quantities: Object.fromEntries(
-              [...quantities].map(([id, quantity]) => [id, FieldValue.increment(-quantity)])
-            ),
-            updatedAt: FieldValue.serverTimestamp()
-          },
-          { merge: true }
-        )
-      }
-
+      applyStockReleases(tx, [release])
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
   })

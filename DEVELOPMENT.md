@@ -84,8 +84,9 @@ Treat debug tokens as credentials and keep them out of Git. [quasar.config.js](q
 | Screens and navigation | `src/pages/`, `src/layouts/MainLayout.vue`, `src/router/routes.js`, `src/router/index.js` |
 | Reusable UI | `src/components/` |
 | Shared frontend state | `src/stores/auth.js`, `src/stores/shop.js`, `src/stores/toast.js` |
-| Firebase access helpers | `src/services/`: orders, ticket types, shop settings, and published content |
-| Shared screen behavior | `src/composables/`, including admin order handling and reactive time |
+| Firebase access helpers | `src/services/`: orders, ticket types, shop settings, published content, sales archives / purges, and survey responses |
+| Shared screen behavior | `src/composables/`, including admin order handling, the order purge, the sales report and reactive time |
+| Sales report | `src/pages/AnalyticsPage.vue`, `src/components/analytics/` (SVG charts use attributes, not CSS, so the PDF export keeps them), `src/utils/salesAnalytics.js` (pure report), `src/utils/salesImport.js` (Excel import) |
 | Styling | `src/css/app.scss` for global styles; page styles in `src/css/` imported by the corresponding Vue files |
 | Site values and form options | `src/config/app.js`, `src/data/` |
 | Frontend utilities | `src/utils/`: Taiwan dates, QR codes, PDFs, analytics, redirects, text, and debounce |
@@ -110,8 +111,9 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 | Signed-in buyer | Purchase with a verified account email and read their own orders |
 | `manager` | Open individual orders, mark delivery/check-in, access staff survey views, and prepare/send notifications |
 | `admin` | Manager capabilities plus list all orders, change payment status, delete orders, and resend confirmation emails |
-| `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup |
+| `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup; read 銷售報表 (`/super_admin/analytics`), import earlier years and purge every order; send 公關票 (`/super_admin/guests`) |
 | Seller (on `sellers/{email}`) | Not a staff role: register tickets to sell on `/sell` (學弟登記賣票). Super admins keep the list on `/admin/sellers`; admins see registrations there and record pickup and payment |
+| Guest (any signed-in account) | Not a staff role: leave their details for a 公關票 on `/guest` and change them until a ticket is sent |
 
 Route guards control navigation. Firestore rules and backend role checks enforce data access. When changing permissions, keep [src/router/index.js](src/router/index.js), `src/stores/auth.js`, [firestore.rules](firestore.rules), and [functions/lib/common.js](functions/lib/common.js) aligned.
 
@@ -143,9 +145,16 @@ Campus-only tickets require both the school `建國中學` and an account at `@g
 | `ticketSales/{typeId}/shards/{shardId}` | Backend stock counters, with caps on the parent ticket-sales document |
 | `settings/sellerProgram` | Public seller program settings: `enabled`, the ticket type sellers take from (`ticketTypeId`, the 二售 type) and the shared `goal`; written by super admins |
 | `sellers/{email}`, `sellerRegistrations/{id}`, `sellerStats/summary` | Seller list (super admins), registrations created by `registerSellerTickets` (admins flip `delivered` / `paid` or delete; deleting returns the tickets to stock), and the shared registered total |
-| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl` | Backend-only allowance, recovery, rate-limit, stock-release, campaign and mail-worker bookkeeping |
+| `guestRegistrations/{uid}` | 公關票 guests' details from `/guest` (name, account email, `relation` alumni / friend and `relationDetail`); `sendGuestInvitation` adds `orderId` when it sends one, after which the guest can no longer change them |
+| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl`, `invitationRequests` | Backend-only allowance, recovery, rate-limit, stock-release, campaign, mail-worker and 公關票 retry bookkeeping |
+| `salesArchives/{year}`, `.../rows/{n}`, `.../archivedOrders/{id}` | A past sale: summary with `openDate` / `closeDate`, sale rows without buyers' details (what the report compares), and the purged orders themselves. Written only by `purgeOrders` / `importSalesArchive`; super admins read them |
+| `orderPurges/{purgeId}`, `systemLogs/{id}` | A purge run's progress (followed live by `/admin`) and the audit log of purges and imports; function-written, super-admin readable |
 
-Create orders through `createOrder`; clients cannot create or update them directly. Staff collection and payment use the expected-state callables in `orderActions.js`, with trusted attribution and atomic audit writes. Order deletion triggers stock and allowance release and invalidates shard caps. Client writes to backend bookkeeping collections are denied.
+Create orders through `createOrder` (or, for 公關票, `sendGuestInvitation`); clients cannot create or update them directly. A 公關票 is an NT$0, already-paid order with `complimentary: true`, school `公關票` and an id starting `PR`; it takes no stock and is left out of payment notices, and its email is an invitation instead of the purchase confirmation. Staff collection and payment use the expected-state callables in `orderActions.js`, with trusted attribution and atomic audit writes. Order deletion triggers stock and allowance release and invalidates shard caps. Client writes to backend bookkeeping collections are denied.
+
+清除所有訂單 deletes through `purgeOrders` only: it deletes exactly the orders in the browser's Excel backup, archives every one before deleting any, then deletes each with its archived copy and stock release in one transaction (its `stockReleases` marker stops `releaseOrderStock` from releasing twice). An interrupted run resumes with the same `purgeId`.
+
+`/super_admin/analytics` listens to every order (one read per order when it opens). Keep the admin order list on bounded pages.
 
 Admin reads use bounded live pages and filter-specific server aggregates. Name/email/phone search applies to the visible page; exact order ID lookup covers any order. Full Excel export explicitly paginates the selected filters and loads ExcelJS only when requested. Order value and collected payment are distinct in both UI and export.
 

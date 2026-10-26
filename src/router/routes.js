@@ -79,6 +79,14 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
+        // 公關票: invited guests leave their details; the link is shared
+        // with them, not shown in the menu. Open before the shop is.
+        path: '/12348uytr8u216230pjhogifjdedu4rgi9fdjswhergtblvcd/guest',
+        name: 'guest',
+        component: () => import('pages/GuestPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'comingsoon',
         name: 'comingsoon',
         component: () => import('pages/ComingSoonPage.vue')
@@ -155,6 +163,34 @@ const routes = [
         path: 'survey',
         name: 'admin-survey',
         component: () => import('pages/SurveyAdminPage.vue')
+      }
+    ]
+  },
+
+  {
+    path: '/super_admin',
+    component: () => import('layouts/MainLayout.vue'),
+    // the router guard requires a super admin; firestore.rules guard the data
+    meta: {
+      isAdminSection: true,
+      requiresSuperAdmin: true
+    },
+    children: [
+      {
+        path: '',
+        redirect: { name: 'super-admin-analytics' }
+      },
+      {
+        // live sales dashboard and the archived years (salesArchives)
+        path: 'analytics',
+        name: 'super-admin-analytics',
+        component: () => import('pages/AnalyticsPage.vue')
+      },
+      {
+        // 公關票: send by name and email, or to guests registered on /guest
+        path: 'guests',
+        name: 'super-admin-guests',
+        component: () => import('pages/GuestAdminPage.vue')
       }
     ]
   },

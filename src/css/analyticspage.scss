@@ -1,0 +1,684 @@
+.analytics-page,
+.state-screen {
+  --void: #050608;
+  --ink: #f2f0e9;
+  --ink-soft: rgba(242, 240, 233, 0.78);
+  --muted: #8d959e;
+  --accent: #e4a468;
+  --line: rgba(242, 240, 233, 0.14);
+  --line-soft: rgba(242, 240, 233, 0.08);
+  --card: rgba(242, 240, 233, 0.025);
+  --card-solid: #0d0f12;
+  --card-line: rgba(242, 240, 233, 0.09);
+  --tooltip: #11151b;
+  --focus: rgba(228, 164, 104, 0.55);
+  --success: #9bbda3;
+  --danger: #c97878;
+}
+
+.analytics-page {
+  min-height: 100vh;
+  padding: 120px clamp(20px, 5vw, 64px) 100px;
+
+  background:
+    radial-gradient(
+      ellipse 60% 40% at 90% 0%,
+      rgba(228, 164, 104, 0.07),
+      transparent 65%
+    ),
+    var(--void);
+
+  color: var(--ink);
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.analytics-page > * {
+  width: min(100%, 1100px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- heading ---------- */
+
+.page-heading {
+  margin-bottom: 30px;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+
+.page-heading h1 {
+  margin: 0;
+
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  margin: 0;
+
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(155, 189, 163, 0.6);
+}
+
+.live-status.offline {
+  color: var(--danger);
+}
+
+.live-status.offline .live-dot {
+  background: var(--danger);
+  box-shadow: none;
+}
+
+.period-note {
+  margin: 12px 0 0;
+
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.notice {
+  margin-top: 0;
+  margin-bottom: 22px;
+  padding: 12px 16px;
+
+  border: 1px solid rgba(201, 120, 120, 0.3);
+  background: rgba(201, 120, 120, 0.06);
+
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.notice a {
+  margin-left: 6px;
+
+  color: var(--accent);
+}
+
+/* ---------- filters ---------- */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+
+  padding: 18px 0;
+
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.compare-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* iOS Safari draws native selects shorter than inputs (adminpage.scss) */
+.compare-select select {
+  -webkit-appearance: none;
+  appearance: none;
+
+  height: 38px;
+  padding: 0 36px 0 12px;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%239aa3ac' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat right 12px center / 12px;
+
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.compare-select option {
+  background: #0d1015;
+  color: var(--ink);
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.segmented button {
+  min-height: 38px;
+  padding: 0 16px;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12.5px;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.segmented button + button {
+  margin-left: -1px;
+}
+
+.segmented button:hover {
+  color: var(--accent);
+}
+
+.segmented button.active {
+  position: relative;
+
+  border-color: var(--accent);
+  background: rgba(228, 164, 104, 0.08);
+
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.segmented.small button {
+  min-height: 30px;
+  padding: 0 11px;
+
+  font-size: 11px;
+}
+
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-left: auto;
+}
+
+.btn,
+.btn-outline {
+  min-height: 38px;
+  padding: 0 18px;
+
+  border-radius: 0;
+
+  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #16110a;
+}
+
+.btn-outline {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn:disabled,
+.btn-outline:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- import ---------- */
+
+.panel {
+  margin-top: 22px;
+  padding: 22px;
+
+  border: 1px solid var(--card-line);
+  background: var(--card);
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.panel-copy {
+  margin: 0;
+
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+.hint-panel {
+  padding: 16px 20px;
+}
+
+.file-input {
+  margin-top: 16px;
+
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.import-preview {
+  margin-top: 20px;
+  padding-top: 18px;
+
+  border-top: 1px solid var(--line-soft);
+}
+
+.import-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+}
+
+.import-stats span,
+.import-dates span {
+  display: block;
+
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.import-stats strong {
+  display: block;
+
+  margin-top: 4px;
+
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.import-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+
+  margin: 18px 0 10px;
+}
+
+/* without the native look, iOS sizes date inputs like the rest (adminpage.scss) */
+.import-dates input {
+  -webkit-appearance: none;
+  appearance: none;
+  color-scheme: dark;
+
+  width: 170px;
+  height: 38px;
+  margin-top: 6px;
+  padding: 0 10px;
+
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 36px;
+}
+
+.import-note {
+  margin: 8px 0 0;
+
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.import-error {
+  margin: 8px 0 0;
+
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.import-actions {
+  display: flex;
+  gap: 10px;
+
+  margin-top: 18px;
+}
+
+/* ---------- report ---------- */
+
+.report {
+  margin-top: 28px;
+
+  transition: opacity 0.2s ease;
+}
+
+/* another year's rows are loading: keep the charts, faded */
+.report.refreshing {
+  opacity: 0.5;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+
+  border: 1px solid var(--card-line);
+  background: var(--card-line);
+}
+
+.kpi {
+  min-width: 0;
+  padding: 20px 22px;
+
+  background: var(--card-solid);
+}
+
+.kpi-label {
+  margin: 0;
+
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* stat-tile values keep proportional figures */
+.kpi-value {
+  margin: 8px 0 0;
+
+  font-size: clamp(22px, 2.6vw, 28px);
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.kpi-compare {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+
+  margin: 10px 0 0;
+
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  font-weight: 700;
+}
+
+.kpi-change.up {
+  color: var(--success);
+}
+
+.kpi-change.down {
+  color: var(--danger);
+}
+
+.kpi-change.flat {
+  color: var(--ink-soft);
+}
+
+.kpi-note {
+  margin: 5px 0 0;
+
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.analytics-section {
+  margin-top: 44px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+
+  margin-bottom: 14px;
+}
+
+.section-heading .eyebrow {
+  margin: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* a stack followed by a card grid in the same section */
+.stack-gap {
+  margin-bottom: 16px;
+}
+
+.section-note {
+  margin: -4px 0 14px;
+
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.period-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ticket-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px 32px;
+}
+
+.list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin: 0 0 6px;
+
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.list-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.empty {
+  margin: 12px 0 0;
+
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.page-footnote {
+  margin: 36px 0 0;
+  padding-top: 18px;
+
+  border-top: 1px solid var(--line-soft);
+
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.9;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.state-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+
+  min-height: 100vh;
+
+  background: var(--void);
+  color: var(--ink);
+}
+
+.state-screen h2 {
+  margin: 0;
+
+  font-family: 'Noto Sans TC', sans-serif;
+  font-size: 1.5rem;
+}
+
+.state-screen p {
+  margin: 0;
+
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- PDF: the page on white, at the A4 printable width ---------- */
+
+/* 210mm less src/utils/pdf.js's 12mm margins is 703px; html2pdf's copy is
+   laid out that wide, and anything wider is cut off */
+
+.analytics-page.exporting {
+  --void: #ffffff;
+  --ink: #1d1d1f;
+  --ink-soft: #3a3a3c;
+  --muted: #6e6e73;
+  --accent: #b35f17;
+  --line: #d2d2d7;
+  --line-soft: #e5e5ea;
+  --card: #ffffff;
+  --card-solid: #ffffff;
+  --card-line: #e5e5ea;
+  --success: #19703a;
+  --danger: #a12622;
+
+  width: 700px;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 16px 0;
+
+  background: #ffffff;
+}
+
+.analytics-page.exporting .live-dot {
+  display: none;
+}
+
+/* each section starts a page, so its heading is never left alone at the
+   bottom of the one before (src/utils/pdf.js honours CSS page breaks) */
+.analytics-page.exporting .analytics-section {
+  page-break-before: always;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report {
+    transition: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .analytics-page {
+    padding: 120px 20px 80px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kpi {
+    padding: 16px 14px;
+  }
+
+  .filter-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .filter-actions .btn-outline {
+    flex: 1;
+  }
+}

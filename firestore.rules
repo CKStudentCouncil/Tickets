@@ -160,9 +160,39 @@ service cloud.firestore {
     }
 
     // Buyers never update or delete orders. ticketSales, buyerPurchases,
-    // orderRequests, rateLimits, stockReleases, notificationJobs and
-    // sellerReleases are only touched by Cloud Functions and fall through to
-    // the deny-all rule below.
+    // orderRequests, rateLimits, stockReleases, notificationJobs,
+    // sellerReleases and invitationRequests are only touched by Cloud
+    // Functions and fall through to the deny-all rule below.
+
+    // =========================
+    // 清除所有訂單 (functions/lib/orderPurge.js)
+    // =========================
+
+    // Written only by purgeOrders. Super admins read the yearly summaries and
+    // archived orders (/super_admin/analytics), a purge's progress, and the
+    // log of who purged. Nobody can write them, so an archive cannot be
+    // altered or a purge hidden from the log.
+    match /salesArchives/{year} {
+      allow read: if isSuperAdmin();
+
+      match /archivedOrders/{orderId} {
+        allow read: if isSuperAdmin();
+      }
+
+      // sale rows without the buyers' details (functions/lib/salesArchive.js),
+      // also written by importSalesArchive
+      match /rows/{chunk} {
+        allow read: if isSuperAdmin();
+      }
+    }
+
+    match /orderPurges/{purgeId} {
+      allow read: if isSuperAdmin();
+    }
+
+    match /systemLogs/{logId} {
+      allow read: if isSuperAdmin();
+    }
 
     // =========================
     // Ticket types & public content
@@ -281,6 +311,53 @@ service cloud.firestore {
     // Tickets registered by everyone, for the goal progress
     match /sellerStats/summary {
       allow get: if isAdmin() || isSeller();
+    }
+
+    // =========================
+    // 公關票 (functions/lib/guests.js)
+    // =========================
+
+    // The tickets themselves are orders with complimentary: true, created
+    // only by sendGuestInvitation; its invitationRequests markers fall
+    // through to the deny-all rule below.
+
+    // Keep the relations in sync with src/data/guests.js
+    function isValidGuestRegistration(data) {
+      return data.keys().hasOnly(['name', 'email', 'relation', 'relationDetail', 'createdAt', 'updatedAt'])
+        && data.name is string
+        && data.name.trim().size() >= 1
+        && data.name.size() <= 50
+        && data.email == signedInEmail()
+        && data.relation in ['alumni', 'friend']
+        && data.relationDetail is string
+        && data.relationDetail.trim().size() >= 1
+        && data.relationDetail.size() <= 50
+        && data.updatedAt == request.time;
+    }
+
+    // A guest's details from /guest, keyed by their uid, so the ticket goes
+    // to their verified account email and they see it under 已購門票. They
+    // may change them until a ticket is sent (sendGuestInvitation adds
+    // orderId, invitedAt and invitedByUid, which clients cannot write).
+    // Super admins read them all and delete strays.
+    match /guestRegistrations/{uid} {
+      allow get: if isSuperAdmin() || (signedIn() && request.auth.uid == uid);
+      allow list: if isSuperAdmin();
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && isValidGuestRegistration(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if signedIn()
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && !('orderId' in resource.data)
+        && isValidGuestRegistration(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if isSuperAdmin();
     }
 
     // =========================

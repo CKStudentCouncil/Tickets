@@ -2,7 +2,6 @@ import {
   escapeHtml,
   C,
   FONT,
-  MONO,
   renderEmail,
   intro,
   card,
@@ -11,7 +10,9 @@ import {
   detailList,
   cardNote,
   cardFooter,
-  actions
+  actions,
+  ticketHead,
+  ticketQr
 } from './shared.js';
 import { SITE_URL } from '../lib/constants.js';
 
@@ -45,76 +46,8 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
     0
   );
 
-  /* ---------- receipt head: title and order number ---------- */
-
-  const head = `
-      <tr>
-        <td class="card-px card-head" style="padding:28px 32px 24px;border-bottom:1px solid ${C.cardLine};">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
-            <tr>
-              <td class="stack" valign="bottom" style="padding:0;">
-                <p style="margin:0 0 8px;font-family:${FONT};font-size:10px;font-weight:700;line-height:1.4;letter-spacing:.18em;color:${C.ember};">
-                  CK PARTY NIGHT
-                </p>
-                <p style="margin:0;font-family:${FONT};font-size:26px;font-weight:500;line-height:1.25;letter-spacing:-.01em;color:${C.text};">
-                  購票收據
-                </p>
-              </td>
-              <td class="stack stack-block" valign="bottom" align="right" style="padding:0 0 0 16px;text-align:right;">
-                <p style="margin:0 0 5px;font-family:${FONT};font-size:10px;line-height:1.4;letter-spacing:.08em;color:${C.lunar};">
-                  訂單編號
-                </p>
-                <p style="margin:0;font-family:${MONO};font-size:13px;font-weight:600;line-height:1.5;letter-spacing:.02em;color:${C.text};word-break:break-all;">
-                  ${safeOrderId}
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-      <tr>
-        <td class="card-px" style="padding:14px 32px;border-bottom:1px solid ${C.cardLineSoft};">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-            <tr>
-              <td style="padding:5px 10px;border:1px solid ${C.emberLine};font-family:${FONT};font-size:11px;line-height:1.4;color:${C.ember};white-space:nowrap;">
-                <span style="font-size:8px;vertical-align:1px;">&#9679;</span>&nbsp;&nbsp;訂單已成立
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>`;
-
-  /* ---------- QR code ---------- */
-
-  const qr = cardSection(`
-          ${sectionHeading('QR', '兌換憑證')}
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.qrBg}" style="width:100%;background:${C.qrBg};border:1px solid ${C.qrLine};">
-            <tr>
-              <td class="qr-pad" align="center" style="padding:28px 20px;text-align:center;">
-                <!--[if mso]><table role="presentation" width="220" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
-                <table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:220px;margin:0 auto;">
-                  <tr>
-                    <td bgcolor="#ffffff" style="padding:12px;background:#ffffff;border-radius:12px;">
-                      <img
-                        src="cid:qrcode"
-                        width="196"
-                        height="196"
-                        alt="票券 QR Code"
-                        style="display:block;width:100%;max-width:196px;height:auto;border:0;"
-                      >
-                    </td>
-                  </tr>
-                </table>
-                <!--[if mso]></td></tr></table><![endif]-->
-                <p style="margin:16px 0 0;font-family:${FONT};font-size:12.5px;line-height:1.8;color:${C.lunar};">
-                  請於指定時間、地點出示此 QR Code<br>給工作人員兌換紙本票券。
-                </p>
-                <p style="margin:8px 0 0;font-family:${MONO};font-size:10px;line-height:1.5;letter-spacing:.08em;color:${C.footerText};word-break:break-all;">
-                  ${safeOrderId}
-                </p>
-              </td>
-            </tr>
-          </table>`);
+  const head = ticketHead({ title: '購票收據', orderId: safeOrderId, status: '訂單已成立' });
+  const qr = ticketQr(safeOrderId);
 
   /* ---------- 01 buyer details ---------- */
 

@@ -174,7 +174,11 @@
             <dt>聯絡電話</dt>
             <dd class="mono">{{ order.customerPhone }}</dd>
           </div>
-          <div v-if="order.school">
+          <div v-if="order.complimentary">
+            <dt>公關票</dt>
+            <dd>{{ guestRelationText(order.guest) || '來賓' }}</dd>
+          </div>
+          <div v-else-if="order.school">
             <dt>學校</dt>
             <dd>{{ order.school }}</dd>
           </div>
@@ -277,6 +281,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
+import { guestRelationText } from 'src/data/guests'
 import { fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'

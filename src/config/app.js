@@ -22,3 +22,7 @@ export const SHOP_OPEN_AT = new Date('2026-11-05T12:00:00+08:00')
 export const EVENT_DATE = '2026/12/13'
 export const EVENT_DATE_LONG = '2026 年 12 月 13 日'
 export const EVENT_VENUE = '建中明道樓後停車場'
+
+// Typed by a super admin to confirm 清除所有訂單 on /admin; purgeOrders
+// checks it too. Keep in sync with functions/lib/orderPurge.js
+export const PURGE_CONFIRM_PHRASE = 'DELETE ALL ORDERS'

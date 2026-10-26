@@ -36,7 +36,11 @@ function validateNotification(type, { paymentTime, pickupTime, location, message
   if ((type === 'pickup' || type === 'both') && !pickupTime) throw new HttpsError('invalid-argument', '請提供取票時間')
 }
 
-async function collectRecipients(school) {
+// 公關票 guests (guests.js) have nothing to pay; they still get pickup and
+// custom notices
+export const includesGuests = (type) => type !== 'payment' && type !== 'both'
+
+async function collectRecipients(school, type) {
   let query = db.collection('orders')
   if (school !== 'all') query = query.where('school', '==', school)
   query = query.orderBy(FieldPath.documentId()).limit(250)
@@ -46,6 +50,7 @@ async function collectRecipients(school) {
     const snapshot = await (cursor ? query.startAfter(cursor) : query).get()
     if (snapshot.empty) break
     snapshot.forEach((doc) => {
+      if (doc.data().complimentary === true && !includesGuests(type)) return
       const email = String(doc.data().customerEmail || '').trim().toLowerCase()
       if (email && email.length <= 320 && email !== SENDER_EMAIL && !email.startsWith('no-reply@') && !email.startsWith('noreply@')) emails.add(email)
     })
@@ -94,7 +99,7 @@ export const prepareOrderNotification = functions.region(REGION).https.onCall(as
   const fields = { paymentTime: readField(data, 'paymentTime'), pickupTime: readField(data, 'pickupTime'),
     location: readField(data, 'location'), message: readField(data, 'message', 8000) }
   validateNotification(type, fields)
-  const recipients = await collectRecipients(school)
+  const recipients = await collectRecipients(school, type)
   if (!recipients.length) return { status: 'empty', jobId: null, sentCount: 0, total: 0 }
   const ref = db.collection('notificationJobs').doc()
   const batch = db.batch()

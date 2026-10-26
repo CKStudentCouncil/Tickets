@@ -159,6 +159,38 @@ export async function fetchAllOrders(filters = {}) {
   }
 }
 
+// The backup taken before 清除所有訂單: every order straight from the server,
+// in document id order, so orders without createdAt (left out of the pages
+// above) are in it too.
+export async function fetchEveryOrder({ onProgress } = {}) {
+  const orders = []
+  let cursor = null
+  for (;;) {
+    const snapshot = await getDocsFromServer(query(collection(db, 'orders'),
+      orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(500)))
+    orders.push(...snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
+    onProgress?.(orders.length)
+    if (snapshot.docs.length < 500) return orders
+    cursor = snapshot.docs.at(-1)
+  }
+}
+
+export async function countAllOrders() {
+  const snapshot = await getAggregateFromServer(collection(db, 'orders'), { orderCount: count() })
+  return snapshot.data().orderCount
+}
+
+// Every order, live, for /super_admin/analytics: one read per order when the
+// page opens, then one per change. The admin list stays on bounded pages.
+export function subscribeAllOrders({ onData, onError }) {
+  return onSnapshot(collection(db, 'orders'), { includeMetadataChanges: true }, (snapshot) => {
+    onData({
+      orders: snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
+      fromCache: snapshot.metadata.fromCache
+    })
+  }, onError)
+}
+
 export async function fetchOrderSummary(filters = {}) {
   const aggregate = async (extra = {}) => {
     const snapshot = await getAggregateFromServer(

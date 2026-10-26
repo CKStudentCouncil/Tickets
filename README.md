@@ -16,6 +16,9 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Live, paginated admin orders with separate order-value and collected-payment totals
 - Search all admin orders by name, phone, email, order ID, school/class details, office, or ticket name
 - Party introduction, lineup pages and a user survey managed from the admin UI
+- 銷售報表 for super admins: live sales against an earlier year (全期 / 同期, by day of the sale), recent windows against the window before, identities, order values, ticket types and marketing charts, with PDF export and 匯入往年資料
+- 清除所有訂單 for super admins: Excel backup, then a Firestore archive (`salesArchives`), then deletion with stock release and an audit log; nothing is deleted unless the backup and archive succeed
+- 公關票 for super admins: invited guests (alumni with their 屆數 and 幹位, friends and family) register on `/guest`, and super admins send them, or anyone by name and email, a free ticket with the same QR code and check-in as an order
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 
 ## Tech Stack
@@ -231,6 +234,9 @@ firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,function
 | `/admin/orders/:id` | Staff order view (ticket QR codes link here) |
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |
+| `/super_admin/analytics` | 銷售報表 (super admins) |
+| `/super_admin/guests` | 公關票: send tickets to guests (super admins) |
+| `/guest` | 公關票 registration for invited guests (link shared with them, not in the menu) |
 | `/comingsoon` | Pre-launch landing page |
 
 ## Application Notes

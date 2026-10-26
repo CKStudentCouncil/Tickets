@@ -7,6 +7,7 @@ import { createTransporter, MAIL_SECRETS, SENDER } from './mailer.js'
 import { SES_RECIPIENTS_PER_SECOND } from './params.js'
 import { createMailQueue } from './mailQueueCore.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
+import { generateGuestInvitationHTML } from '../templates/guestInvitation.js'
 import { generateOrderNotificationHTML } from '../templates/notification.js'
 import { heroAttachment } from '../templates/shared.js'
 
@@ -28,10 +29,14 @@ async function buildMessage(job) {
     width: 300, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' },
     errorCorrectionLevel: 'H', type: 'png'
   })
+  // 公關票 (guests.js) get an invitation, on resends too
+  const content = order.complimentary
+    ? { subject: `建中舞會公關票邀請 - 票券編號：${job.orderId}`,
+        html: generateGuestInvitationHTML(job.orderId, order) }
+    : { subject: `建中舞會購票系統購票成功 - 票券編號：${job.orderId}`,
+        html: generateEmailHTML(job.orderId, order, getBuyerOrderUrl(job.orderId)) }
   return {
-    from: SENDER, to: order.customerEmail,
-    subject: `建中舞會購票系統購票成功 - 票券編號：${job.orderId}`,
-    html: generateEmailHTML(job.orderId, order, getBuyerOrderUrl(job.orderId)),
+    from: SENDER, to: order.customerEmail, ...content,
     attachments: [{ filename: 'ticket-qrcode.png', content: qr, contentType: 'image/png',
       cid: 'qrcode', contentDisposition: 'inline' }, heroAttachment()]
   }
