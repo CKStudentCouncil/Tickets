@@ -2,7 +2,7 @@
 // against an earlier year's sale (salesArchives), day by day from each
 // sale's opening. Pure (no Firebase), so tests/salesAnalytics.test.js runs
 // it with node.
-import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS } from '../data/schools.js'
+import { HOME_SCHOOL, SCHOOLS } from '../data/schools.js'
 import { CHANNEL_OPTIONS } from '../data/surveyQuestions.js'
 import { parseDate } from './datetime.js'
 
@@ -42,7 +42,11 @@ export const WEEKDAY_LABELS = ['週一', '週二', '週三', '週四', '週五',
 // keeps its colour slot (IDENTITY_GROUPS order) whatever a year sold.
 export const IDENTITY_GROUPS = [
   { key: 'home', label: '本校學生', schools: [HOME_SCHOOL] },
-  { key: 'partner', label: '友校學生', schools: CAMPUS_SCHOOLS.filter((school) => school !== HOME_SCHOOL) },
+  { key: 'tfg', label: '北一女中', schools: ['北一女中'] },
+  { key: 'zs', label: '中山女高', schools: ['中山女高'] },
+  { key: 'jm', label: '景美女中', schools: ['景美女中'] },
+  { key: 'cg', label: '成功高中', schools: ['成功高中'] },
+  { key: 'hsnu', label: '師大附中', schools: ['師大附中'] },
   { key: 'parent', label: '家長', schools: ['建中家長會'] },
   { key: 'teacher', label: '教師', schools: ['建中老師'] },
   { key: 'other', label: '其他', schools: [] }

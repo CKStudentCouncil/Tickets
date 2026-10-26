@@ -325,7 +325,7 @@
         <div class="stack stack-gap">
           <ChartCard
             title="各身分營收占比"
-            subtitle="本校學生、友校學生、家長、教師與其他身分各占營收的比例"
+            subtitle="依學校／身分比較營收占比，並細分五所友校"
             :table="groupShareTable"
             :empty="!groupShareBars.some((bar) => bar.segments.some((segment) => segment.value))"
           >
@@ -492,14 +492,14 @@ import {
 const SCREEN_PALETTE = {
   surface: '#0a0b0d', grid: '#1b1e23', axis: '#3b4048', text: '#d9d7d0', muted: '#8d959e',
   current: '#e4a468', previous: '#7d848c',
-  groups: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'],
-  groupText: ['#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
+  groups: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#8066cc', '#14a6b8', '#a97845', '#707780'],
+  groupText: ['#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
 }
 const PRINT_PALETTE = {
   surface: '#ffffff', grid: '#ececf0', axis: '#c7c7cc', text: '#1d1d1f', muted: '#6e6e73',
   current: '#b35f17', previous: '#8a9097',
-  groups: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'],
-  groupText: ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b', '#ffffff']
+  groups: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#8066cc', '#14a6b8', '#a97845', '#707780'],
+  groupText: ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
 }
 const HEAT_DAYS = ['一', '二', '三', '四', '五', '六', '日']
 const PERIOD_COMPARISONS = { today: '昨天同時段', '7d': '前 7 天', '30d': '前 30 天', month: '上月同期' }
