@@ -3,7 +3,7 @@
 // sale's opening. Pure (no Firebase), so tests/salesAnalytics.test.js runs
 // it with node.
 import { HOME_SCHOOL, SCHOOLS } from '../data/schools.js'
-import { CHANNEL_OPTIONS } from '../data/surveyQuestions.js'
+import { CHANNEL_OPTIONS, IDENTITY_OPTIONS } from '../data/surveyQuestions.js'
 import { parseDate } from './datetime.js'
 
 const HOUR_MS = 60 * 60 * 1000
@@ -53,6 +53,7 @@ export const IDENTITY_GROUPS = [
 ]
 const GROUP_OF_SCHOOL = new Map(IDENTITY_GROUPS.flatMap((group) => group.schools.map((school) => [school, group.key])))
 export const groupOf = (school) => GROUP_OF_SCHOOL.get(school) || 'other'
+const groupIndexOf = (school) => IDENTITY_GROUPS.findIndex((group) => group.key === groupOf(school))
 
 const identitySchoolOf = (school) =>
   SCHOOLS.includes(school) ? school : '其他學校或社會人士'
@@ -239,9 +240,10 @@ function hoursOf(rows) {
   return sharesOf(counts)
 }
 
-function bandsOf(rows, bandOf, size) {
+// each row counts once, or by `weightOf` (e.g. its tickets)
+function bandsOf(rows, bandOf, size, weightOf = () => 1) {
   const counts = Array(size).fill(0)
-  rows.forEach((row) => { counts[bandOf(row)] += 1 })
+  rows.forEach((row) => { counts[bandOf(row)] += weightOf(row) })
   return sharesOf(counts)
 }
 
@@ -287,17 +289,35 @@ function ticketTypesOf(rows) {
   return [...types.values()].sort((a, b) => b.units - a.units || b.amount - a.amount)
 }
 
+// `share` of revenue, `ticketShare` of tickets
 function identityGroupsOf(rows) {
-  const totals = new Map(IDENTITY_GROUPS.map((group) => [group.key, { revenue: 0, orders: 0 }]))
+  const totals = new Map(IDENTITY_GROUPS.map((group) => [group.key, { revenue: 0, orders: 0, tickets: 0 }]))
   rows.forEach((row) => {
     const group = totals.get(groupOf(row.school))
     group.revenue += row.total
     group.orders += 1
+    group.tickets += ticketsOf(row)
   })
   const revenue = rows.reduce((sum, row) => sum + row.total, 0)
+  const tickets = rows.reduce((sum, row) => sum + ticketsOf(row), 0)
   return IDENTITY_GROUPS.map(({ key, label }) => ({
-    key, label, ...totals.get(key), share: revenue ? totals.get(key).revenue / revenue : 0
+    key,
+    label,
+    ...totals.get(key),
+    share: revenue ? totals.get(key).revenue / revenue : 0,
+    ticketShare: tickets ? totals.get(key).tickets / tickets : 0
   }))
+}
+
+// Each identity group's orders by Taiwan hour, without groups that have none
+function groupHoursOf(rows) {
+  const counts = IDENTITY_GROUPS.map(() => Array(24).fill(0))
+  rows.forEach((row) => {
+    if (row.at !== null) counts[groupIndexOf(row.school)][new Date(row.at + TAIPEI_MS).getUTCHours()] += 1
+  })
+  return IDENTITY_GROUPS
+    .map(({ key, label }, i) => ({ key, label, orders: counts[i].reduce((sum, n) => sum + n, 0), hours: sharesOf(counts[i]) }))
+    .filter((group) => group.orders)
 }
 
 // Orders by Taiwan weekday (Monday first) and hour
@@ -315,15 +335,36 @@ function weekdaysOf(rows) {
   return sharesOf(weekHoursOf(rows).map((hours) => hours.reduce((sum, n) => sum + n, 0)))
 }
 
+// The stage of a sale an order falls in; orders before the opening are in the first
+function stageOf(row, start) {
+  const day = Math.max(0, Math.floor((row.at - start) / DAY_MS))
+  return SALE_STAGES.findIndex((stage) => day <= stage.last)
+}
+
 // Tickets sold in each stage of a sale
 function stagesOf(rows, start) {
   const counts = Array(SALE_STAGES.length).fill(0)
   rows.forEach((row) => {
-    if (row.at === null) return
-    const day = Math.max(0, Math.floor((row.at - start) / DAY_MS))
-    counts[SALE_STAGES.findIndex((stage) => day <= stage.last)] += ticketsOf(row)
+    if (row.at !== null) counts[stageOf(row, start)] += ticketsOf(row)
   })
   return sharesOf(counts)
+}
+
+// Tickets of each identity group (IDENTITY_GROUPS order) in each stage of a
+// sale, without stages that sold none
+function stageGroupsOf(rows, start) {
+  const counts = SALE_STAGES.map(() => Array(IDENTITY_GROUPS.length).fill(0))
+  rows.forEach((row) => {
+    if (row.at === null) return
+    counts[stageOf(row, start)][groupIndexOf(row.school)] += ticketsOf(row)
+  })
+  return SALE_STAGES
+    .map((stage, i) => ({
+      label: stage.label,
+      tickets: counts[i].reduce((sum, n) => sum + n, 0),
+      groups: sharesOf(counts[i]).map((entry, j) => ({ key: IDENTITY_GROUPS[j].key, label: IDENTITY_GROUPS[j].label, ...entry }))
+    }))
+    .filter((stage) => stage.tickets)
 }
 
 // How many orders each buyer (account) placed; only live orders know theirs
@@ -338,21 +379,75 @@ function repeatOf(rows) {
   return { buyers: perBuyer.size, bands: REPEAT_BANDS.map((label, i) => ({ label, ...shares[i] })) }
 }
 
-// 得知管道: the share of survey respondents who named each channel (one
-// respondent may name several), most named first
-export function channelShares(responses) {
-  const counts = new Map(CHANNEL_OPTIONS.map((option) => [option, 0]))
-  responses.forEach((response) => {
-    ;(Array.isArray(response.channels) ? response.channels : []).forEach((channel) => {
-      if (counts.has(channel)) counts.set(channel, counts.get(channel) + 1)
-    })
+// Revenue concentration: buyers (accounts) by revenue, highest first;
+// `curve[i]` is the share of revenue from the top i × 5% of them
+function concentrationOf(rows) {
+  const perBuyer = new Map()
+  rows.forEach((row) => {
+    if (row.buyer) perBuyer.set(row.buyer, (perBuyer.get(row.buyer) || 0) + row.total)
   })
+  const totals = [...perBuyer.values()].sort((a, b) => b - a)
+  const revenue = totals.reduce((sum, n) => sum + n, 0)
+  let running = 0
+  const cumulative = [0, ...totals.map((n) => (running += n))]
   return {
-    respondents: responses.length,
-    rows: [...counts]
-      .map(([label, count]) => ({ label, count, share: responses.length ? count / responses.length : 0 }))
-      .sort((a, b) => b.count - a.count)
+    buyers: totals.length,
+    curve: Array.from({ length: 21 }, (_, i) => (revenue ? cumulative[Math.round((i / 20) * totals.length)] / revenue : null))
   }
+}
+
+// Each day's mean of up to `span` days before it; null on the first day
+export function trailingMean(values, span = 7) {
+  return values.map((_, i) => {
+    const before = values.slice(Math.max(0, i - span), i)
+    return before.length ? before.reduce((sum, n) => sum + n, 0) / before.length : null
+  })
+}
+
+// The days most above their trailing mean, the biggest gain first
+export function peakDays(values, baseline, count = 5) {
+  return values
+    .map((value, day) => ({ day, value, baseline: baseline[day] }))
+    .filter((entry) => entry.baseline !== null && entry.value > entry.baseline)
+    .sort((a, b) => (b.value - b.baseline) - (a.value - a.baseline))
+    .slice(0, count)
+}
+
+// 得知管道: the share of survey respondents who named each channel (one
+// respondent may name several), most named first; `identities` splits it by
+// the identity each respondent chose, channels in the same order
+export function channelShares(responses) {
+  const countsOf = (group) => {
+    const counts = new Map(CHANNEL_OPTIONS.map((option) => [option, 0]))
+    group.forEach((response) => {
+      new Set(Array.isArray(response.channels) ? response.channels : []).forEach((channel) => {
+        if (counts.has(channel)) counts.set(channel, counts.get(channel) + 1)
+      })
+    })
+    return counts
+  }
+  const rows = [...countsOf(responses)]
+    .map(([label, count]) => ({ label, count, share: responses.length ? count / responses.length : 0 }))
+    .sort((a, b) => b.count - a.count)
+
+  const byIdentity = new Map()
+  responses.forEach((response) => {
+    const identity = response.identity || '未填寫'
+    ;(byIdentity.get(identity) || byIdentity.set(identity, []).get(identity)).push(response)
+  })
+  const identities = [...new Set([...IDENTITY_OPTIONS, ...byIdentity.keys()])]
+    .filter((label) => byIdentity.has(label))
+    .map((label) => {
+      const group = byIdentity.get(label)
+      const counts = countsOf(group)
+      return {
+        label,
+        respondents: group.length,
+        channels: rows.map((row) => ({ count: counts.get(row.label), share: counts.get(row.label) / group.length }))
+      }
+    })
+
+  return { respondents: responses.length, rows, identities }
 }
 
 const KPI_KEYS = ['revenue', 'orders', 'aov', 'tickets', 'ticketsPerOrder', 'paidRate']
@@ -376,6 +471,8 @@ export function buildReport({ current, previous, basis, now }) {
   const previousDays = hasPrevious ? (sameTime ? Math.min(currentDays, previous.days) : previous.days) : 0
   const currentHours = hoursOf(current.rows)
   const previousHours = hoursOf(compared)
+  const currentDaily = dailyOf(current.rows, current.start, currentDays)
+  const baseline = trailingMean(currentDaily.orders)
 
   return {
     hasPrevious,
@@ -390,7 +487,7 @@ export function buildReport({ current, previous, basis, now }) {
     })),
     timeline: {
       days: Math.max(currentDays, previousDays),
-      current: dailyOf(current.rows, current.start, currentDays),
+      current: currentDaily,
       previous: hasPrevious ? dailyOf(compared, previous.start, previousDays) : null,
       dayStart: (sale, i) => new Date(sale.start + i * DAY_MS)
     },
@@ -400,9 +497,15 @@ export function buildReport({ current, previous, basis, now }) {
     values: bandRows(VALUE_BANDS.map((band) => band.label),
       bandsOf(current.rows, valueBand, VALUE_BANDS.length), bandsOf(compared, valueBand, VALUE_BANDS.length)),
     units: bandRows(UNIT_BANDS, bandsOf(current.rows, unitBand, UNIT_BANDS.length), bandsOf(compared, unitBand, UNIT_BANDS.length)),
+    // the tickets orders of each size sold, not how many orders
+    unitTickets: bandRows(UNIT_BANDS,
+      bandsOf(current.rows, unitBand, UNIT_BANDS.length, ticketsOf), bandsOf(compared, unitBand, UNIT_BANDS.length, ticketsOf)),
     ticketTypes: { current: ticketTypesOf(current.rows), previous: ticketTypesOf(compared) },
     identityGroups: { current: identityGroupsOf(current.rows), previous: hasPrevious ? identityGroupsOf(compared) : null },
     weekHours: weekHoursOf(current.rows),
+    groupHours: groupHoursOf(current.rows),
+    // this year's days against the 7 before each
+    peaks: { baseline, days: peakDays(currentDaily.orders, baseline) },
     weekdays: (() => {
       const now = weekdaysOf(current.rows)
       const before = weekdaysOf(compared)
@@ -413,7 +516,9 @@ export function buildReport({ current, previous, basis, now }) {
       stagesOf(current.rows, current.start),
       stagesOf(compared, hasPrevious ? previous.start : 0)
     ),
-    repeat: repeatOf(current.rows)
+    stageGroups: stageGroupsOf(current.rows, current.start),
+    repeat: repeatOf(current.rows),
+    concentration: concentrationOf(current.rows)
   }
 }
 

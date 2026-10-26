@@ -22,23 +22,25 @@
     </div>
 
     <!-- every value stays readable without hovering (and on paper) -->
-    <table class="share-legend">
-      <thead>
-        <tr>
-          <th scope="col"><span class="sr-only">類別</span></th>
-          <th v-for="bar in bars" :key="bar.label" scope="col">{{ bar.label }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(segment, i) in bars[0]?.segments || []" :key="segment.key">
-          <th scope="row">
-            <span class="swatch" :style="{ background: segment.color }" aria-hidden="true" />
-            {{ segment.label }}
-          </th>
-          <td v-for="bar in bars" :key="bar.label" class="num">{{ formatPercent(bar.segments[i].share) }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="share-legend-wrap">
+      <table class="share-legend">
+        <thead>
+          <tr>
+            <th scope="col"><span class="sr-only">類別</span></th>
+            <th v-for="bar in bars" :key="bar.label" scope="col">{{ bar.label }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(segment, i) in bars[0]?.segments || []" :key="segment.key">
+            <th scope="row">
+              <span class="swatch" :style="{ background: segment.color }" aria-hidden="true" />
+              {{ segment.label }}
+            </th>
+            <td v-for="bar in bars" :key="bar.label" class="num">{{ formatPercent(bar.segments[i].share) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <p class="share-readout" aria-hidden="true">{{ readout }}</p>
   </div>
@@ -69,7 +71,7 @@ onBeforeUnmount(() => observer?.disconnect())
 
 const visibleOf = (bar) => bar.segments.filter((segment) => segment.value > 0)
 // a share is written inside its segment only when it fits with room to spare
-const fits = (segment) => segment.share * (width.value - 76) >= 48
+const fits = (segment) => segment.share * (width.value - 84) >= 48
 
 const readout = computed(() => (active.value
   ? `${active.value.segment.label}・${active.value.bar.label}：${props.format(active.value.segment.value)}（${formatPercent(active.value.segment.share)}）`
@@ -79,7 +81,7 @@ const readout = computed(() => (active.value
 <style scoped>
 .share-row {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
 
@@ -134,8 +136,13 @@ const readout = computed(() => (active.value
   font-size: 12px;
 }
 
-.share-legend {
+/* with many bars, the table scrolls rather than widening the page */
+.share-legend-wrap {
   margin-top: 14px;
+  overflow-x: auto;
+}
+
+.share-legend {
   border-collapse: collapse;
 
   font-size: 12px;

@@ -18,13 +18,15 @@ import {
   granularityOptions,
   inRange,
   niceTicks,
+  peakDays,
   periodSeries,
   resolvePeriod,
   rowsFromArchive,
   saleRowOf,
   summarize,
   taipeiDate,
-  taipeiDayStart
+  taipeiDayStart,
+  trailingMean
 } from '../src/utils/salesAnalytics.js'
 
 const at = (iso) => new Date(iso).getTime()
@@ -142,6 +144,11 @@ test('hours, identities, grades, bands and ticket types cover both years', () =>
   assert.deepEqual(report.units.map((row) => [row.label, row.current.count, row.previous.count]), [
     ['1 張', 3, 2], ['2 張', 1, 1], ['3 張', 0, 1]
   ])
+  // the same bands by the tickets their orders sold
+  assert.deepEqual(report.unitTickets.map((row) => [row.label, row.current.count, row.previous.count]), [
+    ['1 張', 3, 2], ['2 張', 2, 2], ['3 張', 0, 3]
+  ])
+  assert.equal(report.unitTickets[0].current.share, 0.6)
 
   assert.deepEqual(report.ticketTypes.current, [{ label: '一階票', units: 5, amount: 3600 }])
   assert.deepEqual(report.ticketTypes.previous.map((type) => [type.label, type.units]), [['晚鳥票', 4], ['早鳥票', 3]])
@@ -176,6 +183,13 @@ test('identity groups, the week grid, sale stages and repeat buyers', () => {
     ['hsnu', 0, 0], ['parent', 0, 0], ['teacher', 0, 0], ['other', 0, 0]
   ])
   assert.equal(report.identityGroups.current[0].share, 0.6)
+  // 本校 4 of 6 tickets this year; the earlier year's 本校 had 3 of 7
+  assert.deepEqual([report.identityGroups.current[0].tickets, report.identityGroups.current[0].ticketShare], [4, 4 / 6])
+  assert.equal(report.identityGroups.previous[0].ticketShare, 3 / 7)
+
+  // orders by hour within each group, groups without orders left out
+  assert.deepEqual(report.groupHours.map((group) => [group.key, group.orders]), [['home', 3], ['tfg', 2]])
+  assert.deepEqual(report.groupHours[1].hours[20], { count: 1, share: 0.5 })
   assert.equal(report.identityGroups.previous.find((group) => group.key === 'teacher').orders, 1)
 
   // Thursday 11/5 12:01 and 21:30, Friday 11/6 20:10 (Monday is row 0)
@@ -190,16 +204,44 @@ test('identity groups, the week grid, sale stages and repeat buyers', () => {
   assert.deepEqual(report.stages.map((stage) => [stage.label, stage.current.count, stage.previous.count]), [
     ['開賣首日', 4, 1], ['第 2–3 天', 2, 5], ['第 15 天以後', 0, 1]
   ])
+  // this year's stages by identity group: 本校 then 北一女中
+  assert.deepEqual(report.stageGroups.map((stage) => [stage.label, stage.tickets, stage.groups[0].count, stage.groups[1].share]), [
+    ['開賣首日', 4, 3, 0.25], ['第 2–3 天', 2, 1, 0.5]
+  ])
+  assert.equal(report.stageGroups[0].groups.length, 9)
 
   assert.equal(report.repeat.buyers, 1)
   assert.deepEqual(report.repeat.bands.map((band) => band.count), [0, 1, 0])
+
+  // day 1 has nothing before it; day 2 is under day 1, day 3 under their mean
+  assert.deepEqual(report.peaks.baseline, [null, 3, 2])
+  assert.deepEqual(report.peaks.days, [])
+  // only buyer-b is known: all of the known revenue
+  assert.equal(report.concentration.buyers, 1)
+  assert.deepEqual([report.concentration.curve[0], report.concentration.curve[20]], [0, 1])
+})
+
+test('days are measured against the days before them, and buyers by their revenue', () => {
+  const baseline = trailingMean([10, 2, 4, 30, 6, 6, 6, 6, 6, 50], 7)
+  assert.deepEqual(baseline.slice(0, 4), [null, 10, 6, 16 / 3])
+  // the 7 days before the last one: indexes 2–8
+  assert.equal(baseline[9], (4 + 30 + 6 + 6 + 6 + 6 + 6) / 7)
+  assert.deepEqual(peakDays([10, 2, 4, 30, 6, 6, 6, 6, 6, 50], baseline, 2).map((entry) => entry.day), [9, 3])
+
+  const buyer = (id, total) => saleRowOf({ createdAt: ts('2026-11-05T13:00:00+08:00'), userId: id, finalTotal: total, items: [] })
+  const rows = [buyer('a', 6000), buyer('b', 2000), buyer('b', 0), buyer('c', 1000), buyer('d', 500), buyer('e', 500)]
+  const { concentration } = buildReport({ current: thisYear(rows), previous: null, basis: 'full', now: NOW })
+  assert.equal(concentration.buyers, 5)
+  // the top 20% is one buyer of five
+  assert.equal(concentration.curve[4], 0.6)
+  assert.equal(concentration.curve[20], 1)
 })
 
 test('得知管道 counts each respondent once per channel they named', () => {
-  const { respondents, rows } = channelShares([
-    { channels: ['班聯會官方 Instagram', '同學或朋友分享'] },
-    { channels: ['班聯會官方 Instagram'] },
-    { channels: ['不在選項中'] },
+  const { respondents, rows, identities } = channelShares([
+    { identity: '北一女中學生', channels: ['班聯會官方 Instagram', '同學或朋友分享'] },
+    { identity: '建國中學學生', channels: ['班聯會官方 Instagram', '班聯會官方 Instagram'] },
+    { identity: '建國中學學生', channels: ['不在選項中'] },
     {}
   ])
   assert.equal(respondents, 4)
@@ -208,6 +250,12 @@ test('得知管道 counts each respondent once per channel they named', () => {
     { label: '同學或朋友分享', count: 1, share: 0.25 }
   ])
   assert.equal(rows.length, 7)
+
+  // by identity, in the survey's order, channels in the order of `rows`
+  assert.deepEqual(identities.map((row) => [row.label, row.respondents, row.channels[0].share, row.channels[1].count]), [
+    ['建國中學學生', 2, 0.5, 0], ['北一女中學生', 1, 1, 1], ['未填寫', 1, 0, 0]
+  ])
+  assert.equal(identities[0].channels.length, 7)
 })
 
 test('a window is compared with the same part of the window before it', () => {

@@ -513,6 +513,52 @@
   font-size: 12.5px;
 }
 
+/* 宣傳高峰: the days most above the week before them */
+.peak-caption {
+  margin: 18px 0 4px;
+
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.peak-list {
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.peak-list li {
+  display: grid;
+  grid-template-columns: 84px 56px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+
+  padding: 8px 0;
+
+  border-bottom: 1px solid var(--line-soft);
+
+  font-size: 12.5px;
+}
+
+.peak-list li:last-child {
+  border-bottom: 0;
+}
+
+.peak-day {
+  color: var(--ink-soft);
+}
+
+.peak-value {
+  color: var(--ink);
+  font-weight: 600;
+  text-align: right;
+}
+
+.peak-gain {
+  color: var(--muted);
+}
+
 .period-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 16px;
@@ -644,6 +690,13 @@
    bottom of the one before (src/utils/pdf.js honours CSS page breaks) */
 .analytics-page.exporting .analytics-section {
   page-break-before: always;
+}
+
+/* html2pdf pushes a card that would straddle two pages down with a spacer
+   div before it; in a card grid the spacer takes a row of its own, so the
+   card and the one beside it move together instead of filling one cell */
+.analytics-page.exporting .card-grid > :deep(div) {
+  grid-column: 1 / -1;
 }
 
 @media (prefers-reduced-motion: reduce) {

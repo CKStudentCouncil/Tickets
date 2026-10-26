@@ -365,6 +365,28 @@
             <ShareBar :bars="groupShareBars" :format="formatCurrency" />
           </ChartCard>
         </div>
+        <!-- its own block: the PDF moves a block that would straddle two pages whole -->
+        <div v-if="hasPrevious" class="stack stack-gap">
+          <ChartCard
+            title="各身分的市占與變化"
+            :subtitle="`橫軸是 ${current.year} 年的購票張數占比（虛線為平均），縱軸是與 ${compareLabel}相比增減的百分點，圓越大張數越多；左上是占比還小但正在成長的對象`"
+            :legend="portfolioPoints.map((point) => ({ label: point.label, color: point.color }))"
+            :table="portfolioTable"
+            :empty="!portfolioPoints.length"
+          >
+            <ScatterChart
+              :points="portfolioPoints"
+              label="各身分購票張數占比與變化的泡泡圖"
+              :x-format="formatPercentTick"
+              :y-format="formatPointsTick"
+              :x-title="`${current.year} 年張數占比 →`"
+              y-title="↑ 占比增減（百分點）"
+              :x-split="1 / portfolioPoints.length"
+              :quadrants="['小眾・成長', '主力・成長', '小眾・下滑', '主力・下滑']"
+              :describe="describePortfolio"
+            />
+          </ChartCard>
+        </div>
         <div class="card-grid">
           <ChartCard
             title="各校／身分購票張數"
@@ -392,6 +414,25 @@
         <div class="section-heading">
           <p class="eyebrow">客單價</p>
         </div>
+        <div class="stack stack-gap">
+          <ChartCard
+            title="營收集中度"
+            :subtitle="concentrationSubtitle"
+            :legend="concentrationLegend"
+            legend-shape="line"
+            :table="concentrationTable"
+            :empty="report.concentration.curve[20] == null"
+          >
+            <LineChart
+              :series="concentrationSeries"
+              label="購買者營收集中度曲線"
+              :format="formatPercent"
+              :axis-format="formatPercentTick"
+              :x-label="(i) => `${i * 5}%`"
+              :tooltip-title="(i) => `營收最高的前 ${i * 5}% 購買者`"
+            />
+          </ChartCard>
+        </div>
         <div class="card-grid">
           <ChartCard
             title="訂單金額分布"
@@ -405,11 +446,25 @@
 
           <ChartCard
             title="每筆訂單張數"
-            subtitle="一筆訂單買了幾張票"
+            :subtitle="unitMode.subtitle"
             :legend="legend"
             :table="unitTable"
-            :empty="isEmptyShares(report.units)"
+            :empty="isEmptyShares(unitShares)"
           >
+            <template #controls>
+              <div class="segmented small" role="group" aria-label="訂單或張數占比">
+                <button
+                  v-for="mode in UNIT_MODES"
+                  :key="mode.key"
+                  type="button"
+                  :class="{ active: unitModeKey === mode.key }"
+                  :aria-pressed="unitModeKey === mode.key"
+                  @click="unitModeKey = mode.key"
+                >
+                  {{ mode.label }}
+                </button>
+              </div>
+            </template>
             <BarList :rows="unitRows" :colors="colors" :series-labels="seriesLabels" :format="formatPercent" />
           </ChartCard>
         </div>
@@ -420,6 +475,39 @@
           <p class="eyebrow">行銷</p>
         </div>
         <div class="stack stack-gap">
+          <ChartCard
+            title="宣傳高峰"
+            :subtitle="`${current.year} 年每天的訂單數與前 7 天的平均；高出平均最多的日子，可以對照當天的宣傳貼文或通知看效果`"
+            :legend="peakLegend"
+            legend-shape="line"
+            :table="peakTable"
+            :empty="timelineEmpty"
+          >
+            <LineChart
+              :series="peakSeries"
+              label="每日訂單數與前 7 天平均折線圖"
+              :format="formatCount"
+              :axis-format="formatCount"
+              :x-label="dayTick"
+              :tooltip-title="dayTitle"
+              :x-step-offset="1"
+              integer
+              area
+            />
+            <template v-if="report.peaks.days.length">
+              <p class="peak-caption">高出前 7 天平均最多的日子</p>
+              <ol class="peak-list">
+                <li v-for="peak in report.peaks.days" :key="peak.day">
+                  <span class="peak-day num">{{ formatDay(timeline.dayStart(current, peak.day)) }}</span>
+                  <span class="peak-value num">{{ formatCount(peak.value) }} 筆</span>
+                  <span class="peak-gain num">
+                    多 {{ formatCount(peak.value - peak.baseline) }} 筆（{{ (peak.value / peak.baseline).toFixed(1) }} 倍）
+                  </span>
+                </li>
+              </ol>
+            </template>
+          </ChartCard>
+
           <ChartCard
             title="熱門購票時段"
             :subtitle="`${current.year} 年各星期、各時段的訂單數，可用來安排宣傳貼文與通知的時間`"
@@ -434,6 +522,53 @@
               label="各星期與時段的訂單數熱度圖"
               :describe="describeWeekHour"
             />
+          </ChartCard>
+
+          <ChartCard
+            title="各身分的購票時段"
+            :subtitle="`${current.year} 年各身分的訂單落在哪些時段（台灣時間），每一列以該身分訂單最多的時段為最深；可依對象安排宣傳的時間`"
+            :table="groupHourTable"
+            :empty="!report.groupHours.length"
+          >
+            <HeatGrid
+              :rows="report.groupHours.map((group) => group.label)"
+              :row-notes="report.groupHours.map((group) => formatCount(group.orders))"
+              :columns="HOUR_LABELS"
+              :values="report.groupHours.map((group) => group.hours.map((hour) => hour.share))"
+              :color="palette.current"
+              row-width="84px"
+              row-scale
+              label="各身分各時段訂單占比的熱度圖"
+              :describe="describeGroupHour"
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="各身分的得知管道"
+            subtitle="問卷中各身分的回覆者選擇各管道的比例，可複選；身分旁是回覆數，回覆少的身分僅供參考"
+            :table="channelReachTable"
+            :empty="!channelReach.length"
+          >
+            <HeatGrid
+              :rows="channelReach.map((group) => group.label)"
+              :row-notes="channelReach.map((group) => formatCount(group.respondents))"
+              :columns="channelColumns"
+              :values="channelReach.map((group) => group.channels.map((channel) => channel.share))"
+              :color="palette.current"
+              row-width="104px"
+              :cell-label="formatPercentTick"
+              label="各身分得知活動管道比例的熱度圖"
+              :describe="describeChannelReach"
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="各階段的購買者組成"
+            :subtitle="`${current.year} 年開賣後各階段售出的張數，依購買者身分細分；看哪些對象較早購票、哪些對象要靠後段宣傳`"
+            :table="stageMixTable"
+            :empty="!stageMixBars.length"
+          >
+            <ShareBar :bars="stageMixBars" :format="formatTickets" />
           </ChartCard>
         </div>
         <div class="card-grid">
@@ -493,6 +628,7 @@ import ChartCard from 'src/components/analytics/ChartCard.vue'
 import ColumnChart from 'src/components/analytics/ColumnChart.vue'
 import HeatGrid from 'src/components/analytics/HeatGrid.vue'
 import LineChart from 'src/components/analytics/LineChart.vue'
+import ScatterChart from 'src/components/analytics/ScatterChart.vue'
 import ShareBar from 'src/components/analytics/ShareBar.vue'
 import { useSalesAnalytics } from 'src/composables/useSalesAnalytics'
 import { useAuthStore } from 'src/stores/auth'
@@ -566,6 +702,20 @@ const TIMELINE_MODES = [
   { key: 'daily', label: '每日' }
 ]
 
+// 每筆訂單張數 as a share of orders, or of the tickets they sold
+const UNIT_MODES = [
+  { key: 'orders', label: '訂單占比', subtitle: '一筆訂單買了幾張票', unit: '筆' },
+  { key: 'tickets', label: '張數占比', subtitle: '一次買幾張的訂單合計賣出的票占總張數的比例，看多張一起買的訂單貢獻多少銷量', unit: '張' }
+]
+
+// 得知管道 column heads; the readout and table use the full names
+const CHANNEL_SHORT = {
+  '班聯會官方 Instagram': '官方 IG',
+  '班代或班級轉知': '班級轉知',
+  '同學或朋友分享': '親友分享',
+  '建中相關社群': '建中社群'
+}
+
 const ARROWS = { up: '▲', down: '▼', flat: '－' }
 const CHANGE_WORDS = { up: '成長', down: '減少', flat: '' }
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => String(hour))
@@ -629,6 +779,17 @@ function formatTickets(value) {
 
 function formatPercentTick(value) {
   return `${Math.round(value * 100)}%`
+}
+
+// a change of share: "+2.5 個百分點"
+function formatPoints(ratio) {
+  if (Math.abs(ratio) < 0.0005) return '持平'
+  return `${ratio > 0 ? '+' : '−'}${(Math.abs(ratio) * 100).toFixed(1)} 個百分點`
+}
+
+function formatPointsTick(ratio) {
+  if (!ratio) return '0'
+  return `${ratio > 0 ? '+' : '−'}${Number((Math.abs(ratio) * 100).toFixed(1))}`
 }
 
 function shortDate(isoDate) {
@@ -768,7 +929,11 @@ function barRows(rows, pick) {
 const identityRows = computed(() => barRows(report.value.identities, (summary) => summary[groupMetricKey.value]))
 const gradeRows = computed(() => barRows(report.value.grades, (summary) => summary[groupMetricKey.value]))
 const valueRows = computed(() => barRows(report.value.values, (entry) => entry.share))
-const unitRows = computed(() => barRows(report.value.units, (entry) => entry.share))
+
+const unitModeKey = ref('orders')
+const unitMode = computed(() => UNIT_MODES.find((mode) => mode.key === unitModeKey.value))
+const unitShares = computed(() => (unitModeKey.value === 'orders' ? report.value.units : report.value.unitTickets))
+const unitRows = computed(() => barRows(unitShares.value, (entry) => entry.share))
 
 const ticketTypeLists = computed(() => {
   const list = (label, color, types) => ({
@@ -781,23 +946,55 @@ const ticketTypeLists = computed(() => {
   return lists
 })
 
-// Identity groups as one bar per year; each group keeps its colour slot.
-const groupShareBars = computed(() => {
-  const bar = (label, groups) => ({
+// A ShareBar bar of the identity groups; each group keeps its colour slot.
+function groupBar(label, groups, valueOf) {
+  return {
     label,
     segments: groups.map((group, i) => ({
       key: group.key,
       label: group.label,
-      value: group.revenue,
+      value: valueOf(group),
       share: group.share,
       color: palette.value.groups[i],
       textColor: palette.value.groupText[i]
     }))
-  })
-  const bars = [bar(seriesLabels.value[0], report.value.identityGroups.current)]
-  if (report.value.identityGroups.previous) bars.push(bar(seriesLabels.value[1], report.value.identityGroups.previous))
+  }
+}
+
+// Identity groups' revenue as one bar per year.
+const groupShareBars = computed(() => {
+  const bars = [groupBar(seriesLabels.value[0], report.value.identityGroups.current, (group) => group.revenue)]
+  if (report.value.identityGroups.previous) {
+    bars.push(groupBar(seriesLabels.value[1], report.value.identityGroups.previous, (group) => group.revenue))
+  }
   return bars
 })
+
+// Identity groups by this year's share of tickets and its change since the
+// compared year, sized by tickets
+const portfolioPoints = computed(() => {
+  const before = report.value.identityGroups.previous
+  if (!before) return []
+  return report.value.identityGroups.current
+    .map((group, i) => ({
+      key: group.key,
+      label: group.label,
+      x: group.ticketShare,
+      y: group.ticketShare - before[i].ticketShare,
+      size: group.tickets,
+      color: palette.value.groups[i],
+      previous: before[i]
+    }))
+    .filter((point) => point.size || point.previous.tickets)
+})
+
+function describePortfolio(point) {
+  return [
+    `${seriesLabels.value[0]} ${formatPercent(point.x)}（${formatTickets(point.size)}）`,
+    `${compareLabel.value} ${formatPercent(point.previous.ticketShare)}（${formatTickets(point.previous.tickets)}）`,
+    `占比 ${formatPoints(point.y)}`
+  ]
+}
 
 // ---- 期間分析: a window of this year's sale against the one before it ----
 
@@ -893,6 +1090,65 @@ function describeWeekHour(row, hour, value) {
   return `${WEEKDAY_LABELS[row]} ${hour}:00–${hour}:59　${formatCount(value)} 筆訂單`
 }
 
+// 得知管道 by identity: all respondents first, then each identity that answered
+const channelReach = computed(() => (survey.value?.respondents
+  ? [{ label: '全部回覆', respondents: survey.value.respondents, channels: survey.value.rows }, ...survey.value.identities]
+  : []))
+const channelColumns = computed(() => (survey.value?.rows || []).map((row) => CHANNEL_SHORT[row.label] || row.label))
+
+function describeChannelReach(row, column, share) {
+  const group = channelReach.value[row]
+  return `${group.label}・${survey.value.rows[column].label}　${formatPercent(share)}（${formatCount(group.channels[column].count)} / ${formatCount(group.respondents)} 份）`
+}
+
+function describeGroupHour(row, hour, share) {
+  const group = report.value.groupHours[row]
+  return `${group.label} ${hour}:00–${hour}:59　${formatPercent(share)}（${formatCount(group.hours[hour].count)} 筆）`
+}
+
+// Daily orders against the mean of the 7 days before each
+const peakLegend = computed(() => [
+  { label: '每日訂單', color: palette.value.current },
+  { label: '前 7 天平均', color: palette.value.previous }
+])
+const peakSeries = computed(() => [
+  {
+    key: 'orders',
+    label: '每日訂單',
+    color: palette.value.current,
+    values: timeline.value.current.orders,
+    detail: (i) => formatDay(timeline.value.dayStart(current.value, i))
+  },
+  { key: 'baseline', label: '前 7 天平均', color: palette.value.previous, values: report.value.peaks.baseline }
+])
+
+// The share of revenue from the top 0%, 5%, … 100% of buyers, against an even split
+const concentrationLegend = computed(() => [
+  { label: seriesLabels.value[0], color: palette.value.current },
+  { label: '平均分配', color: palette.value.previous }
+])
+const concentrationSeries = computed(() => {
+  const { buyers, curve } = report.value.concentration
+  return [
+    {
+      key: 'current',
+      label: seriesLabels.value[0],
+      color: palette.value.current,
+      values: curve,
+      detail: (i) => `${formatCount(Math.round((i / 20) * buyers))} 位購買者`
+    },
+    { key: 'even', label: '平均分配', color: palette.value.previous, values: curve.map((_, i) => i / 20) }
+  ]
+})
+const concentrationSubtitle = computed(() => {
+  const { buyers, curve } = report.value.concentration
+  return `${current.value.year} 年 ${formatCount(buyers)} 位購買者依營收由高到低排列；前 20% 的購買者貢獻 ${formatPercent(curve[4])} 的營收，曲線越往左上彎越集中`
+})
+
+// This year's sale stages, each split by identity group
+const stageMixBars = computed(() =>
+  report.value.stageGroups.map((stage) => groupBar(stage.label, stage.groups, (group) => group.count)))
+
 // ---- Table views ----
 
 function seriesTable(series, format) {
@@ -934,7 +1190,7 @@ const hourTable = computed(() => shareTable('時段', hourRows.value, '筆'))
 const identityTable = computed(() => groupTable('學校／身分', report.value.identities))
 const gradeTable = computed(() => groupTable('年級', report.value.grades))
 const valueTable = computed(() => shareTable('訂單金額（NT$）', report.value.values, '筆'))
-const unitTable = computed(() => shareTable('張數', report.value.units, '筆'))
+const unitTable = computed(() => shareTable('每筆張數', unitShares.value, unitMode.value.unit))
 const stageTable = computed(() => shareTable('階段', report.value.stages, '張'))
 const weekdayTable = computed(() => shareTable('星期', report.value.weekdays, '筆'))
 
@@ -980,6 +1236,61 @@ const channelTable = computed(() => ({
   columns: ['管道', '選擇比例', '回覆數'],
   rows: (survey.value?.rows || []).map((row) => [row.label, formatPercent(row.share), formatCount(row.count)])
 }))
+
+const channelReachTable = computed(() => ({
+  columns: ['身分', '回覆數', ...(survey.value?.rows || []).map((row) => row.label)],
+  rows: channelReach.value.map((group) => [
+    group.label,
+    formatCount(group.respondents),
+    ...group.channels.map((channel) => formatPercent(channel.share))
+  ])
+}))
+
+const stageMixTable = computed(() => ({
+  columns: ['身分', ...report.value.stageGroups.map((stage) => stage.label)],
+  rows: (report.value.stageGroups[0]?.groups || []).map((group, i) => [
+    group.label,
+    ...report.value.stageGroups.map((stage) => `${formatPercent(stage.groups[i].share)}（${formatCount(stage.groups[i].count)} 張）`)
+  ])
+}))
+
+const portfolioTable = computed(() => ({
+  columns: ['身分', `${seriesLabels.value[0]}張數`, `${seriesLabels.value[0]}占比`, `${compareLabel.value}占比`, '增減'],
+  rows: portfolioPoints.value.map((point) => [
+    point.label,
+    formatCount(point.size),
+    formatPercent(point.x),
+    formatPercent(point.previous.ticketShare),
+    formatPoints(point.y)
+  ])
+}))
+
+const groupHourTable = computed(() => ({
+  columns: ['身分', ...HOUR_LABELS.map((hour) => `${hour} 時`)],
+  rows: report.value.groupHours.map((group) => [group.label, ...group.hours.map((hour) => formatPercent(hour.share))])
+}))
+
+const peakTable = computed(() => ({
+  columns: ['天數', '日期', '訂單數', '前 7 天平均'],
+  rows: timeline.value.current.orders.map((orders, i) => [
+    dayTitle(i),
+    formatDay(timeline.value.dayStart(current.value, i)),
+    formatCount(orders),
+    formatDecimal(report.value.peaks.baseline[i])
+  ])
+}))
+
+const concentrationTable = computed(() => {
+  const { buyers, curve } = report.value.concentration
+  return {
+    columns: ['營收最高的', '購買者', '營收占比'],
+    rows: curve.slice(1).map((share, i) => [
+      `前 ${(i + 1) * 5}%`,
+      formatCount(Math.round(((i + 1) / 20) * buyers)),
+      formatPercent(share)
+    ])
+  }
+})
 
 const repeatTable = computed(() => ({
   columns: ['訂單數', '購買者', '占比'],
