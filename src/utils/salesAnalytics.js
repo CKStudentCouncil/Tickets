@@ -54,6 +54,9 @@ export const IDENTITY_GROUPS = [
 const GROUP_OF_SCHOOL = new Map(IDENTITY_GROUPS.flatMap((group) => group.schools.map((school) => [school, group.key])))
 export const groupOf = (school) => GROUP_OF_SCHOOL.get(school) || 'other'
 
+const identitySchoolOf = (school) =>
+  SCHOOLS.includes(school) ? school : '其他學校或社會人士'
+
 /* ---------- dates ---------- */
 
 // "YYYY-MM-DD" in Taiwan
@@ -392,7 +395,7 @@ export function buildReport({ current, previous, basis, now }) {
       dayStart: (sale, i) => new Date(sale.start + i * DAY_MS)
     },
     hours: { current: currentHours, previous: previousHours },
-    identities: groupRows(current.rows, compared, (row) => row.school, SCHOOLS),
+    identities: groupRows(current.rows, compared, (row) => identitySchoolOf(row.school), SCHOOLS),
     grades: groupRows(current.rows, compared, (row) => (row.school === HOME_SCHOOL ? GRADE_LABELS[row.grade] : null), GRADE_ORDER),
     values: bandRows(VALUE_BANDS.map((band) => band.label),
       bandsOf(current.rows, valueBand, VALUE_BANDS.length), bandsOf(compared, valueBand, VALUE_BANDS.length)),

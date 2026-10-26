@@ -147,6 +147,22 @@ test('hours, identities, grades, bands and ticket types cover both years', () =>
   assert.deepEqual(report.ticketTypes.previous.map((type) => [type.label, type.units]), [['晚鳥票', 4], ['早鳥票', 3]])
 })
 
+test('identities merge unlisted schools into other schools', () => {
+  const report = buildReport({
+    current: thisYear([
+      saleRowOf({ createdAt: ts('2026-11-05T13:00:00+08:00'), school: '松山高中', finalTotal: 900, items: [{ id: 'open', name: '一階票', price: 900, quantity: 1 }] }),
+      saleRowOf({ createdAt: ts('2026-11-05T14:00:00+08:00'), school: '中山女高', finalTotal: 900, items: [{ id: 'open', name: '一階票', price: 900, quantity: 1 }] })
+    ]),
+    previous: null,
+    basis: 'full',
+    now: NOW
+  })
+
+  assert.deepEqual(report.identities.map((row) => [row.label, row.current.orders]), [
+    ['中山女高', 1], ['其他學校或社會人士', 1]
+  ])
+})
+
 test('identity groups, the week grid, sale stages and repeat buyers', () => {
   const rows = [
     ...current,
