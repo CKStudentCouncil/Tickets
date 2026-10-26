@@ -193,6 +193,7 @@ function totalsOf(rows) {
 function dailyOf(rows, start, days) {
   const revenue = Array(days).fill(0)
   const orders = Array(days).fill(0)
+  const tickets = Array(days).fill(0)
   const valued = Array(days).fill(0)
   const valuedOrders = Array(days).fill(0)
 
@@ -201,6 +202,7 @@ function dailyOf(rows, start, days) {
     const day = Math.min(days - 1, Math.max(0, Math.floor((row.at - start) / DAY_MS)))
     revenue[day] += row.total
     orders[day] += 1
+    tickets[day] += ticketsOf(row)
     if (row.total > 0) {
       valued[day] += row.total
       valuedOrders[day] += 1
@@ -211,8 +213,13 @@ function dailyOf(rows, start, days) {
   return {
     revenue,
     orders,
+    tickets,
     aov: valued.map((value, day) => (valuedOrders[day] ? value / valuedOrders[day] : null)),
-    cumulative: revenue.map((value) => (running += value))
+    cumulative: revenue.map((value) => (running += value)),
+    cumulativeTickets: tickets.reduce((result, value) => {
+      result.push((result.at(-1) || 0) + value)
+      return result
+    }, [])
   }
 }
 
@@ -247,7 +254,7 @@ function bandRows(labels, current, previous) {
 
 function summaryOf(rows) {
   const totals = totalsOf(rows)
-  return { revenue: totals.revenue, orders: totals.orders, aov: totals.aov }
+  return { revenue: totals.revenue, orders: totals.orders, tickets: totals.tickets, aov: totals.aov }
 }
 
 // Rows of both years by `labelOf`, in `order`, only labels either year has

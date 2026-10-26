@@ -221,7 +221,7 @@
               :axis-format="periodMetric.axis"
               :x-label="periodXLabel"
               :tooltip-title="periodTitle"
-              :integer="periodMetricKey === 'orders'"
+              :integer="['orders', 'tickets'].includes(periodMetricKey)"
               area
             />
           </ChartCard>
@@ -249,6 +249,27 @@
               :x-label="dayTick"
               :tooltip-title="dayTitle"
               :x-step-offset="1"
+              area
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="累積售出張數"
+            :subtitle="report.sameTime ? `開賣後每天的累積張數，${previous.year} 年只算到同一時間` : '開賣後每天的累積售出張數'"
+            :legend="legend"
+            legend-shape="line"
+            :table="cumulativeTicketsTable"
+            :empty="timelineEmpty"
+          >
+            <LineChart
+              :series="cumulativeTicketsSeries"
+              label="累積售出張數折線圖"
+              :format="formatCount"
+              :axis-format="formatCount"
+              :x-label="dayTick"
+              :tooltip-title="dayTitle"
+              :x-step-offset="1"
+              integer
               area
             />
           </ChartCard>
@@ -283,7 +304,7 @@
               :x-label="dayTick"
               :tooltip-title="dayTitle"
               :x-step-offset="1"
-              :integer="slotMetricKey === 'orders'"
+              :integer="['orders', 'tickets'].includes(slotMetricKey)"
             />
           </ChartCard>
 
@@ -334,7 +355,7 @@
         </div>
         <div class="card-grid">
           <ChartCard
-            title="各身分"
+            title="各校／身分購票張數"
             :subtitle="`依訂購時選擇的學校／身分，比較${groupMetric.label}`"
             :legend="legend"
             :table="identityTable"
@@ -525,6 +546,7 @@ const KPI_META = {
 const METRICS = [
   { key: 'revenue', label: '營收', format: formatCurrency, axis: formatCompact },
   { key: 'orders', label: '訂單數', format: formatCount, axis: formatCount },
+  { key: 'tickets', label: '售出張數', format: formatCount, axis: formatCount },
   { key: 'aov', label: '平均客單價', format: formatCurrency, axis: formatCompact }
 ]
 
@@ -556,7 +578,7 @@ const {
 } = useSalesAnalytics()
 
 const slotMetricKey = ref('revenue')
-const groupMetricKey = ref('revenue')
+const groupMetricKey = ref('tickets')
 const slotMetric = computed(() => METRICS.find((metric) => metric.key === slotMetricKey.value))
 const groupMetric = computed(() => METRICS.find((metric) => metric.key === groupMetricKey.value))
 
@@ -675,6 +697,7 @@ function timeSeries(metric) {
 }
 
 const cumulativeSeries = computed(() => timeSeries('cumulative'))
+const cumulativeTicketsSeries = computed(() => timeSeries('cumulativeTickets'))
 const slotSeries = computed(() => timeSeries(slotMetricKey.value))
 const timelineEmpty = computed(() =>
   !cumulativeSeries.value.some((series) => series.values.some((value) => value > 0))
@@ -875,19 +898,20 @@ function shareTable(header, rows, unit) {
 
 function groupTable(header, rows) {
   const columns = [header]
-  seriesLabels.value.forEach((year) => columns.push(`${year}營收`, `${year}訂單`, `${year}客單價`))
+  seriesLabels.value.forEach((year) => columns.push(`${year}購票張數`, `${year}營收`, `${year}訂單`, `${year}客單價`))
   return {
     columns,
     rows: rows.map((row) => [
       row.label,
       ...[row.current, row.previous]
         .slice(0, seriesLabels.value.length)
-        .flatMap((summary) => [formatCurrency(summary.revenue), formatCount(summary.orders), formatCurrency(summary.aov)])
+        .flatMap((summary) => [formatCount(summary.tickets), formatCurrency(summary.revenue), formatCount(summary.orders), formatCurrency(summary.aov)])
     ])
   }
 }
 
 const cumulativeTable = computed(() => seriesTable(cumulativeSeries.value, formatCurrency))
+const cumulativeTicketsTable = computed(() => seriesTable(cumulativeTicketsSeries.value, formatCount))
 const slotTable = computed(() => seriesTable(slotSeries.value, slotMetric.value.format))
 const hourTable = computed(() => shareTable('時段', hourRows.value, '筆'))
 const identityTable = computed(() => groupTable('學校／身分', report.value.identities))
