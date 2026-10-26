@@ -132,8 +132,11 @@ function trackGA4Purchase(orderData) {
   const transactionId = String(orderData.id || '')
   const storageKey = `ga4_purchased_${transactionId}`
 
-  // reloading the success page must not report the purchase twice
-  if (sessionStorage.getItem(storageKey)) return
+  // reloading the success page must not report the purchase twice; blocked
+  // storage only loses that guard (GA4 also dedupes on transaction_id)
+  try {
+    if (sessionStorage.getItem(storageKey)) return
+  } catch { /* storage blocked */ }
 
   trackEvent('purchase', {
     transaction_id: transactionId,
@@ -147,7 +150,9 @@ function trackGA4Purchase(orderData) {
     }))
   })
 
-  sessionStorage.setItem(storageKey, 'true')
+  try {
+    sessionStorage.setItem(storageKey, 'true')
+  } catch { /* storage blocked */ }
 }
 
 async function loadOrder() {
@@ -157,10 +162,15 @@ async function loadOrder() {
     order.value = await fetchOrder(orderId.value)
     if (!order.value) return
 
-    trackGA4Purchase(order.value)
-
     await nextTick()
     if (qrCanvas.value) await renderOrderQr(qrCanvas.value, order.value)
+
+    // analytics must never keep the ticket QR from rendering
+    try {
+      trackGA4Purchase(order.value)
+    } catch (error) {
+      console.error('GA4 紀錄失敗：', error)
+    }
   } catch (error) {
     console.error('訂單載入失敗：', error)
   }

@@ -40,6 +40,18 @@ function validateNotification(type, { paymentTime, pickupTime, location, message
 // custom notices
 export const includesGuests = (type) => type !== 'payment' && type !== 'both'
 
+// Payment notices skip paid orders and pickup notices skip delivered ones, so
+// nobody is asked to pay twice or to collect tickets they already have.
+export function needsNotice(order, type) {
+  if (order.complimentary === true && !includesGuests(type)) return false
+  const unpaid = order.paid !== true && order.complimentary !== true
+  const undelivered = order.delivered !== true
+  if (type === 'payment') return unpaid
+  if (type === 'pickup') return undelivered
+  if (type === 'both') return unpaid || undelivered
+  return true
+}
+
 async function collectRecipients(school, type) {
   let query = db.collection('orders')
   if (school !== 'all') query = query.where('school', '==', school)
@@ -50,7 +62,7 @@ async function collectRecipients(school, type) {
     const snapshot = await (cursor ? query.startAfter(cursor) : query).get()
     if (snapshot.empty) break
     snapshot.forEach((doc) => {
-      if (doc.data().complimentary === true && !includesGuests(type)) return
+      if (!needsNotice(doc.data(), type)) return
       const email = String(doc.data().customerEmail || '').trim().toLowerCase()
       if (email && email.length <= 320 && email !== SENDER_EMAIL && !email.startsWith('no-reply@') && !email.startsWith('noreply@')) emails.add(email)
     })

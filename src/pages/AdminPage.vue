@@ -227,7 +227,7 @@
             <p>地點：<strong>{{ notifyForm.location || '（尚未填寫）' }}</strong></p>
             <p v-if="notifyForm.message">補充說明：{{ notifyForm.message }}</p>
           </template>
-          <p class="preview-count">將發送給{{ notifyTargetSchoolLabel }}的訂購者（確認前會顯示完整人數）</p>
+          <p class="preview-count">將發送給{{ notifyTargetSchoolLabel }}{{ notifyAudienceLabel }}的訂購者（確認前會顯示完整人數）</p>
         </div>
 
         <div class="notify-actions">
@@ -662,6 +662,10 @@ const deliveryStats = computed(() => calculateDeliveryStats(currentOrders.value)
 const notifyTargetSchoolLabel = computed(() =>
   notifyForm.value.school === 'all' ? '全部學校' : notifyForm.value.school
 )
+
+// mirrors needsNotice in functions/lib/notifications.js
+const NOTIFY_AUDIENCE = { payment: '尚未繳費', pickup: '尚未領票', both: '尚未繳費或領票', custom: '' }
+const notifyAudienceLabel = computed(() => NOTIFY_AUDIENCE[notifyForm.value.type] || '')
 
 // Only admins may list every order (firestore.rules); managers get the
 // notification tools only

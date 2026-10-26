@@ -18,3 +18,18 @@ test('a leftover custom subject never replaces a payment / pickup subject (PARTY
   assert.equal(resolveSubject('custom', '舞會延期'), '舞會延期')
   assert.equal(resolveSubject('custom', ''), '【建中舞會購票系統】通知')
 })
+
+test('payment / pickup notices skip orders that no longer need them', async () => {
+  const { needsNotice } = await import('../../lib/notifications.js')
+  const order = (fields) => ({ paid: false, delivered: false, ...fields })
+  assert.equal(needsNotice(order({}), 'payment'), true)
+  assert.equal(needsNotice(order({ paid: true }), 'payment'), false)
+  assert.equal(needsNotice(order({ delivered: true }), 'pickup'), false)
+  assert.equal(needsNotice(order({ paid: true }), 'pickup'), true)
+  assert.equal(needsNotice(order({ paid: true }), 'both'), true)
+  assert.equal(needsNotice(order({ paid: true, delivered: true }), 'both'), false)
+  assert.equal(needsNotice(order({ paid: true, delivered: true }), 'custom'), true)
+  assert.equal(needsNotice(order({ complimentary: true }), 'payment'), false)
+  assert.equal(needsNotice(order({ complimentary: true }), 'pickup'), true)
+  assert.equal(needsNotice(order({ complimentary: true, delivered: true }), 'pickup'), false)
+})
