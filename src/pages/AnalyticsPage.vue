@@ -231,19 +231,31 @@
       <section class="analytics-section">
         <div class="section-heading">
           <p class="eyebrow">時間與銷售</p>
+          <div v-if="!exporting" class="segmented small" role="group" aria-label="累積或每日">
+            <button
+              v-for="option in TIMELINE_MODES"
+              :key="option.key"
+              type="button"
+              :class="{ active: timelineMode === option.key }"
+              :aria-pressed="timelineMode === option.key"
+              @click="timelineMode = option.key"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
         <div class="stack">
           <ChartCard
-            title="累積營收"
-            :subtitle="report.sameTime ? `開賣後每天的累積營收，${previous.year} 年只算到同一時間` : '開賣後每天的累積營收'"
+            :title="`${timelineMode === 'cumulative' ? '累積' : '每日'}營收`"
+            :subtitle="report.sameTime ? `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}營收，${previous.year} 年只算到同一時間` : `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}營收`"
             :legend="legend"
             legend-shape="line"
-            :table="cumulativeTable"
+            :table="revenueTimelineTable"
             :empty="timelineEmpty"
           >
             <LineChart
-              :series="cumulativeSeries"
-              label="累積營收折線圖"
+              :series="revenueTimelineSeries"
+              :label="`${timelineMode === 'cumulative' ? '累積' : '每日'}營收折線圖`"
               :format="formatCurrency"
               :axis-format="formatCompact"
               :x-label="dayTick"
@@ -254,16 +266,16 @@
           </ChartCard>
 
           <ChartCard
-            title="累積售出張數"
-            :subtitle="report.sameTime ? `開賣後每天的累積張數，${previous.year} 年只算到同一時間` : '開賣後每天的累積售出張數'"
+            :title="`${timelineMode === 'cumulative' ? '累積' : '每日'}售出張數`"
+            :subtitle="report.sameTime ? `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}售出張數，${previous.year} 年只算到同一時間` : `開賣後每天的${timelineMode === 'cumulative' ? '累積' : ''}售出張數`"
             :legend="legend"
             legend-shape="line"
-            :table="cumulativeTicketsTable"
+            :table="ticketTimelineTable"
             :empty="timelineEmpty"
           >
             <LineChart
-              :series="cumulativeTicketsSeries"
-              label="累積售出張數折線圖"
+              :series="ticketTimelineSeries"
+              :label="`${timelineMode === 'cumulative' ? '累積' : '每日'}售出張數折線圖`"
               :format="formatCount"
               :axis-format="formatCount"
               :x-label="dayTick"
@@ -549,6 +561,10 @@ const METRICS = [
   { key: 'tickets', label: '售出張數', format: formatCount, axis: formatCount },
   { key: 'aov', label: '平均客單價', format: formatCurrency, axis: formatCompact }
 ]
+const TIMELINE_MODES = [
+  { key: 'cumulative', label: '累積' },
+  { key: 'daily', label: '每日' }
+]
 
 const ARROWS = { up: '▲', down: '▼', flat: '－' }
 const CHANGE_WORDS = { up: '成長', down: '減少', flat: '' }
@@ -696,11 +712,12 @@ function timeSeries(metric) {
   return series
 }
 
-const cumulativeSeries = computed(() => timeSeries('cumulative'))
-const cumulativeTicketsSeries = computed(() => timeSeries('cumulativeTickets'))
+const timelineMode = ref('cumulative')
+const revenueTimelineSeries = computed(() => timeSeries(timelineMode.value === 'cumulative' ? 'cumulative' : 'revenue'))
+const ticketTimelineSeries = computed(() => timeSeries(timelineMode.value === 'cumulative' ? 'cumulativeTickets' : 'tickets'))
 const slotSeries = computed(() => timeSeries(slotMetricKey.value))
 const timelineEmpty = computed(() =>
-  !cumulativeSeries.value.some((series) => series.values.some((value) => value > 0))
+  !revenueTimelineSeries.value.some((series) => series.values.some((value) => value > 0))
 )
 
 // ---- Shares (hours, order values, tickets per order) ----
@@ -910,8 +927,8 @@ function groupTable(header, rows) {
   }
 }
 
-const cumulativeTable = computed(() => seriesTable(cumulativeSeries.value, formatCurrency))
-const cumulativeTicketsTable = computed(() => seriesTable(cumulativeTicketsSeries.value, formatCount))
+const revenueTimelineTable = computed(() => seriesTable(revenueTimelineSeries.value, formatCurrency))
+const ticketTimelineTable = computed(() => seriesTable(ticketTimelineSeries.value, formatCount))
 const slotTable = computed(() => seriesTable(slotSeries.value, slotMetric.value.format))
 const hourTable = computed(() => shareTable('時段', hourRows.value, '筆'))
 const identityTable = computed(() => groupTable('學校／身分', report.value.identities))

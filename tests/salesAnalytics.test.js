@@ -130,8 +130,8 @@ test('hours, identities, grades, bands and ticket types cover both years', () =>
   assert.equal(report.hours.previous.length, 24)
 
   assert.deepEqual(report.identities.map((row) => row.label), ['建國中學', '北一女中', '建中老師', '其他學校或社會人士'])
-  assert.deepEqual(report.identities[0].current, { revenue: 2700, orders: 3, aov: 1350 })
-  assert.deepEqual(report.identities[1].previous, { revenue: 0, orders: 0, aov: null })
+  assert.deepEqual(report.identities[0].current, { revenue: 2700, orders: 3, tickets: 4, aov: 1350 })
+  assert.deepEqual(report.identities[1].previous, { revenue: 0, orders: 0, tickets: 0, aov: null })
 
   assert.deepEqual(report.grades.map((row) => [row.label, row.current.orders, row.previous.orders]), [
     ['高一', 0, 1], ['高二', 2, 0], ['高三', 1, 1]
@@ -156,7 +156,8 @@ test('identity groups, the week grid, sale stages and repeat buyers', () => {
   const report = buildReport({ current: thisYear(rows), previous: lastYear(previous), basis: 'full', now: NOW })
 
   assert.deepEqual(report.identityGroups.current.map((group) => [group.key, group.orders, group.revenue]), [
-    ['home', 3, 2700], ['partner', 2, 1800], ['parent', 0, 0], ['teacher', 0, 0], ['other', 0, 0]
+    ['home', 3, 2700], ['tfg', 2, 1800], ['zs', 0, 0], ['jm', 0, 0], ['cg', 0, 0],
+    ['hsnu', 0, 0], ['parent', 0, 0], ['teacher', 0, 0], ['other', 0, 0]
   ])
   assert.equal(report.identityGroups.current[0].share, 0.6)
   assert.equal(report.identityGroups.previous.find((group) => group.key === 'teacher').orders, 1)
