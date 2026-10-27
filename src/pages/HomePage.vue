@@ -117,11 +117,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { fetchTicketTypes, getTicketStatus, isTicketTypeListed } from 'src/services/ticketTypeService'
+import { fetchSoldOut, fetchTicketTypes, getTicketStatus, isTicketTypeListed } from 'src/services/ticketTypeService'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
 import { useNow } from 'src/composables/useNow'
 
 const ticketTypes = ref([])
+const soldOut = ref({})
 const loadingTicketTypes = ref(true)
 const ticketTypesError = ref(false)
 const collectionSection = ref(null)
@@ -130,7 +131,7 @@ const collectionSection = ref(null)
 const now = useNow(10000)
 
 function statusOf(ticketType) {
-  return getTicketStatus(ticketType, now.value)
+  return getTicketStatus(ticketType, now.value, soldOut.value)
 }
 
 const availableTicketTypes = computed(() =>
@@ -147,11 +148,12 @@ async function loadTicketTypes() {
   ticketTypesError.value = false
 
   try {
-    ticketTypes.value = await fetchTicketTypes()
+    ;[ticketTypes.value, soldOut.value] = await Promise.all([fetchTicketTypes(), fetchSoldOut()])
   } catch (error) {
     console.error('Load ticket types error:', error)
     ticketTypesError.value = true
     ticketTypes.value = []
+    soldOut.value = {}
   } finally {
     loadingTicketTypes.value = false
   }

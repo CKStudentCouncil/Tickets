@@ -29,6 +29,21 @@ test('the analytics page and the archive derive grades and sale rows alike', asy
   assert.deepEqual(salesImport.compactRowOf({ ...order, at: Date.parse(order.createdAt) }), archive.saleRowOf(order))
 })
 
+test('the party survey checks answers with the limits of its page, and takes its default questions', async () => {
+  const { LIMITS: page, defaultSections } = await import(srcFile('data/partySurveyQuestions.js'))
+  const { LIMITS: server, cleanAnswers } = await import('../../lib/partySurvey.js')
+  assert.equal(page.other, server.other)
+  assert.equal(page.text, server.text)
+  // a sheet the page could send for the default questions passes
+  const answers = Object.fromEntries(defaultSections().flatMap((section) => section.questions).map((question) => [
+    question.id,
+    question.type === 'scale' ? Object.fromEntries(question.rows.map((row) => [row.id, 5]))
+      : question.type === 'multiple' ? [question.options[0]]
+        : question.type === 'text' ? '好' : question.options[0]
+  ]))
+  assert.deepEqual(cleanAnswers(defaultSections(), answers), answers)
+})
+
 test('the purge confirmation phrase matches src/config/app.js', async () => {
   const app = await import(srcFile('config/app.js'))
   const { PURGE_CONFIRM_PHRASE } = await import('../../lib/orderPurge.js')

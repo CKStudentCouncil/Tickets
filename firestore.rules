@@ -494,6 +494,35 @@ service cloud.firestore {
     }
 
     // =========================
+    // 舞會滿意度調查
+    // =========================
+
+    // One document per party year (src/services/partySurveyService.js): its
+    // questions and whether it takes answers. Public, so the survey page can
+    // show them; super admins edit both on /admin/party-survey, and a survey opens
+    // only with questions. Questions change from year to year, so answers are
+    // checked against them by submitPartySurvey (functions), which writes
+    // partySurveys/{year}/responses; no client writes there.
+    match /partySurveys/{year} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['year', 'open', 'sections', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.year == int(year)
+        && request.resource.data.open is bool
+        && request.resource.data.get('sections', []) is list
+        // keep in sync with LIMITS in src/data/partySurveyQuestions.js
+        && request.resource.data.get('sections', []).size() <= 20
+        && (request.resource.data.open == false || request.resource.data.get('sections', []).size() > 0)
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if false;
+
+      match /responses/{responseId} {
+        allow read, delete: if isSuperAdmin();
+      }
+    }
+
+    // =========================
     // Everything else is denied
     // =========================
 

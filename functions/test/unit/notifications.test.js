@@ -33,3 +33,21 @@ test('payment / pickup notices skip orders that no longer need them', async () =
   assert.equal(needsNotice(order({ complimentary: true }), 'pickup'), true)
   assert.equal(needsNotice(order({ complimentary: true, delivered: true }), 'pickup'), false)
 })
+
+test('the survey invitation goes to every buyer and 公關票 guest, under its own subject', async () => {
+  const { needsNotice } = await import('../../lib/notifications.js')
+  assert.equal(resolveSubject('survey', '舞會延期'), '【建中舞會購票系統】舞會滿意度調查')
+  assert.equal(needsNotice({ paid: false, delivered: false }, 'survey'), true)
+  assert.equal(needsNotice({ paid: true, delivered: true }, 'survey'), true)
+  assert.equal(needsNotice({ complimentary: true }, 'survey'), true)
+})
+
+test('a survey notice is the party survey invitation, linking to /party-survey only', async () => {
+  const { generateOrderNotificationHTML } = await import('../../templates/notification.js')
+  const { generatePartySurveyInvitationHTML } = await import('../../templates/partySurvey.js')
+  const { SITE_URL } = await import('../../lib/constants.js')
+  const html = generateOrderNotificationHTML({ type: 'survey', message: '' })
+  assert.equal(html, generatePartySurveyInvitationHTML())
+  assert.ok(html.includes(`${SITE_URL}/party-survey`))
+  assert.ok(!html.includes(`${SITE_URL}/survey"`))
+})

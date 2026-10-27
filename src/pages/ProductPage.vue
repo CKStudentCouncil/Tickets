@@ -68,6 +68,7 @@
         </p>
         <p v-else-if="status.state === 'unavailable'" class="ticket-limit">開賣時間尚未公布</p>
         <p v-else-if="status.state === 'ended'" class="ticket-limit">此票種已結束販售</p>
+        <p v-else-if="status.state === 'soldOut'" class="ticket-limit">此票種已售罄</p>
 
         <template v-if="status.state === 'selling' && !showOrderForm">
           <button
@@ -223,6 +224,7 @@ import TurnstileWidget from 'src/components/TurnstileWidget.vue'
 import { TURNSTILE_SITE_KEY } from 'src/config/app'
 import {
   ELIGIBLE_IDENTITIES,
+  fetchSoldOut,
   fetchTicketTypes,
   getPurchaseLimit,
   getTicketStatus,
@@ -241,6 +243,7 @@ const auth = useAuthStore()
 const toast = useToastStore()
 
 const ticketTypes = ref([])
+const soldOut = ref({})
 const loading = ref(true)
 const loadError = ref(false)
 
@@ -259,7 +262,7 @@ const ticketType = computed(() => {
 })
 
 const status = computed(() =>
-  ticketType.value ? getTicketStatus(ticketType.value, now.value) : null
+  ticketType.value ? getTicketStatus(ticketType.value, now.value, soldOut.value) : null
 )
 
 const purchaseLimit = computed(() =>
@@ -271,11 +274,12 @@ async function loadTicketTypes() {
   loadError.value = false
 
   try {
-    ticketTypes.value = await fetchTicketTypes()
+    ;[ticketTypes.value, soldOut.value] = await Promise.all([fetchTicketTypes(), fetchSoldOut()])
   } catch (error) {
     console.error('Load ticket types error:', error)
     loadError.value = true
     ticketTypes.value = []
+    soldOut.value = {}
   } finally {
     loading.value = false
   }

@@ -52,6 +52,8 @@ async function countOrdersOf(ticketTypeId) {
     .reduce((sum, item) => sum + item.quantity, 0)
 }
 
+const soldOutMarks = async () => (await db.doc('settings/ticketSoldOut').get()).data() || {}
+
 const setTypes = (changes) =>
   db.doc('settings/ticketTypes').set({
     types: TICKET_TYPES.map((type) => (changes[type.id] ? { ...type, ...changes[type.id] } : type))
@@ -263,6 +265,18 @@ describe('createOrder', () => {
     assert.equal((await db.doc('ticketSales/campus').get()).exists, false, 'unlimited types get no caps')
   })
 
+  test('saving the ticket types marks the types already sold out, and only those', async () => {
+    await db.doc('ticketSales/open').set({ sold: 100 }) // sold out without createOrder marking it
+    await db.doc('settings/ticketSoldOut').set({ small: 5 }) // no longer true: nothing of it sold
+    await callPlan(fft.makeChange(null, await db.doc('settings/ticketTypes').get()), {})
+    // future has a stock of 0, so it sells nothing either
+    assert.deepEqual(await soldOutMarks(), { open: 100, future: 0 })
+
+    await setTypes({ open: { totalTicketQuantity: 150 } })
+    await callPlan(fft.makeChange(null, await db.doc('settings/ticketTypes').get()), {})
+    assert.deepEqual(await soldOutMarks(), { future: 0 })
+  })
+
   test('a retried checkout returns its order even once the type sold out (PARTY-28)', async () => {
     await setTypes({ open: { totalTicketQuantity: 2 } })
     const payload = { ...order([{ id: 'open', quantity: 2 }]), requestId: 'req-soldout-0123456789' }
@@ -368,6 +382,25 @@ describe('createOrder', () => {
     assert.equal(await soldOf('open'), 100)
   })
 
+  test('taking the last tickets marks the type sold out at its stock', async () => {
+    await setTypes({ open: { totalTicketQuantity: 2 } })
+    await callCreate(order([{ id: 'open', quantity: 1 }]), as('a@example.com'))
+    assert.equal((await soldOutMarks()).open, undefined)
+
+    await callCreate(order([{ id: 'open', quantity: 1 }]), as('b@example.com'))
+    assert.equal((await soldOutMarks()).open, 2)
+  })
+
+  test('a checkout turned away with nothing left marks the type sold out, one asking too many does not', async () => {
+    await setTypes({ open: { totalTicketQuantity: 2 } })
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 3 }]), as('a@example.com')), { code: 'resource-exhausted' })
+    assert.equal((await soldOutMarks()).open, undefined)
+
+    await db.doc('ticketSales/open').set({ sold: 2 }) // both sold before the shards
+    await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('b@example.com')), { code: 'resource-exhausted' })
+    assert.equal((await soldOutMarks()).open, 2)
+  })
+
   test('many simultaneous buyers all get tickets while stock lasts (PARTY-28)', async (t) => {
     await db.doc('settings/ticketTypes').set({
       types: TICKET_TYPES.map((type) => (type.id === 'open' ? { ...type, totalTicketQuantity: 1000 } : type))
@@ -457,6 +490,17 @@ describe('releaseOrderStock', () => {
 
     // the buyer can buy the full allowance again
     await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 4 }]), as('a@example.com')))
+  })
+
+  test('released tickets put a sold-out type back on sale', async () => {
+    await setTypes({ open: { totalTicketQuantity: 2 } })
+    const { id } = await callCreate(order([{ id: 'open', quantity: 2 }]), as('a@example.com'))
+    assert.equal((await soldOutMarks()).open, 2)
+
+    const snap = await db.doc(`orders/${id}`).get()
+    await db.doc(`orders/${id}`).delete()
+    await callRelease(snap, { params: { orderId: id }, eventId: 'e-soldout' })
+    assert.equal((await soldOutMarks()).open, undefined)
   })
 
   test('orders created before the counters existed are not refunded', async () => {

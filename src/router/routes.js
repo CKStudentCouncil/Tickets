@@ -15,6 +15,14 @@ const routes = [
         name: 'survey',
         component: () => import('pages/SurveyPage.vue')
       },
+      // 舞會滿意度調查: answers only while super admins have this year's open, from
+      // signed-in accounts (submitPartySurvey checks too)
+      {
+        path: 'party-survey',
+        name: 'party-survey',
+        component: () => import('pages/PartySurveyPage.vue'),
+        meta: { requiresAuth: true }
+      },
       {
         path: 'policy',
         name: 'policy',
@@ -163,6 +171,14 @@ const routes = [
         path: 'survey',
         name: 'admin-survey',
         component: () => import('pages/SurveyAdminPage.vue')
+      },
+      {
+        path: 'party-survey',
+        name: 'admin-party-survey',
+        component: () => import('pages/PartySurveyAdminPage.vue'),
+        meta: {
+          requiresSuperAdmin: true
+        }
       }
     ]
   },

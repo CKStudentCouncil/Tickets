@@ -52,6 +52,11 @@ const DEFINITE_ORDER_ERRORS = new Set(['invalid-argument', 'failed-precondition'
 //   rateLimits/{uid}_{slot}         { count }  — only when ORDER_LIMIT_PER_ACCOUNT > 0
 //   turnstilePasses/{requestId}     { uid } — only when ENFORCE_TURNSTILE is on
 //   stockReleases/{orderId}         marks a deleted order as already released
+//   settings/ticketSoldOut          { [ticketTypeId]: stock } — public (settings/*),
+//                                   the limited types found sold out at that stock,
+//                                   for the storefront's 售罄 label; a release
+//                                   clears its types, a stock change makes the
+//                                   entry stale
 
 class OrderIdTaken extends Error {}
 // The shards chosen from the unlocked look filled up before they were locked
@@ -112,6 +117,7 @@ const ALL_SHARDS = Array.from({ length: SHARD_COUNT }, (_, k) => k)
 export const settingsRef = db.doc('settings/ticketTypes')
 export const legacyRef = (ticketTypeId) => db.doc(`ticketSales/${ticketTypeId}`)
 export const shardRef = (ticketTypeId, k) => db.doc(`ticketSales/${ticketTypeId}/shards/${k}`)
+export const soldOutRef = db.doc('settings/ticketSoldOut')
 const soldOf = (snap) => Number(snap.data()?.sold || 0)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -131,6 +137,23 @@ export function ticketTypeOf(ticketTypes, id) {
 
 const soldOutError = (ticketType) => new HttpsError('resource-exhausted', `${ticketType.name}剩餘票量不足`)
 
+// Records types ({ id, stock }) as sold out at their stock. Best effort: if it
+// fails, the storefront keeps saying 販售中 and createOrder still turns buyers away.
+async function markSoldOut(types) {
+  if (types.length === 0) return
+  try {
+    await soldOutRef.set(Object.fromEntries(types.map(({ id, stock }) => [id, stock])), { merge: true })
+  } catch (error) {
+    console.error('[createOrder] could not mark sold out:', error)
+  }
+}
+
+// Released tickets put these types back on sale
+export function clearSoldOut(tx, ticketTypeIds) {
+  if (ticketTypeIds.length === 0) return
+  tx.set(soldOutRef, Object.fromEntries(ticketTypeIds.map((id) => [id, FieldValue.delete()])), { merge: true })
+}
+
 // The stored shard caps of a limited type, or null when they must be planned again
 function currentCapsOf(legacySnap, stock) {
   return getCurrentCaps(legacySnap.data()?.shardCaps, getAvailable(stock, soldOf(legacySnap)))
@@ -139,12 +162,15 @@ function currentCapsOf(legacySnap, stock) {
 // Unlocked look before the transaction, so a sold-out type turns buyers away
 // without opening one and the transaction locks only shards with room.
 // Returns null when this requestId was already resolved (the transaction
-// returns the order or rejection), otherwise { [ticketTypeId]: shards to lock } for the
-// limited types. Throws the errors the transaction would for unknown types,
-// types not on sale or not for this buyer, and sold-out types.
+// returns the order or rejection), otherwise { chosen, emptied }: chosen is
+// { [ticketTypeId]: shards to lock } for the limited types, emptied the types
+// ({ id, stock }) this order takes the last tickets of, to mark sold out once
+// it commits. Throws the errors the transaction would for unknown types,
+// types not on sale or not for this buyer, and sold-out types (marking those
+// with nothing left).
 async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, spread }) {
-  const refs = [settingsRef, ...ticketTypeIds.map(legacyRef), ...(requestRef ? [requestRef] : [])]
-  const [settingsSnap, ...snaps] = await db.getAll(...refs)
+  const refs = [settingsRef, soldOutRef, ...ticketTypeIds.map(legacyRef), ...(requestRef ? [requestRef] : [])]
+  const [settingsSnap, soldOutSnap, ...snaps] = await db.getAll(...refs)
   const legacySnaps = snaps.slice(0, ticketTypeIds.length)
   if (requestRef && snaps.at(-1).exists) return null
 
@@ -158,19 +184,27 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
     const stock = getStockLimit(ticketType)
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
   })
-  if (limited.length === 0) return {}
+  if (limited.length === 0) return { chosen: {}, emptied: [] }
 
   const shardSnaps = await db.getAll(...limited.flatMap(({ id }) => ALL_SHARDS.map((k) => shardRef(id, k))))
 
-  return Object.fromEntries(
-    limited.map(({ id, ticketType, stock, legacySnap }, i) => {
-      const sold = shardSnaps.slice(i * SHARD_COUNT, (i + 1) * SHARD_COUNT).map(soldOf)
-      const caps = currentCapsOf(legacySnap, stock) || planShardCaps(getAvailable(stock, soldOf(legacySnap)), sold)
-      const shards = planShards({ caps, sold, quantity: quantities.get(id), random: randomInt, spread })
-      if (!shards) throw soldOutError(ticketType)
-      return [id, shards]
-    })
-  )
+  const looks = limited.map(({ id, ticketType, stock, legacySnap }, i) => {
+    const sold = shardSnaps.slice(i * SHARD_COUNT, (i + 1) * SHARD_COUNT).map(soldOf)
+    const caps = currentCapsOf(legacySnap, stock) || planShardCaps(getAvailable(stock, soldOf(legacySnap)), sold)
+    const left = caps.reduce((sum, cap, k) => sum + Math.max(0, cap - sold[k]), 0)
+    const shards = planShards({ caps, sold, quantity: quantities.get(id), random: randomInt, spread })
+    return { id, ticketType, stock, left, shards }
+  })
+  const marked = soldOutSnap.data() || {}
+  const unmarked = looks.filter(({ id, stock, left }) => left <= quantities.get(id) && marked[id] !== stock)
+
+  const short = looks.find(({ shards }) => !shards)
+  if (short) {
+    await markSoldOut(unmarked.filter(({ left }) => left === 0))
+    throw soldOutError(short.ticketType)
+  }
+
+  return { chosen: Object.fromEntries(looks.map(({ id, shards }) => [id, shards])), emptied: unmarked }
 }
 
 // Counts each item's tickets in its shards; returns { [ticketTypeId]: { [k]: n } }.
@@ -364,13 +398,13 @@ export const createOrder = functions
       ])
       if (checks.status === 'rejected') throw checks.reason
       if (look.status === 'rejected') throw look.reason
-      let chosen = look.value
+      let stockLook = look.value
 
       for (;;) {
         const orderRef = db.doc(`orders/${generateOrderId(schoolCode, dateKey)}`)
 
         try {
-          return await db.runTransaction(async (tx) => {
+          const result = await db.runTransaction(async (tx) => {
             const refs = [settingsRef, buyerRef, orderRef, ...(requestRef ? [requestRef] : []), ...legacyRefs]
             const snaps = await tx.getAll(...refs)
             const [settingsSnap, buyerSnap, orderSnap] = snaps
@@ -421,7 +455,7 @@ export const createOrder = functions
             })
 
             // Stock and buyer allowance commit together with the new order.
-            const stockShards = await reserveStock(tx, items, ticketTypes, legacySnaps, chosen || {})
+            const stockShards = await reserveStock(tx, items, ticketTypes, legacySnaps, stockLook?.chosen || {})
 
             Object.entries(stockShards).forEach(([id, allocation]) => {
               Object.entries(allocation).forEach(([k, n]) => {
@@ -463,6 +497,9 @@ export const createOrder = functions
 
             return { status: 201, id: orderRef.id }
           }, { maxAttempts: 10 })
+
+          if (result.status === 201) await markSoldOut(stockLook?.emptied || [])
+          return result
         } catch (error) {
           if (error instanceof OrderIdTaken && idAttempt++ < ORDER_ID_ATTEMPTS) continue
           // the last tickets are fought over until Firestore gives up; if they
@@ -471,7 +508,7 @@ export const createOrder = functions
           if (!(error instanceof ShardsTaken) || stockAttempt++ >= STOCK_ATTEMPTS) throw error
           // others took those shards: back off a little, then look again
           await sleep(randomInt(20, 100) * stockAttempt)
-          chosen = await choose(stockAttempt > SPREAD_AFTER)
+          stockLook = await choose(stockAttempt > SPREAD_AFTER)
         }
       }
     } catch (error) {
@@ -561,6 +598,7 @@ export function applyStockReleases(tx, releases) {
       ...(dropCaps ? { shardCaps: FieldValue.delete() } : {})
     }, { merge: true })
   })
+  clearSoldOut(tx, [...legacy.keys()])
 
   buyers.forEach((bought, buyerKey) => {
     tx.set(
@@ -620,7 +658,27 @@ export const planStockShards = functions
         tx.set(legacySnap.ref, { shardCaps: { available, caps: planShardCaps(available, sold) } }, { merge: true })
       })
     })
+    await refreshSoldOut()
   })
+
+// Marks every limited type with nothing left as sold out at its stock and
+// clears the others, counting from the stock counters, so a type that sold
+// out without createOrder marking it (e.g. before it did) gets its 售罄 label
+// when the ticket types are next saved
+async function refreshSoldOut() {
+  const limited = [...ticketTypesOf(await settingsRef.get())]
+    .filter(([id, ticketType]) => TICKET_TYPE_ID_PATTERN.test(id) && getStockLimit(ticketType) !== null)
+  if (limited.length === 0) return
+
+  const snaps = await db.getAll(...limited.flatMap(([id]) => [legacyRef(id), ...ALL_SHARDS.map((k) => shardRef(id, k))]))
+  const marks = limited.map(([id, ticketType], i) => {
+    const [legacySnap, ...shardSnaps] = snaps.slice(i * (SHARD_COUNT + 1), (i + 1) * (SHARD_COUNT + 1))
+    const stock = getStockLimit(ticketType)
+    const left = getAvailable(stock, soldOf(legacySnap)) - shardSnaps.reduce((sum, snap) => sum + soldOf(snap), 0)
+    return [id, left <= 0 ? stock : FieldValue.delete()]
+  })
+  await soldOutRef.set(Object.fromEntries(marks), { merge: true })
+}
 
 /* ---------- confirmation email queue ---------- */
 

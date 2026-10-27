@@ -20,7 +20,15 @@ export function saveTicketTypes(types, updatedByUid) {
   return setDoc(ticketTypesRef(), { types, updatedAt: serverTimestamp(), updatedByUid })
 }
 
-export function getTicketStatus(ticketType, now = new Date()) {
+// { [ticketTypeId]: stock } of the types createOrder found sold out at that
+// stock (functions/lib/orders.js); an entry for another stock is out of date
+export async function fetchSoldOut() {
+  const snapshot = await getDoc(doc(db, 'settings', 'ticketSoldOut'))
+  return snapshot.data() || {}
+}
+
+// soldOut is what fetchSoldOut returned
+export function getTicketStatus(ticketType, now = new Date(), soldOut = {}) {
   const start = parseDate(ticketType.salesStartTime)
   const end = parseDate(ticketType.salesEndTime)
 
@@ -36,6 +44,11 @@ export function getTicketStatus(ticketType, now = new Date()) {
     return { state: 'ended', label: '已結束', className: 'ended' }
   }
 
+  const stock = getStockLimit(ticketType)
+  if (stock !== null && soldOut[ticketType.id] === stock) {
+    return { state: 'soldOut', label: '售罄', className: 'ended' }
+  }
+
   return { state: 'selling', label: '販售中', className: 'selling' }
 }
 
@@ -48,6 +61,13 @@ export function isTicketTypeListed(ticketType, now = new Date()) {
   if (state === 'selling') return true
 
   return ticketType.hideUntilSale === false
+}
+
+// same as functions/lib/orderValidation.js: null when unlimited
+export function getStockLimit(ticketType) {
+  if (ticketType.unlimitedStock === true) return null
+  const total = Number(ticketType.totalTicketQuantity)
+  return Number.isInteger(total) && total > 0 ? total : 0
 }
 
 export function getPurchaseLimit(ticketType) {

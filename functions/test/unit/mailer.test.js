@@ -65,7 +65,7 @@ test('every inline image the emails reference is attached', () => {
   const confirmation = generateEmailHTML('CKS202611050001', { school: '建國中學', items: [], finalTotal: 0 })
   assert.deepEqual(cids(confirmation), ['hero-terrain', 'qrcode'])
 
-  for (const type of ['payment', 'pickup', 'both', 'custom']) {
+  for (const type of ['payment', 'pickup', 'both', 'custom', 'survey']) {
     const html = generateOrderNotificationHTML({ type, paymentTime: 't', pickupTime: 't', location: 'l', message: 'm' })
     assert.deepEqual(cids(html), ['hero-terrain'], type)
   }

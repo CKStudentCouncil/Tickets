@@ -23,6 +23,7 @@ import {
   writeBatch
 } from 'firebase/firestore'
 import * as SURVEY from '../src/data/surveyQuestions.js'
+import * as PARTY_SURVEY from '../src/data/partySurveyQuestions.js'
 
 let env
 
@@ -546,6 +547,59 @@ describe('surveyResponses (PARTY-23)', () => {
       await assertFails(deleteDoc(doc(as(who), 'surveyResponses', 'r1')))
     }
     await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r1')))
+  })
+})
+
+describe('舞會滿意度調查', () => {
+  const sections = PARTY_SURVEY.defaultSections()
+  const survey = (who, year, extra = {}) => ({ year, open: false, sections, updatedAt: serverTimestamp(), updatedByUid: who.uid, ...extra })
+  const save = (who, id, data) => setDoc(doc(as(who), 'partySurveys', id), data)
+
+  test('only super admins save a year\'s questions and open it; anyone can read them', async () => {
+    await assertSucceeds(save(staff.superAdmin, '2026', survey(staff.superAdmin, 2026)))
+    await assertSucceeds(save(staff.superAdmin, '2026', survey(staff.superAdmin, 2026, { open: true })))
+    await assertSucceeds(getDoc(doc(anon(), 'partySurveys', '2026')))
+
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(save(who, '2026', survey(who, 2026)))
+    }
+    await assertFails(setDoc(doc(anon(), 'partySurveys', '2026'), { year: 2026, open: true, sections }))
+    await assertFails(deleteDoc(doc(as(staff.superAdmin), 'partySurveys', '2026')))
+  })
+
+  test('a year document is checked: its year, its fields, and questions before it opens', async () => {
+    const boss = staff.superAdmin
+    await assertFails(save(boss, '2026', survey(boss, 2025)))
+    await assertFails(save(boss, 'latest', survey(boss, 2026)))
+    await assertFails(save(boss, '2026', { ...survey(boss, 2026), note: 'x' }))
+    await assertFails(save(boss, '2026', survey(staff.admin, 2026)))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { open: 'yes' })))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { sections: 'all of them' })))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { sections: Array(21).fill(sections[0]) })))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { open: true, sections: [] })))
+    // a year may be saved without questions while it is closed
+    await assertSucceeds(save(boss, '2026', survey(boss, 2026, { sections: [] })))
+  })
+
+  test('no client writes answers; only super admins read and delete them', async () => {
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'partySurveys', '2026'), { year: 2026, open: true, sections }))
+    const answer = { answers: { identity: PARTY_SURVEY.defaultSections()[0].questions[0].options[0] }, createdAt: serverTimestamp() }
+    for (const who of [anon(), as(staff.superAdmin)]) {
+      await assertFails(setDoc(doc(who, 'partySurveys', '2026', 'responses', 'r1'), answer))
+    }
+
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'partySurveys', '2026', 'responses', 'r1'), { answers: {} }))
+    for (const who of [anon(), as(staff.manager), as(staff.admin)]) {
+      await assertFails(getDocs(collection(who, 'partySurveys', '2026', 'responses')))
+    }
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'partySurveys', '2026', 'responses')))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'partySurveys', '2026', 'responses', 'r1'), { answers: { x: 1 } }))
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(deleteDoc(doc(as(who), 'partySurveys', '2026', 'responses', 'r1')))
+    }
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'partySurveys', '2026', 'responses', 'r1')))
   })
 })
 

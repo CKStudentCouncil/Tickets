@@ -5,6 +5,7 @@ import { db, HttpsError } from './common.js'
 import { MAX_SELLER_TICKETS, REGION } from './constants.js'
 import { TICKET_TYPE_ID_PATTERN, isValidRequestId } from './orderValidation.js'
 import {
+  clearSoldOut,
   getBuyerAccount,
   isContention,
   legacyRef,
@@ -178,6 +179,7 @@ export const releaseSellerStock = functions
         // as in releaseOrderStock: plan the caps again from the remaining sales
         tx.set(legacyRef(id), { shardCaps: FieldValue.delete() }, { merge: true })
       })
+      clearSoldOut(tx, Object.keys(registration.stockShards || {}))
 
       tx.set(
         summaryRef,

@@ -176,4 +176,19 @@ describe('notifications and 公關票', () => {
     const pickup = await callPrepare({ type: 'pickup', pickupTime: '11/21', location: '穿堂' }, as(ADMIN))
     assert.deepEqual(await recipientsOf(pickup.jobId), ['alumni@example.com', 'buyer@example.com'])
   })
+
+  test('the party survey goes to buyers and guests, only while that year is open', async () => {
+    await callSend(send(), as(SUPER))
+    await db.doc('orders/O20261026AAAAAA').set({ customerEmail: 'buyer@example.com', school: '其他學校或社會人士', paid: true, delivered: true })
+
+    await assert.rejects(callPrepare({ type: 'survey', year: 2026 }, as(ADMIN)), { code: 'failed-precondition' })
+    await db.doc('partySurveys/2026').set({ year: 2026, open: false, sections: [] })
+    await assert.rejects(callPrepare({ type: 'survey', year: 2026 }, as(ADMIN)), { code: 'failed-precondition' })
+    await assert.rejects(callPrepare({ type: 'survey' }, as(ADMIN)), { code: 'invalid-argument' })
+
+    await db.doc('partySurveys/2026').set({ year: 2026, open: true, sections: [] })
+    const survey = await callPrepare({ type: 'survey', year: 2026 }, as(ADMIN))
+    assert.deepEqual(await recipientsOf(survey.jobId), ['alumni@example.com', 'buyer@example.com'])
+    assert.equal((await db.doc(`notificationJobs/${survey.jobId}`).get()).data().subject, '【建中舞會購票系統】舞會滿意度調查')
+  })
 })

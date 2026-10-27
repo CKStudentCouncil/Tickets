@@ -8,10 +8,12 @@ import { notificationProgress } from './mailQueueCore.js'
 
 export { batchDelayMs } from './mailQueueCore.js'
 
-const NOTIFY_TYPES = ['payment', 'pickup', 'both', 'custom']
+// survey invites every buyer to this year's 舞會滿意度調查 (partySurvey.js)
+const NOTIFY_TYPES = ['payment', 'pickup', 'both', 'custom', 'survey']
 const NOTIFY_SUBJECTS = {
   payment: '【建中舞會購票系統】繳費通知', pickup: '【建中舞會購票系統】取票通知',
-  both: '【建中舞會購票系統】繳費暨取票通知', custom: '【建中舞會購票系統】通知'
+  both: '【建中舞會購票系統】繳費暨取票通知', custom: '【建中舞會購票系統】通知',
+  survey: '【建中舞會購票系統】舞會滿意度調查'
 }
 const JOB_ID_PATTERN = /^[A-Za-z0-9]{1,40}$/
 const MAX_RECIPIENTS = 10_000
@@ -27,6 +29,7 @@ function readField(data, key, limit = 500) {
 }
 
 function validateNotification(type, { paymentTime, pickupTime, location, message }) {
+  if (type === 'survey') return
   if (type === 'custom') {
     if (!message) throw new HttpsError('invalid-argument', '請提供訊息內容')
     return
@@ -36,8 +39,18 @@ function validateNotification(type, { paymentTime, pickupTime, location, message
   if ((type === 'pickup' || type === 'both') && !pickupTime) throw new HttpsError('invalid-argument', '請提供取票時間')
 }
 
-// 公關票 guests (guests.js) have nothing to pay; they still get pickup and
-// custom notices
+// The invitation links to /party-survey, which only takes answers while
+// partySurveys/{year} is open
+async function assertPartySurveyOpen(year) {
+  if (!Number.isInteger(year) || year < 2000 || year > 2999) throw new HttpsError('invalid-argument', '問卷年度不正確')
+  const survey = await db.doc(`partySurveys/${year}`).get()
+  if (survey.get('open') !== true) {
+    throw new HttpsError('failed-precondition', `${year} 年舞會滿意度調查尚未開放填寫，請先開放再寄送`)
+  }
+}
+
+// 公關票 guests (guests.js) have nothing to pay; they still get pickup,
+// custom and survey notices
 export const includesGuests = (type) => type !== 'payment' && type !== 'both'
 
 // Payment notices skip paid orders and pickup notices skip delivered ones, so
@@ -111,6 +124,7 @@ export const prepareOrderNotification = functions.region(REGION).https.onCall(as
   const fields = { paymentTime: readField(data, 'paymentTime'), pickupTime: readField(data, 'pickupTime'),
     location: readField(data, 'location'), message: readField(data, 'message', 8000) }
   validateNotification(type, fields)
+  if (type === 'survey') await assertPartySurveyOpen(Number(data?.year))
   const recipients = await collectRecipients(school, type)
   if (!recipients.length) return { status: 'empty', jobId: null, sentCount: 0, total: 0 }
   const ref = db.collection('notificationJobs').doc()

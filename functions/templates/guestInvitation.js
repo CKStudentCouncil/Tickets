@@ -41,7 +41,7 @@ export function generateGuestInvitationHTML(orderId, order) {
           ${intro({
             eyebrow: 'You are invited',
             heading: '誠摯邀請',
-            lead: `${name ? `${name} 您好：` : '您好：'}<br>誠摯邀請您蒞臨 2026 建中舞會 COSMOS，以下是我們為您保留的公關票。`
+            lead: `${name ? `${name} 您好：` : '您好：'}<br>誠摯邀請您蒞臨 2026 建中舞會 COSMOS，以下是我們為您保留的公關票`
           })}
         </td>
       </tr>
