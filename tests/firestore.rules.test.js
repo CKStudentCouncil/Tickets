@@ -141,6 +141,14 @@ describe('orders (PARTY-2)', () => {
     await assertSucceeds(deleteDoc(doc(db, 'orders', ORDER_ID)))
   })
 
+  test('only super admins delete 公關票 orders', async () => {
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'orders', 'PR20261027AAAAAA'), { ...ORDER, complimentary: true }))
+    await assertFails(deleteDoc(doc(as(staff.manager), 'orders', 'PR20261027AAAAAA')))
+    await assertFails(deleteDoc(doc(as(staff.admin), 'orders', 'PR20261027AAAAAA')))
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'orders', 'PR20261027AAAAAA')))
+  })
+
   test('all staff roles are denied direct status, identity and metadata rewrites', async () => {
     for (const who of Object.values(staff)) {
       const target = doc(as(who), 'orders', ORDER_ID)

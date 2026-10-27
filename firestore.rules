@@ -151,7 +151,9 @@ service cloud.firestore {
       // administrators cannot bypass their stale-state / QR checks directly.
       allow update: if false;
 
-      allow delete: if isAdmin();
+      // 公關票 (complimentary) orders are the super admins' to remove
+      allow delete: if isAdmin()
+        && (resource.data.get('complimentary', false) != true || isSuperAdmin());
 
       match /history/{eventId} {
         allow read: if isManager();

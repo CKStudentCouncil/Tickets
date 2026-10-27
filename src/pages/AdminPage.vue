@@ -398,7 +398,7 @@
         </div>
         <div class="order-actions">
           <button
-            v-if="order.customerEmail"
+            v-if="order.customerEmail && canManageGuestOrder(order)"
             type="button"
             class="btn-outline"
             :disabled="resendingIds.has(order.id)"
@@ -414,6 +414,7 @@
             查看詳細
           </button>
           <button
+            v-if="canManageGuestOrder(order)"
             type="button"
             class="btn-outline danger"
             @click="confirmDelete(order.id)"
@@ -697,6 +698,10 @@ async function lookupExactOrder() {
 function viewOrderDetail(orderId) {
   router.push({ name: 'admin-order-detail', params: { id: orderId } })
 }
+
+// 公關票 orders are resent and deleted by super admins only (firestore.rules,
+// resendOrderEmail)
+const canManageGuestOrder = (order) => order.complimentary !== true || auth.isSuperAdmin
 
 function confirmDelete(orderId) {
   if (!window.confirm(`確定要刪除此訂單嗎？\nID: ${orderId}`)) return

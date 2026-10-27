@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes, randomInt } from 'node:crypto'
 
 import { db, HttpsError, assertRole, getRoleRank } from './common.js'
-import { REGION, SCHOOL_CODES, SHOP_OPEN_AT } from './constants.js'
+import { REGION, ROLE_RANK, SCHOOL_CODES, SHOP_OPEN_AT } from './constants.js'
 import { getTaiwanDateKey, parseTaipeiDateTime } from './time.js'
 import {
   ORDER_ID_PATTERN,
@@ -655,6 +655,10 @@ export const resendOrderEmail = functions
 
     if (!snap.exists) throw new HttpsError('not-found', '找不到訂單')
     if (!snap.data().customerEmail) throw new HttpsError('failed-precondition', '訂單沒有 Email')
+    // a 公關票 invitation, like sending one, is for super admins only
+    if (snap.data().complimentary === true && (await getRoleRank(context.auth.uid)) < ROLE_RANK.super_admin) {
+      throw new HttpsError('permission-denied', '公關票只有最高管理員可以補寄')
+    }
 
     return enqueueManualOrderResend(orderId, snap.data(), context.auth.uid, { requestId: data?.requestId })
   })

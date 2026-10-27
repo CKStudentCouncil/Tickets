@@ -10,6 +10,7 @@ assert.ok(isEmulator, 'these tests clear the database: emulator only')
 const callSend = fft.wrap(functions.sendGuestInvitation)
 const callPrepare = fft.wrap(functions.prepareOrderNotification)
 const callReleaseRegistration = fft.wrap(functions.releaseGuestRegistration)
+const callResend = fft.wrap(functions.resendOrderEmail)
 
 const SUPER = { uid: 'super-uid', email: 'super@example.com' }
 const ADMIN = { uid: 'admin-uid', email: 'admin@example.com' }
@@ -143,6 +144,14 @@ describe('sendGuestInvitation', () => {
     const results = await Promise.allSettled(Array.from({ length: 4 }, () => callSend(sendTo(GUEST_UID), as(SUPER))))
     assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1)
     assert.equal((await db.collection('orders').get()).size, 1)
+  })
+
+  test('only super admins resend a 公關票 invitation', async () => {
+    const { id } = await callSend(send(), as(SUPER))
+    await assert.rejects(callResend({ orderId: id, requestId: 'resend-1' }, as(ADMIN)), { code: 'permission-denied' })
+    assert.equal((await db.collection('mailQueue').get()).size, 0)
+    await callResend({ orderId: id, requestId: 'resend-2' }, as(SUPER))
+    assert.equal((await db.collection('mailQueue').get()).size, 1)
   })
 
   test('a missing registration is reported', async () => {
