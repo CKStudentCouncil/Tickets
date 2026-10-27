@@ -202,6 +202,12 @@ async function writeSummaries(years) {
   const shopOpenAt = parseTaipeiDateTime(shop.data()?.openAt) || SHOP_OPEN_AT
 
   for (const year of years) {
+    // A year imported from its Excel export (importSalesArchive) already
+    // holds that whole sale; the few orders left of it stay in
+    // archivedOrders but must not replace it.
+    const current = await db.doc(`salesArchives/${year}`).get()
+    if (current.exists && current.data().source === 'import') continue
+
     const snap = await db.collection(`salesArchives/${year}/archivedOrders`)
       .select('createdAt', 'finalTotal', 'paid', 'delivered', 'school', 'class', 'items', 'archive.purgeId')
       .get()

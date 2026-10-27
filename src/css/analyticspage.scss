@@ -687,9 +687,15 @@
 }
 
 /* each section starts a page, so its heading is never left alone at the
-   bottom of the one before (src/utils/pdf.js honours CSS page breaks) */
-.analytics-page.exporting .analytics-section {
+   bottom of the one before (src/utils/pdf.js honours CSS page breaks). The
+   PDF is drawn a part at a time; the parts not being drawn are hidden, and a
+   part's first section is at the top of its page already */
+.analytics-page.exporting .export-break {
   page-break-before: always;
+}
+
+.analytics-page.exporting .export-hidden {
+  display: none;
 }
 
 /* html2pdf pushes a card that would straddle two pages down with a spacer

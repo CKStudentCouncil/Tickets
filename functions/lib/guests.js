@@ -172,3 +172,28 @@ export const sendGuestInvitation = functions
       }
     }
   })
+
+// When a 公關票 order is deleted (by an admin or purgeOrders), its
+// registration is open again: the guest may correct their details on
+// /guest (firestore.rules only allow that without orderId) before it is
+// sent again.
+export const releaseGuestRegistration = functions
+  .region(REGION)
+  .runWith({ failurePolicy: true }) // retried on failure; a no-op once released
+  .firestore.document('orders/{orderId}')
+  .onDelete(async (snap, context) => {
+    const order = snap.data()
+    if (order.complimentary !== true || typeof order.userId !== 'string' || !REGISTRATION_ID_PATTERN.test(order.userId)) return
+
+    const registrationRef = db.doc(`guestRegistrations/${order.userId}`)
+    await db.runTransaction(async (tx) => {
+      const registration = await tx.get(registrationRef)
+      // a later ticket sent to the same registration keeps it locked
+      if (!registration.exists || registration.data().orderId !== context.params.orderId) return
+      tx.update(registrationRef, {
+        orderId: FieldValue.delete(),
+        invitedAt: FieldValue.delete(),
+        invitedByUid: FieldValue.delete()
+      })
+    })
+  })

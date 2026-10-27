@@ -9,6 +9,7 @@ assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 const callSend = fft.wrap(functions.sendGuestInvitation)
 const callPrepare = fft.wrap(functions.prepareOrderNotification)
+const callReleaseRegistration = fft.wrap(functions.releaseGuestRegistration)
 
 const SUPER = { uid: 'super-uid', email: 'super@example.com' }
 const ADMIN = { uid: 'admin-uid', email: 'admin@example.com' }
@@ -111,6 +112,30 @@ describe('sendGuestInvitation', () => {
 
     const second = await callSend(sendTo(GUEST_UID), as(SUPER))
     assert.notEqual(second.id, first.id)
+    assert.equal((await db.doc(`guestRegistrations/${GUEST_UID}`).get()).data().orderId, second.id)
+  })
+
+  test('deleting the ticket lets the guest change their registration again', async () => {
+    const { id } = await callSend(sendTo(GUEST_UID), as(SUPER))
+    const deleted = await db.doc(`orders/${id}`).get()
+    await db.doc(`orders/${id}`).delete()
+    await callReleaseRegistration(deleted, { params: { orderId: id } })
+
+    const registration = (await db.doc(`guestRegistrations/${GUEST_UID}`).get()).data()
+    assert.equal(registration.orderId, undefined)
+    assert.equal(registration.invitedAt, undefined)
+    assert.equal(registration.invitedByUid, undefined)
+    assert.equal(registration.name, '陳小華')
+  })
+
+  test('deleting an earlier ticket leaves a later one in place', async () => {
+    const first = await callSend(sendTo(GUEST_UID), as(SUPER))
+    const deleted = await db.doc(`orders/${first.id}`).get()
+    await db.doc(`orders/${first.id}`).delete()
+    const second = await callSend(sendTo(GUEST_UID), as(SUPER))
+    // a late or repeated delivery of the first deletion
+    await callReleaseRegistration(deleted, { params: { orderId: first.id } })
+
     assert.equal((await db.doc(`guestRegistrations/${GUEST_UID}`).get()).data().orderId, second.id)
   })
 

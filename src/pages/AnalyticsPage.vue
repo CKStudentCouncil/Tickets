@@ -9,7 +9,7 @@
   </div>
 
   <div v-else ref="pageRoot" class="analytics-page" :class="{ exporting }">
-    <div class="page-heading">
+    <div class="page-heading" :class="partClass(0)">
       <p class="eyebrow">後台管理</p>
       <div class="heading-row">
         <h1>銷售報表</h1>
@@ -130,7 +130,7 @@
     </div>
 
     <div class="report" :class="{ refreshing: archiveLoading }">
-      <section class="kpi-grid" aria-label="重點指標">
+      <section class="kpi-grid" :class="partClass(0)" aria-label="重點指標">
         <article v-for="kpi in kpis" :key="kpi.key" class="kpi">
           <p class="kpi-label">{{ kpi.label }}</p>
           <p class="kpi-value">{{ kpi.value }}</p>
@@ -148,7 +148,7 @@
         </article>
       </section>
 
-      <section class="analytics-section">
+      <section class="analytics-section" :class="partClass(0, true)">
         <div class="section-heading">
           <p class="eyebrow">期間分析</p>
           <div v-if="!exporting" class="segmented small" role="group" aria-label="分析期間">
@@ -181,14 +181,14 @@
         </div>
         <div class="stack">
           <ChartCard
-            v-for="metric in variants(METRICS, periodMetric)"
+            v-for="metric in periodCards"
             :key="metric.id"
             :title="variantTitle('銷售趨勢', metric.label)"
-            :subtitle="periodChartSubtitleOf(metric)"
+            :subtitle="metric.subtitle"
             :legend="periodLegend"
             legend-shape="line"
-            :table="periodTableOf(metric)"
-            :empty="isFlat(periodChartSeriesOf(metric.key))"
+            :table="metric.table"
+            :empty="metric.empty"
           >
             <template #controls>
               <div class="segmented small" role="group" aria-label="趨勢指標">
@@ -217,8 +217,8 @@
               </div>
             </template>
             <LineChart
-              :series="periodChartSeriesOf(metric.key)"
-              :label="`${periodChartSubtitleOf(metric)}折線圖`"
+              :series="metric.series"
+              :label="`${metric.subtitle}折線圖`"
               :format="metric.format"
               :axis-format="metric.axis"
               :x-label="periodXLabel"
@@ -230,7 +230,7 @@
         </div>
       </section>
 
-      <section class="analytics-section">
+      <section class="analytics-section" :class="partClass(1)">
         <div class="section-heading">
           <p class="eyebrow">時間與銷售</p>
           <div v-if="!exporting" class="segmented small" role="group" aria-label="累積或每日">
@@ -247,17 +247,17 @@
           </div>
         </div>
         <div class="stack">
-          <template v-for="mode in variants(TIMELINE_MODES, timelineModeOption)" :key="mode.id">
+          <template v-for="mode in timelineCards" :key="mode.id">
             <ChartCard
               :title="`${mode.label}營收`"
               :subtitle="timelineSubtitle(mode, '營收')"
               :legend="legend"
               legend-shape="line"
-              :table="seriesTable(revenueTimelineSeriesOf(mode.key), formatCurrency)"
-              :empty="timelineEmpty"
+              :table="mode.revenue.table"
+              :empty="mode.revenue.empty"
             >
               <LineChart
-                :series="revenueTimelineSeriesOf(mode.key)"
+                :series="mode.revenue.series"
                 :label="`${mode.label}營收折線圖`"
                 :format="formatCurrency"
                 :axis-format="formatCompact"
@@ -273,11 +273,11 @@
               :subtitle="timelineSubtitle(mode, '售出張數')"
               :legend="legend"
               legend-shape="line"
-              :table="seriesTable(ticketTimelineSeriesOf(mode.key), formatCount)"
-              :empty="timelineEmpty"
+              :table="mode.tickets.table"
+              :empty="mode.tickets.empty"
             >
               <LineChart
-                :series="ticketTimelineSeriesOf(mode.key)"
+                :series="mode.tickets.series"
                 :label="`${mode.label}售出張數折線圖`"
                 :format="formatCount"
                 :axis-format="formatCount"
@@ -290,21 +290,20 @@
             </ChartCard>
           </template>
 
-          <!-- the PDF has the daily revenue and tickets above already -->
           <ChartCard
-            v-for="metric in variants(METRICS.filter((item) => !['revenue', 'tickets'].includes(item.key)), slotMetric)"
+            v-for="metric in slotCards"
             :key="metric.id"
             :title="variantTitle('每日表現', metric.label)"
             :subtitle="`開賣後每天的${metric.label}`"
             :legend="legend"
             legend-shape="line"
-            :table="seriesTable(timeSeries(metric.key), metric.format)"
-            :empty="timelineEmpty"
+            :table="metric.table"
+            :empty="metric.empty"
           >
             <template #controls>
               <div class="segmented small" role="group" aria-label="指標">
                 <button
-                  v-for="metric in METRICS"
+                  v-for="metric in SLOT_METRICS"
                   :key="metric.key"
                   type="button"
                   :class="{ active: slotMetricKey === metric.key }"
@@ -316,7 +315,7 @@
               </div>
             </template>
             <LineChart
-              :series="timeSeries(metric.key)"
+              :series="metric.series"
               :label="`每日${metric.label}折線圖`"
               :format="metric.format"
               :axis-format="metric.axis"
@@ -346,7 +345,7 @@
         </div>
       </section>
 
-      <section class="analytics-section">
+      <section class="analytics-section" :class="partClass(2)">
         <div class="section-heading">
           <p class="eyebrow">身分與銷售</p>
           <div v-if="!exporting" class="segmented small" role="group" aria-label="身分分析指標">
@@ -395,15 +394,15 @@
           </ChartCard>
         </div>
         <div class="card-grid">
-          <template v-for="metric in variants(METRICS, groupMetric)" :key="metric.id">
+          <template v-for="metric in groupCards" :key="metric.id">
             <ChartCard
-              :title="exporting ? `各校／身分（${metric.label}）` : '各校／身分購票張數'"
+              :title="variantTitle('各校／身分', metric.label)"
               :subtitle="`依訂購時選擇的學校／身分，比較${metric.label}`"
               :legend="legend"
               :table="identityTable"
               :empty="!report.identities.length"
             >
-              <BarList :rows="groupBarRows(report.identities, metric.key)" :colors="colors" :series-labels="seriesLabels" :format="metric.format" />
+              <BarList :rows="metric.identityRows" :colors="colors" :series-labels="seriesLabels" :format="metric.format" />
             </ChartCard>
 
             <ChartCard
@@ -413,13 +412,13 @@
               :table="gradeTable"
               :empty="!report.grades.length"
             >
-              <BarList :rows="groupBarRows(report.grades, metric.key)" :colors="colors" :series-labels="seriesLabels" :format="metric.format" />
+              <BarList :rows="metric.gradeRows" :colors="colors" :series-labels="seriesLabels" :format="metric.format" />
             </ChartCard>
           </template>
         </div>
       </section>
 
-      <section class="analytics-section">
+      <section class="analytics-section" :class="partClass(3)">
         <div class="section-heading">
           <p class="eyebrow">客單價</p>
         </div>
@@ -454,13 +453,13 @@
           </ChartCard>
 
           <ChartCard
-            v-for="mode in variants(UNIT_MODES, unitMode)"
+            v-for="mode in unitCards"
             :key="mode.id"
             :title="variantTitle('每筆訂單張數', mode.label)"
             :subtitle="mode.subtitle"
             :legend="legend"
-            :table="shareTable('每筆張數', unitSharesOf(mode.key), mode.unit)"
-            :empty="isEmptyShares(unitSharesOf(mode.key))"
+            :table="mode.table"
+            :empty="mode.empty"
           >
             <template #controls>
               <div class="segmented small" role="group" aria-label="訂單或張數占比">
@@ -476,12 +475,12 @@
                 </button>
               </div>
             </template>
-            <BarList :rows="barRows(unitSharesOf(mode.key), (entry) => entry.share)" :colors="colors" :series-labels="seriesLabels" :format="formatPercent" />
+            <BarList :rows="mode.rows" :colors="colors" :series-labels="seriesLabels" :format="formatPercent" />
           </ChartCard>
         </div>
       </section>
 
-      <section class="analytics-section">
+      <section class="analytics-section" :class="partClass(4)">
         <div class="section-heading">
           <p class="eyebrow">行銷</p>
         </div>
@@ -623,7 +622,7 @@
         </div>
       </section>
 
-      <p class="page-footnote">
+      <p class="page-footnote" :class="partClass(4)">
         日期與時段以台灣時間計算；「同期」只比較往年開賣後同一天、同一時刻為止的資料，「全期」比較往年整段銷售期間；
         開賣前成立的訂單（例如測試訂單）算在第 1 天，往年結束日之後的訂單算在最後一天；營收是訂單金額，包含還沒付款的訂單，
         平均客單價不含 NT$0 的訂單
@@ -644,7 +643,7 @@ import ShareBar from 'src/components/analytics/ShareBar.vue'
 import { useSalesAnalytics } from 'src/composables/useSalesAnalytics'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { downloadElementAsPdf } from 'src/utils/pdf'
+import { downloadElementPartsAsPdf } from 'src/utils/pdf'
 import {
   PERIODS,
   WEEKDAY_LABELS,
@@ -708,6 +707,8 @@ const METRICS = [
   { key: 'tickets', label: '售出張數', format: formatCount, axis: formatCount },
   { key: 'aov', label: '平均客單價', format: formatCurrency, axis: formatCompact }
 ]
+// 每日表現: the daily revenue and tickets have charts of their own above it
+const SLOT_METRICS = METRICS.filter((metric) => !['revenue', 'tickets'].includes(metric.key))
 const TIMELINE_MODES = [
   { key: 'cumulative', label: '累積' },
   { key: 'daily', label: '每日' }
@@ -754,20 +755,22 @@ const {
   confirmImport
 } = useSalesAnalytics()
 
-const slotMetricKey = ref('revenue')
+const slotMetricKey = ref('orders')
 const groupMetricKey = ref('tickets')
-const slotMetric = computed(() => METRICS.find((metric) => metric.key === slotMetricKey.value))
-const groupMetric = computed(() => METRICS.find((metric) => metric.key === groupMetricKey.value))
 
 const exporting = ref(false)
 const palette = computed(() => (exporting.value ? PRINT_PALETTE : SCREEN_PALETTE))
 
 // A chart with a toggle shows the chosen option on screen; the PDF has every
-// option, each named in its title. On screen `id` stays the same, so
-// switching options keeps the card (and its table view) instead of a new one.
-const variants = (options, chosen) => (exporting.value
-  ? options.map((option) => ({ ...option, id: option.key }))
-  : [{ ...chosen, id: 'chosen' }])
+// option, each named in its title. The chosen option's card keeps the id
+// 'chosen' either way, so neither switching options nor an export replaces
+// it with a new one (which would lose its table view).
+function variants(options, chosenKey) {
+  const chosen = options.find((option) => option.key === chosenKey) || options[0]
+  return exporting.value
+    ? options.map((option) => ({ ...option, id: option === chosen ? 'chosen' : option.key }))
+    : [{ ...chosen, id: 'chosen' }]
+}
 const variantTitle = (title, label) => (exporting.value ? `${title}（${label}）` : title)
 provide('chartPalette', palette)
 // Chart cards hide their buttons too.
@@ -893,9 +896,6 @@ function timeSeries(metric) {
 }
 
 const timelineMode = ref('cumulative')
-const timelineModeOption = computed(() => TIMELINE_MODES.find((mode) => mode.key === timelineMode.value))
-const revenueTimelineSeriesOf = (mode) => timeSeries(mode === 'cumulative' ? 'cumulative' : 'revenue')
-const ticketTimelineSeriesOf = (mode) => timeSeries(mode === 'cumulative' ? 'cumulativeTickets' : 'tickets')
 
 function timelineSubtitle(mode, measure) {
   const text = `開賣後每天的${mode.key === 'cumulative' ? '累積' : ''}${measure}`
@@ -904,7 +904,22 @@ function timelineSubtitle(mode, measure) {
 
 // no line rises above 0
 const isFlat = (series) => !series.some((item) => item.values.some((value) => value > 0))
-const timelineEmpty = computed(() => isFlat(timeSeries('revenue')))
+// no orders on any day (NT$0 orders count, so this is not about revenue)
+const timelineEmpty = computed(() => isFlat(timeSeries('orders')))
+
+// A timeline chart's series with its table view and empty state
+function timelineCard(metric, format) {
+  const series = timeSeries(metric)
+  return { series, table: seriesTable(series, format), empty: isFlat(series) }
+}
+
+const timelineCards = computed(() => variants(TIMELINE_MODES, timelineMode.value).map((mode) => ({
+  ...mode,
+  revenue: timelineCard(mode.key === 'cumulative' ? 'cumulative' : 'revenue', formatCurrency),
+  tickets: timelineCard(mode.key === 'cumulative' ? 'cumulativeTickets' : 'tickets', formatCount)
+})))
+const slotCards = computed(() =>
+  variants(SLOT_METRICS, slotMetricKey.value).map((metric) => ({ ...metric, ...timelineCard(metric.key, metric.format) })))
 
 // ---- Shares (hours, order values, tickets per order) ----
 
@@ -951,12 +966,23 @@ function barRows(rows, pick) {
   }))
 }
 
-const groupBarRows = (rows, key) => barRows(rows, (summary) => summary[key])
+const groupCards = computed(() => variants(METRICS, groupMetricKey.value).map((metric) => ({
+  ...metric,
+  identityRows: barRows(report.value.identities, (summary) => summary[metric.key]),
+  gradeRows: barRows(report.value.grades, (summary) => summary[metric.key])
+})))
 const valueRows = computed(() => barRows(report.value.values, (entry) => entry.share))
 
 const unitModeKey = ref('orders')
-const unitMode = computed(() => UNIT_MODES.find((mode) => mode.key === unitModeKey.value))
-const unitSharesOf = (key) => (key === 'orders' ? report.value.units : report.value.unitTickets)
+const unitCards = computed(() => variants(UNIT_MODES, unitModeKey.value).map((mode) => {
+  const shares = mode.key === 'orders' ? report.value.units : report.value.unitTickets
+  return {
+    ...mode,
+    rows: barRows(shares, (entry) => entry.share),
+    table: shareTable('每筆張數', shares, mode.unit),
+    empty: isEmptyShares(shares)
+  }
+}))
 
 const ticketTypeLists = computed(() => {
   const list = (label, color, types) => ({
@@ -1025,7 +1051,6 @@ const periodKey = ref('7d')
 const periodMetricKey = ref('revenue')
 // null: whatever suits the window's length
 const periodGranularityChoice = ref(null)
-const periodMetric = computed(() => METRICS.find((metric) => metric.key === periodMetricKey.value))
 
 const firstOrderAt = computed(() => current.value.rows.reduce((first, row) =>
   (row.at !== null && (first === null || row.at < first) ? row.at : first), null))
@@ -1099,6 +1124,11 @@ function periodChartSeriesOf(key) {
   }
   return series
 }
+
+const periodCards = computed(() => variants(METRICS, periodMetricKey.value).map((metric) => {
+  const series = periodChartSeriesOf(metric.key)
+  return { ...metric, series, subtitle: periodChartSubtitleOf(metric), table: periodTableOf(metric), empty: isFlat(series) }
+}))
 
 // ---- 行銷 ----
 
@@ -1323,6 +1353,17 @@ const toast = useToastStore()
 const pageRoot = ref(null)
 const exportStamp = ref('')
 
+// The PDF is drawn a part at a time (downloadElementPartsAsPdf): the
+// heading, KPIs and 期間分析, then each section. The others are hidden, not
+// removed, so their cards keep their state (e.g. a table view).
+const EXPORT_PARTS = 5
+const exportPart = ref(null)
+// `breaks`: it starts a new page within its part
+function partClass(part, breaks = false) {
+  if (exportPart.value === null) return null
+  return exportPart.value === part ? { 'export-break': breaks } : 'export-hidden'
+}
+
 function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve))
 }
@@ -1336,14 +1377,17 @@ async function exportPdf() {
   exportStamp.value = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })
   exporting.value = true
   try {
-    await nextTick()
-    for (let i = 0; i < 3; i++) await nextFrame()
-    await downloadElementAsPdf(pageRoot.value, `銷售報表_${taipeiDate(Date.now())}.pdf`)
+    await downloadElementPartsAsPdf(pageRoot.value, `銷售報表_${taipeiDate(Date.now())}.pdf`, EXPORT_PARTS, async (part) => {
+      exportPart.value = part
+      await nextTick()
+      for (let i = 0; i < 3; i++) await nextFrame()
+    })
   } catch (error) {
     console.error('PDF export failed:', error)
     toast.show('PDF 匯出失敗，請再試一次')
   } finally {
     exporting.value = false
+    exportPart.value = null
   }
 }
 

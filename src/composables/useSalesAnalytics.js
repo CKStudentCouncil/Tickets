@@ -82,19 +82,23 @@ export function useSalesAnalytics() {
     rows: rows.value
   }))
 
+  // only the latest load may set the rows or end the loading state, so a
+  // slower earlier one (or a cleared comparison) never leaves it stuck
+  let rowsLoad = 0
   async function loadPreviousRows(year) {
+    const load = ++rowsLoad
     previousRows.value = null
+    archiveLoading.value = year !== null
     if (year === null) return
-    archiveLoading.value = true
     try {
       const archive = archives.value.find((item) => item.year === year)
       const loaded = rowsFromArchive(await fetchArchiveRows(year), archive?.byTicketType)
-      if (compareYear.value === year) previousRows.value = loaded
+      if (load === rowsLoad) previousRows.value = loaded
     } catch (error) {
       console.error('Sales report archive error:', error)
-      toast.show(`${year} 年的資料載入失敗`)
+      if (load === rowsLoad) toast.show(`${year} 年的資料載入失敗`)
     } finally {
-      if (compareYear.value === year) archiveLoading.value = false
+      if (load === rowsLoad) archiveLoading.value = false
     }
   }
   watch(compareYear, loadPreviousRows)

@@ -338,7 +338,8 @@ service cloud.firestore {
     // A guest's details from /guest, keyed by their uid, so the ticket goes
     // to their verified account email and they see it under 已購門票. They
     // may change them until a ticket is sent (sendGuestInvitation adds
-    // orderId, invitedAt and invitedByUid, which clients cannot write).
+    // orderId, invitedAt and invitedByUid, which clients cannot write;
+    // releaseGuestRegistration removes them again if that order is deleted).
     // Super admins read them all and delete strays.
     match /guestRegistrations/{uid} {
       allow get: if isSuperAdmin() || (signedIn() && request.auth.uid == uid);

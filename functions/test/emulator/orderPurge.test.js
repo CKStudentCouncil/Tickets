@@ -264,6 +264,22 @@ describe('purgeOrders', () => {
     assert.ok(summary.purgeIds.includes(second.purgeId))
   })
 
+  test('a year imported from its Excel export keeps its import', async () => {
+    await db.doc(`salesArchives/${THIS_YEAR}`).set({ year: THIS_YEAR, source: 'import', orderCount: 1500, rowChunks: 1 })
+    await db.doc(`salesArchives/${THIS_YEAR}/rows/000`).set({ rows: [{ t: null, v: 900, p: true, d: true, s: '建國中學', g: 1, i: [] }] })
+    const a = await buy('a@example.com', [{ id: 'open', quantity: 1 }])
+
+    await callPurge(purge({ orderIds: [a.id] }), as(SUPER))
+
+    const summary = await summaryOf(THIS_YEAR)
+    assert.equal(summary.source, 'import')
+    assert.equal(summary.orderCount, 1500)
+    assert.equal(await exists(`salesArchives/${THIS_YEAR}/rows/000`), true)
+    // the order itself is still archived, and deleted
+    assert.ok(await archivedOf(THIS_YEAR, a.id))
+    assert.equal(await exists(`orders/${a.id}`), false)
+  })
+
   test('orders are archived under the Taiwan year they were placed in', async () => {
     const batch = db.batch()
     // 2026-01-01 00:30 and 2025-12-31 23:30 in Taiwan
