@@ -176,7 +176,7 @@
           </div>
           <div v-if="order.complimentary">
             <dt>公關票</dt>
-            <dd>{{ guestRelationText(order.guest) || '來賓' }}</dd>
+            <dd>{{ guestSourceText(order) }}</dd>
           </div>
           <div v-else-if="order.school">
             <dt>學校</dt>
@@ -281,7 +281,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
-import { guestRelationText } from 'src/data/guests'
+import { guestSourceText } from 'src/data/guests'
 import { fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'

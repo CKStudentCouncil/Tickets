@@ -87,11 +87,19 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
-        // 公關票: invited guests leave their details; the link is shared
-        // with them, not shown in the menu. Open before the shop is.
-        path: '/12348uytr8u216230pjhogifjdedu4rgi9fdjswhergtblvcd/guest',
-        name: 'guest',
-        component: () => import('pages/GuestPage.vue'),
+        // 公關票: officers (幹部) give out tickets from their quota; the page
+        // itself tells those not on the list
+        path: 'officer',
+        name: 'officer',
+        component: () => import('pages/OfficerPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        // 公關票: a guest claims an officer's one-time invite link. Open
+        // before the shop is.
+        path: 'invite/:id',
+        name: 'invite',
+        component: () => import('pages/InvitePage.vue'),
         meta: { requiresAuth: true }
       },
       {
@@ -203,7 +211,7 @@ const routes = [
         component: () => import('pages/AnalyticsPage.vue')
       },
       {
-        // 公關票: send by name and email, or to guests registered on /guest
+        // 公關票: the officers and their quotas, and sends by name and email
         path: 'guests',
         name: 'super-admin-guests',
         component: () => import('pages/GuestAdminPage.vue')

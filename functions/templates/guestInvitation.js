@@ -15,17 +15,20 @@ import {
 import { SITE_URL, guestRelationText } from '../lib/constants.js';
 
 // 公關票 (functions/lib/guests.js): the invitation sent in place of the
-// purchase confirmation, with the same ticket QR code. It links to no order
-// page: the shop may not be open yet when it is sent.
+// purchase confirmation, with the same ticket QR code. It names the officer
+// who gave it out (older tickets, how the guest knew the council). It links
+// to no order page: the shop may not be open yet when it is sent.
 export function generateGuestInvitationHTML(orderId, order) {
   const safeOrderId = escapeHtml(orderId);
   const items = Array.isArray(order.items) ? order.items : [];
   const ticketCount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const name = escapeHtml(order.customerName);
   const relation = guestRelationText(order.guest);
+  const inviter = order.officerEmail ? escapeHtml(order.officerName || '') : '';
 
   const details = [
     order.customerName ? ['姓名', name] : null,
+    inviter ? ['邀請人', inviter] : null,
     relation ? ['身分', escapeHtml(relation)] : null,
     ['張數', `${ticketCount} 張`]
   ].filter(Boolean);
@@ -41,7 +44,7 @@ export function generateGuestInvitationHTML(orderId, order) {
           ${intro({
             eyebrow: 'You are invited',
             heading: '誠摯邀請',
-            lead: `${name ? `${name} 您好：` : '您好：'}<br>誠摯邀請您蒞臨 2026 建中舞會 COSMOS，以下是我們為您保留的公關票`
+            lead: `${name ? `${name} 您好：` : '您好：'}<br>${inviter ? `${inviter} 誠摯邀請您` : '誠摯邀請您'}蒞臨 2026 建中舞會 COSMOS，以下是我們為您保留的公關票`
           })}
         </td>
       </tr>
@@ -71,7 +74,7 @@ export function generateGuestInvitationHTML(orderId, order) {
 
   return renderEmail({
     title: '2026 建中舞會 COSMOS 公關票',
-    preheader: `誠摯邀請您蒞臨 2026 建中舞會 COSMOS，公關票編號 ${safeOrderId}，共 ${ticketCount} 張`,
+    preheader: `${inviter ? `${inviter} ` : ''}誠摯邀請您蒞臨 2026 建中舞會 COSMOS，公關票編號 ${safeOrderId}，共 ${ticketCount} 張`,
     content,
     heroCaption: 'Invitation'
   });

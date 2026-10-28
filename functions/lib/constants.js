@@ -49,14 +49,15 @@ export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 // year). Keep in sync with src/data/sellerGuide.js
 export const MAX_SELLER_TICKETS = 200
 
-// 公關票: how a guest knows the council (alumni give their class and
-// council position, friends and family whose they are and how they are
-// related), and the tickets one invitation may carry. Keep in sync with
-// src/data/guests.js and firestore.rules
-export const GUEST_RELATIONS = ['alumni', 'friend']
+// 公關票: tickets one send or invite link may carry, and the largest quota
+// an officer (幹部) may be given. Keep in sync with src/data/guests.js and
+// firestore.rules
 export const MAX_GUEST_TICKETS = 10
+export const MAX_OFFICER_QUOTA = 500
 
-// "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友". Keep in sync with src/data/guests.js
+// How a guest invited before the officer quotas knew the council, kept on
+// their order: "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友".
+// Keep in sync with src/data/guests.js
 export function guestRelationText(guest) {
   const detail = String(guest?.relationDetail || '').trim()
   if (guest?.relation === 'alumni') return detail ? `建班大學長・${detail}` : '建班大學長'

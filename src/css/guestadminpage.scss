@@ -1,5 +1,5 @@
-/* on top of managementpage.scss (admin shell) and selleradminpage.scss
-   (search, tables) */
+/* the 公關票 admin page, on top of managementpage.scss (admin shell) and
+   selleradminpage.scss (search, tables) */
 
 .admin-page {
   // input outlines: 3.26:1 on --field
@@ -21,8 +21,7 @@
 }
 
 /* ---------- fields ---------- */
-.field > span:first-child,
-.field legend {
+.field > span:first-child {
   padding: 0;
   font-size: 12px;
   font-weight: 700;
@@ -30,16 +29,9 @@
   color: var(--lunar);
 }
 
-fieldset.field {
-  margin: 0;
-  padding: 0;
-  border: 0;
-
-  legend { margin-bottom: 8px; }
-}
-
 .field input[type='text'],
 .field input[type='email'],
+.field input[type='number'],
 .search {
   min-height: 44px;
   border-color: var(--field-line);
@@ -70,56 +62,7 @@ fieldset.field {
   color: rgba(154, 163, 172, 0.75);
 }
 
-/* ---------- segmented: the queue's view, the direct form's 身分 ---------- */
-.segmented {
-  display: inline-flex;
-}
-
-.segmented button,
-.segmented-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--field-line);
-  background: transparent;
-  color: var(--lunar);
-  font: 600 13px 'Manrope', 'Noto Sans TC', sans-serif;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
-
-  &:hover { color: var(--ember); }
-
-  &.active {
-    position: relative;
-    border-color: var(--ember);
-    background: rgba(228, 164, 104, 0.08);
-    color: var(--ember);
-  }
-
-  .num { font-weight: 800; }
-}
-
-.segmented > * + * { margin-left: -1px; }
-
-.segmented-option {
-  input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-  }
-
-  &:focus-within {
-    z-index: 1;
-    outline: 2px solid var(--ember);
-    outline-offset: 2px;
-  }
-}
-
-/* ---------- the queue ---------- */
+/* ---------- officers ---------- */
 .share-link {
   display: flex;
   align-items: center;
@@ -133,19 +76,6 @@ fieldset.field {
     min-width: 0;
     color: var(--lunar);
     overflow-wrap: anywhere;
-  }
-}
-
-.queue-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 16px;
-  margin-bottom: 8px;
-
-  .search {
-    flex: 1 1 240px;
-    margin-bottom: 0;
   }
 }
 
@@ -180,11 +110,6 @@ fieldset.field {
     font-weight: 700;
   }
 
-  .guest-relation {
-    margin-top: 3px;
-    font-size: 13.5px;
-  }
-
   .guest-email {
     margin-top: 4px;
     color: var(--lunar);
@@ -210,21 +135,6 @@ fieldset.field {
   .btn-outline { min-height: 38px; }
 }
 
-.guest-actions .sent-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid rgba(228, 164, 104, 0.5);
-  color: var(--ember);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-
-  &:hover { background: rgba(228, 164, 104, 0.08); }
-}
-
 .send-step {
   grid-area: step;
   display: grid;
@@ -235,28 +145,18 @@ fieldset.field {
   background: var(--field);
 }
 
-.send-step-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 16px;
+.quota-line {
+  line-height: 1.6;
+
+  strong {
+    color: var(--off-white);
+    font-weight: 800;
+  }
+
+  .held { color: var(--ember); }
 }
 
-.step-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--lunar);
-}
-
-.send-to {
-  margin: 0;
-  color: var(--lunar);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-
-  .mono { color: var(--off-white); }
-}
+.officer-form { margin-bottom: 20px; }
 
 .send-step-actions {
   display: flex;
@@ -267,7 +167,7 @@ fieldset.field {
   .btn-outline { min-height: 44px; }
 }
 
-/* ---------- direct send ---------- */
+/* ---------- direct send and the add form ---------- */
 .send-form {
   display: grid;
   gap: 16px;
@@ -327,6 +227,13 @@ table th { font-size: 12px; }
 
 td.strong { font-weight: 700; }
 
+td .via { color: var(--lunar); }
+
+.source-filter {
+  max-width: 280px;
+  margin-bottom: 12px;
+}
+
 .status {
   display: inline-block;
   padding: 3px 10px;
@@ -357,9 +264,6 @@ td.mono a {
     .btn-outline { min-height: 44px; }
   }
 
-  .queue-tools .segmented { width: 100%; }
-  .segmented button { flex: 1; justify-content: center; }
-
   .guest-row {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -375,8 +279,7 @@ td.mono a {
     justify-content: stretch;
     margin-top: 6px;
 
-    .btn,
-    .sent-link { flex: 1; justify-content: center; min-height: 44px; }
+    .btn { flex: 1; justify-content: center; min-height: 44px; }
     .btn-outline { min-height: 44px; }
   }
 

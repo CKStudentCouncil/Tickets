@@ -8,53 +8,128 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from 'src/boot/firebase'
+import { SITE_URL } from 'src/config/app'
 import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 
-// 公關票 (functions/lib/guests.js). Invited guests leave their details on
-// /guest; super admins send the tickets, to them or by name and email.
-//   guestRegistrations/{uid}   a guest's details; sendGuestInvitation adds orderId
+// 公關票 (functions/lib/guests.js). Super admins keep the officers (幹部)
+// and their quotas; an officer gives tickets out on /officer by name and
+// email or as one-time invite links, which guests claim on /invite/{id}.
+//   officers/{email}           { email, name, quota, used }; used is kept by the functions
+//   officerInvites/{id}        an invite link; status 'open' or 'claimed'
 //   orders/{id}                the tickets, NT$0 orders with complimentary: true
 
-const sendCallable = httpsCallable(functions, 'sendGuestInvitation')
+const callables = {
+  sendGuestInvitation: httpsCallable(functions, 'sendGuestInvitation'),
+  sendOfficerTicket: httpsCallable(functions, 'sendOfficerTicket'),
+  createOfficerInvite: httpsCallable(functions, 'createOfficerInvite'),
+  revokeOfficerInvite: httpsCallable(functions, 'revokeOfficerInvite'),
+  claimOfficerInvite: httpsCallable(functions, 'claimOfficerInvite')
+}
 
-const registrationRef = (uid) => doc(db, 'guestRegistrations', uid)
+const officerRef = (email) => doc(db, 'officers', email.trim().toLowerCase())
+const inviteRef = (id) => doc(db, 'officerInvites', id)
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const toItem = (snapshot) => ({ id: snapshot.id, ...snapshot.data() })
 
-/* ---------- guests ---------- */
+export const inviteUrl = (id) => `${SITE_URL}/invite/${encodeURIComponent(id)}`
 
-export async function fetchMyGuestRegistration(uid) {
-  const snapshot = await getDoc(registrationRef(uid))
+// Tickets an officer may still give out
+export const remainingOf = (officer) => Math.max(0, (Number(officer?.quota) || 0) - (Number(officer?.used) || 0))
+
+// Tickets in a 公關票 order
+export const quantityOf = (ticket) =>
+  (Array.isArray(ticket?.items) ? ticket.items : []).reduce((sum, item) => sum + (Number(item?.quantity) || 0), 0)
+
+// Retries a lost or busy call with the same input (and so the same
+// requestId, where it has one), so it takes effect once
+async function call(name, input) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const { data } = await callables[name](input)
+      return data
+    } catch (error) {
+      if (!RETRYABLE.includes(error?.code) || attempt >= 3) throw error
+      await wait(500 * attempt + Math.random() * 1000)
+    }
+  }
+}
+
+/* ---------- officers ---------- */
+
+// null when the account is not on the officer list
+export async function fetchMyOfficer(email) {
+  const snapshot = await getDoc(officerRef(email))
   return snapshot.exists() ? toItem(snapshot) : null
 }
 
-// `createdAt` of the earlier registration, kept when it is changed
-export function saveGuestRegistration(uid, { name, email, relation, relationDetail }, createdAt = null) {
-  return setDoc(registrationRef(uid), {
-    name,
-    email,
-    relation,
-    relationDetail,
-    createdAt: createdAt || serverTimestamp(),
-    updatedAt: serverTimestamp()
-  })
+// Never throws: a failed look just hides the officer page from the menu
+export async function isOnOfficerList(email) {
+  try {
+    return (await getDoc(officerRef(email))).exists()
+  } catch {
+    return false
+  }
 }
+
+export async function fetchMyOfficerTickets(email) {
+  const snapshot = await getDocs(query(collection(db, 'orders'), where('officerEmail', '==', email.trim().toLowerCase())))
+  return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
+}
+
+export async function fetchMyInvites(email) {
+  const snapshot = await getDocs(query(collection(db, 'officerInvites'), where('officerEmail', '==', email.trim().toLowerCase())))
+  return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
+}
+
+// { requestId, name, email, quantity, allowDuplicate }; returns { id } of the order
+export const sendOfficerTicket = (input) => call('sendOfficerTicket', input)
+
+// { requestId, quantity }; returns { id } of the invite
+export const createOfficerInvite = (input) => call('createOfficerInvite', input)
+
+export const revokeOfficerInvite = (inviteId) => call('revokeOfficerInvite', { inviteId })
+
+/* ---------- guests with an invite link ---------- */
+
+// null when the link is unknown (revoked, mistyped)
+export async function fetchInvite(id) {
+  const snapshot = await getDoc(inviteRef(id))
+  return snapshot.exists() ? toItem(snapshot) : null
+}
+
+// returns { id } of the order
+export const claimOfficerInvite = (inviteId, name) => call('claimOfficerInvite', { inviteId, name })
 
 /* ---------- super admins ---------- */
 
-export async function fetchGuestRegistrations() {
-  const snapshot = await getDocs(query(collection(db, 'guestRegistrations'), orderBy('createdAt', 'desc')))
+export async function fetchOfficers() {
+  const snapshot = await getDocs(query(collection(db, 'officers'), orderBy('createdAt', 'desc')))
   return snapshot.docs.map(toItem)
 }
 
-export function deleteGuestRegistration(uid) {
-  return deleteDoc(registrationRef(uid))
+export async function fetchAllInvites() {
+  const snapshot = await getDocs(collection(db, 'officerInvites'))
+  return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
+}
+
+export function addOfficer({ email, name, quota }) {
+  const address = email.trim().toLowerCase()
+  return setDoc(officerRef(address), { email: address, name, quota, used: 0, createdAt: serverTimestamp() })
+}
+
+export function updateOfficer(email, { name, quota }) {
+  return updateDoc(officerRef(email), { name, quota })
+}
+
+export function deleteOfficer(email) {
+  return deleteDoc(officerRef(email))
 }
 
 // Sorted here rather than with orderBy, which would need a composite index;
@@ -64,17 +139,5 @@ export async function fetchGuestTickets() {
   return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
 }
 
-// { requestId, quantity } and either { registrationId } or { name, email,
-// relation, relationDetail }. Retries a lost or busy call with the same
-// requestId, so the ticket is sent once; returns { id } of its order.
-export async function sendGuestInvitation(input) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      const { data } = await sendCallable(input)
-      return data
-    } catch (error) {
-      if (!RETRYABLE.includes(error?.code) || attempt >= 3) throw error
-      await wait(500 * attempt + Math.random() * 1000)
-    }
-  }
-}
+// { requestId, quantity, name, email }; returns { id } of its order
+export const sendGuestInvitation = (input) => call('sendGuestInvitation', input)

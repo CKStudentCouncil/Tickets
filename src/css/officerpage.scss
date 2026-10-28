@@ -1,0 +1,93 @@
+/* on top of sellerpage.scss: the officer's 公關票 page and the invite page */
+
+.officer-page {
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--ember);
+    outline-offset: 2px;
+  }
+}
+
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.field input[type='email'] { font-size: 16px; }
+
+.secondary-button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease;
+
+  &:hover { border-color: var(--ember); color: var(--ember); }
+  &:disabled { opacity: .45; cursor: not-allowed; }
+
+  &.danger:hover { border-color: var(--danger); color: var(--danger); }
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  .primary-button { flex: 1 1 180px; }
+}
+
+.duplicate {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(231, 180, 123, .5);
+  background: rgba(231, 180, 123, .06);
+}
+
+.guide-card .muted { margin-bottom: 22px; }
+
+.invite-form { gap: 18px; }
+
+.new-link {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed rgba(231, 180, 123, .6);
+  background: var(--field);
+}
+
+.new-link-label {
+  margin: 0;
+  color: var(--ember);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+
+.link-text {
+  margin: 0;
+  color: var(--white);
+  user-select: all;
+}
+
+.history-copy {
+  min-width: 0;
+
+  .link-text { margin-top: 6px; color: var(--lunar); }
+}
+
+.badges .secondary-button { min-height: 38px; }
+
+@media (max-width: 480px) {
+  .badges .secondary-button { flex: 1; min-height: 44px; }
+  .badges { width: 100%; }
+}

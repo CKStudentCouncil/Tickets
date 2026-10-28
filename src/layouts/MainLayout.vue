@@ -270,7 +270,8 @@ const navGroups = computed(() => {
       caption: 'TICKETS',
       links: [
         { to: '/orders', label: '已購門票', en: 'My Tickets' },
-        ...(auth.isSeller ? [{ to: '/sell', label: '登記賣票', en: 'Sell' }] : [])
+        ...(auth.isSeller ? [{ to: '/sell', label: '登記賣票', en: 'Sell' }] : []),
+        ...(auth.isOfficer ? [{ to: '/officer', label: '發公關票', en: 'Guest Tickets' }] : [])
       ]
     },
     {

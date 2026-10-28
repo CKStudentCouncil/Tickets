@@ -1,20 +1,26 @@
-// 公關票: the registration form on /guest and the send form on
-// /super_admin/guests. Keep the relation values and MAX_GUEST_TICKETS in
+// 公關票: the officer page (/officer), the invite page and the admin page
+// (/super_admin/guests). Keep MAX_GUEST_TICKETS and MAX_OFFICER_QUOTA in
 // sync with functions/lib/constants.js and firestore.rules
 
-// Tickets one invitation may carry
+// Tickets one send or invite link may carry
 export const MAX_GUEST_TICKETS = 10
 
-// How a guest knows the council; `detail` is what they write next to it
-export const GUEST_RELATIONS = [
-  { value: 'alumni', label: '建班大學長', detail: '屆數及幹位', placeholder: '例：80 屆 主席' },
-  { value: 'friend', label: '親友', detail: '誰的親友及稱謂', placeholder: '例：副主席 鄭詠齊不存在的女朋友' }
-]
+// The largest quota an officer (幹部) may be given
+export const MAX_OFFICER_QUOTA = 500
 
-// "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友". Keep in sync with functions/lib/constants.js
+// How a guest invited before the officer quotas knew the council, kept on
+// their order: "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友".
+// Keep in sync with functions/lib/constants.js
 export function guestRelationText(guest) {
   const detail = String(guest?.relationDetail || '').trim()
   if (guest?.relation === 'alumni') return detail ? `建班大學長・${detail}` : '建班大學長'
   if (guest?.relation === 'friend') return detail ? `親友・${detail}` : '親友'
   return ''
+}
+
+// Who gave a 公關票 out: the officer's name, or 班聯會 for one a super admin
+// sent directly; older tickets show how the guest knew the council
+export function guestSourceText(order) {
+  if (order?.officerEmail) return order.officerName ? `${order.officerName} 邀請` : `${order.officerEmail} 邀請`
+  return guestRelationText(order?.guest) || '班聯會'
 }

@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS, GUEST_RELATIONS, MAX_GUEST_TICKETS, guestRelationText } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, guestRelationText } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -68,10 +68,10 @@ test('the seller registration limit matches src/data/sellerGuide.js', async () =
   assert.equal(guide.MAX_SELLER_TICKETS, MAX_SELLER_TICKETS)
 })
 
-test('公關票 relations, ticket limit and relation text match src/data/guests.js', async () => {
+test('公關票 limits and relation text match src/data/guests.js', async () => {
   const guests = await import(srcFile('data/guests.js'))
-  assert.deepEqual(guests.GUEST_RELATIONS.map((option) => option.value), GUEST_RELATIONS)
   assert.equal(guests.MAX_GUEST_TICKETS, MAX_GUEST_TICKETS)
+  assert.equal(guests.MAX_OFFICER_QUOTA, MAX_OFFICER_QUOTA)
   for (const guest of [
     { relation: 'alumni', relationDetail: '78 屆' },
     { relation: 'friend', relationDetail: ' 王小明 ' },

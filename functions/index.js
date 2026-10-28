@@ -6,5 +6,12 @@ export { updateOrderDelivery, updateOrderPayment } from './lib/orderActions.js'
 export { registerSellerTickets, releaseSellerStock } from './lib/sellers.js'
 export { purgeOrders } from './lib/orderPurge.js'
 export { importSalesArchive } from './lib/salesArchive.js'
-export { releaseGuestRegistration, sendGuestInvitation } from './lib/guests.js'
+export {
+  claimOfficerInvite,
+  createOfficerInvite,
+  releaseOfficerQuota,
+  revokeOfficerInvite,
+  sendGuestInvitation,
+  sendOfficerTicket
+} from './lib/guests.js'
 export { submitPartySurvey } from './lib/partySurvey.js'

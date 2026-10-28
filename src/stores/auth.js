@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
 import { isSchoolAccount as isSchoolEmail } from 'src/data/schools'
 import { isOnSellerList } from 'src/services/sellerService'
+import { isOnOfficerList } from 'src/services/guestService'
 
 const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 
@@ -22,6 +23,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!user.value)
   // on the 學弟登記賣票 list (sellers/{email}), kept by super admins
   const isSeller = computed(() => user.value?.isSeller === true)
+  // on the 公關票 officer list (officers/{email}), kept by super admins
+  const isOfficer = computed(() => user.value?.isOfficer === true)
 
   // Everyone signs in with Google to buy; 本校學生 tickets need a school account
   const email = computed(() => user.value?.email || '')
@@ -52,9 +55,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     try {
-      const [userDoc, isSeller] = await Promise.all([
+      const [userDoc, isSeller, isOfficer] = await Promise.all([
         getDoc(doc(db, 'users', firebaseUser.uid)),
-        firebaseUser.email ? isOnSellerList(firebaseUser.email) : false
+        firebaseUser.email ? isOnSellerList(firebaseUser.email) : false,
+        firebaseUser.email ? isOnOfficerList(firebaseUser.email) : false
       ])
       // uid and email always come from the signed-in account: the rules
       // compare against request.auth, not whatever the users doc holds
@@ -64,7 +68,8 @@ export const useAuthStore = defineStore('auth', () => {
           ...(userDoc.exists() ? userDoc.data() : {}),
           uid: base.uid,
           email: base.email,
-          isSeller
+          isSeller,
+          isOfficer
         }
       }
     } catch {
@@ -108,6 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSuperAdmin,
     isLoggedIn,
     isSeller,
+    isOfficer,
     email,
     isSchoolAccount,
     displayName,
