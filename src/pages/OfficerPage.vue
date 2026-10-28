@@ -259,7 +259,9 @@ const openInvites = computed(() => invites.value.filter((invite) => invite.statu
 const heldCount = computed(() => openInvites.value.reduce((sum, invite) => sum + (Number(invite.quantity) || 0), 0))
 const sentCount = computed(() => tickets.value.reduce((sum, ticket) => sum + quantityOf(ticket), 0))
 
-const validQuantity = (quantity) => Number.isInteger(quantity) && quantity >= 1 && quantity <= maxQuantity.value
+// never above what is left, even when the stepper's floor of 1 is
+const validQuantity = (quantity) =>
+  Number.isInteger(quantity) && quantity >= 1 && quantity <= Math.min(MAX_GUEST_TICKETS, remaining.value)
 
 const formValid = computed(
   () => form.value.name.trim() !== '' && EMAIL_PATTERN.test(form.value.email.trim()) && validQuantity(form.value.quantity)

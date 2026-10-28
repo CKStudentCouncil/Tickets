@@ -262,6 +262,33 @@ describe('invite links', () => {
     assert.equal((await db.collection('orders').get()).size, 0)
   })
 
+  test('an officer removed and added again starts afresh: old links stop working, old tickets do not count', async () => {
+    const { id: openLink } = await callCreateInvite(invite(2), as(OFFICER))
+    const { id: sent } = await callOfficerSend(send({ quantity: 3 }), as(OFFICER))
+    await db.doc('officers/officer@example.com').delete()
+    await db.doc('officers/officer@example.com').set({ email: 'officer@example.com', name: '林幹部', quota: 5, used: 0, createdAt: new Date(Date.now() + 1000) })
+
+    await assert.rejects(callClaimInvite({ inviteId: openLink, name: '陳小華' }, as(GUEST)), { code: 'not-found' })
+    assert.deepEqual(await callRevokeInvite({ inviteId: openLink }, as(OFFICER)), { revoked: true })
+    await (await deleteOrder(sent))()
+    assert.equal((await officerOf()).used, 0)
+
+    // the new entry's quota is whole
+    await callOfficerSend(send({ quantity: 5, email: 'b@example.com' }), as(OFFICER))
+    assert.equal((await officerOf()).used, 5)
+  })
+
+  test('a request id is only a retry key for the same caller and kind of call', async () => {
+    const request = invite(1)
+    await callCreateInvite(request, as(OFFICER))
+
+    await assert.rejects(callOfficerSend(send({ requestId: request.requestId }), as(OFFICER)), { code: 'invalid-argument' })
+    await assert.rejects(callCreateInvite(request, as(OTHER_OFFICER)), { code: 'invalid-argument' })
+    await assert.rejects(callSend(send({ requestId: request.requestId }), as(SUPER)), { code: 'invalid-argument' })
+    assert.equal((await db.collection('orders').get()).size, 0)
+    assert.equal((await officerOf('officer2@example.com')).used, 0)
+  })
+
   test('unknown links and malformed claims are refused', async () => {
     await assert.rejects(callClaimInvite({ inviteId: 'A'.repeat(24), name: '陳小華' }, as(GUEST)), { code: 'not-found' })
     await assert.rejects(callClaimInvite({ inviteId: '../orders/x', name: '陳小華' }, as(GUEST)), { code: 'not-found' })

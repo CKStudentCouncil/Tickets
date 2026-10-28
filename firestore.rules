@@ -140,12 +140,13 @@ service cloud.firestore {
       return signedIn() && resource.data.userId == request.auth.uid;
     }
 
-    // 公關票 an officer sent (functions/lib/guests.js); their lists must
-    // filter on officerEmail
+    // 公關票 an officer still on the list sent (functions/lib/guests.js);
+    // their lists must filter on officerEmail
     function isOrderOfficer() {
       return signedIn()
         && request.auth.token.email_verified == true
-        && resource.data.get('officerEmail', null) == signedInEmail();
+        && resource.data.get('officerEmail', null) == signedInEmail()
+        && isOfficer();
     }
 
     match /orders/{orderId} {
@@ -345,6 +346,10 @@ service cloud.firestore {
       return quota is int && quota >= 0 && quota <= 500;
     }
 
+    function isValidOfficerName(name) {
+      return isShortString(name, 50) && name.trim().size() >= 1;
+    }
+
     // The officer list, keyed by lower-case email: super admins set each
     // one's name and quota; `used` (tickets sent plus those held by open
     // invite links) is kept by the functions, and a quota cannot go below
@@ -361,14 +366,14 @@ service cloud.firestore {
         && email == email.lower()
         && request.resource.data.keys().hasOnly(['email', 'name', 'quota', 'used', 'createdAt'])
         && request.resource.data.email == email
-        && isShortString(request.resource.data.name, 50)
+        && isValidOfficerName(request.resource.data.name)
         && isValidQuota(request.resource.data.quota)
         && request.resource.data.used == 0
         && request.resource.data.createdAt == request.time;
 
       allow update: if isSuperAdmin()
         && onlyChanges(['name', 'quota'])
-        && isShortString(request.resource.data.name, 50)
+        && isValidOfficerName(request.resource.data.name)
         && isValidQuota(request.resource.data.quota)
         && request.resource.data.quota >= resource.data.get('used', 0);
 

@@ -2,8 +2,8 @@ import * as functions from 'firebase-functions/v1'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
 
-import { db, HttpsError, assertRole } from './common.js'
-import { MAX_GUEST_TICKETS, REGION } from './constants.js'
+import { db, HttpsError, assertRole, getRoleRank } from './common.js'
+import { MAX_GUEST_TICKETS, REGION, ROLE_RANK } from './constants.js'
 import { getBuyerAccount } from './orders.js'
 import { generateOrderId, isValidRequestId } from './orderValidation.js'
 import { getTaiwanDateKey } from './time.js'
@@ -24,12 +24,18 @@ import { getTaiwanDateKey } from './time.js'
 //                                   those held by their open invites
 //   officerInvites/{inviteId}       an invite link; the random id is the
 //                                   secret in the link. { officerEmail,
-//                                   officerName, quantity, status: 'open' |
-//                                   'claimed', createdAt } and, once
-//                                   claimed, orderId, claimedByUid, claimedAt.
-//                                   Revoking an open one deletes it.
-//   invitationRequests/{requestId}  { orderId } or { inviteId }: a retried
-//                                   call returns the same ticket or link
+//                                   officerName, officerSince, quantity,
+//                                   status: 'open' | 'claimed', createdAt }
+//                                   and, once claimed, orderId, claimedByUid,
+//                                   claimedAt. Revoking an open one deletes it.
+//   invitationRequests/{requestId}  { kind, createdByUid, orderId | inviteId }:
+//                                   the same caller retrying the same kind of
+//                                   call gets the same ticket or link back
+//
+// Tickets and links record `officerSince`, the officer entry's createdAt:
+// an officer taken off the list and added again starts a new entry with
+// nothing used, so what the old one gave out neither works (open links) nor
+// counts against it (revokes, deleted tickets).
 //   officerReleases/{orderId}       marks a deleted officer ticket whose
 //                                   tickets went back to the quota
 //
@@ -55,6 +61,21 @@ const requestRef = (id) => db.doc(`invitationRequests/${id}`)
 const releaseRef = (orderId) => db.doc(`officerReleases/${orderId}`)
 
 export const newInviteId = () => randomBytes(18).toString('base64url')
+
+// The officer entry a ticket or link was given out under still exists
+export const isSameOfficer = (officerSnap, since) =>
+  officerSnap.exists && Boolean(since) && officerSnap.data().createdAt?.isEqual?.(since) === true
+
+// An earlier call with this requestId, or null. It must be the same caller
+// making the same kind of call: a request id is only a retry key.
+function replayed(request, kind, uid) {
+  if (!request.exists) return null
+  const data = request.data()
+  if (data.kind !== kind || data.createdByUid !== uid) {
+    throw new HttpsError('invalid-argument', '寄送請求無效，請重新整理後再試')
+  }
+  return data
+}
 
 // Tickets in a 公關票 order
 export const ticketCountOf = (order) =>
@@ -108,7 +129,8 @@ export function sanitizeClaimInput(data) {
 
 // The order of a 公關票, shaped like a checkout's (orders.js) so every
 // order view, export and the sales report read it as one. `officer` is who
-// gave it out ({ email, name }), null when a super admin sent it directly.
+// gave it out ({ email, name, since }), null when a super admin sent it
+// directly.
 export function guestOrderOf({ guest, quantity, userId, invitedByUid, ticketCode, officer = null, inviteId = null }) {
   return {
     customerName: guest.name,
@@ -124,6 +146,7 @@ export function guestOrderOf({ guest, quantity, userId, invitedByUid, ticketCode
     complimentary: true,
     officerEmail: officer?.email || null,
     officerName: officer?.name || null,
+    officerSince: officer?.since || null,
     inviteId,
     // whoever claimed an invite reads it under 已購門票, as a buyer would
     userId,
@@ -186,9 +209,9 @@ export const sendGuestInvitation = functions
     const { requestId, quantity, guest } = sanitizeGuestInput(data)
 
     return withNewOrder('sendGuestInvitation', async (orderRef, tx) => {
-      const request = await tx.get(requestRef(requestId))
       // the same send was already saved (e.g. the response was lost)
-      if (request.exists) return { id: request.data().orderId }
+      const earlier = replayed(await tx.get(requestRef(requestId)), 'direct', context.auth.uid)
+      if (earlier) return { id: earlier.orderId }
 
       tx.create(orderRef, guestOrderOf({
         guest,
@@ -198,6 +221,7 @@ export const sendGuestInvitation = functions
         ticketCode: newTicketCode()
       }))
       tx.create(requestRef(requestId), {
+        kind: 'direct',
         orderId: orderRef.id,
         createdByUid: context.auth.uid,
         createdAt: FieldValue.serverTimestamp()
@@ -218,7 +242,8 @@ export const sendOfficerTicket = functions
 
     return withNewOrder('sendOfficerTicket', async (orderRef, tx) => {
       const [request, officerSnap] = await tx.getAll(requestRef(requestId), officerRef(officer.email))
-      if (request.exists) return { id: request.data().orderId }
+      const earlier = replayed(request, 'officer', officer.uid)
+      if (earlier) return { id: earlier.orderId }
       if (!officerSnap.exists) throw new HttpsError('permission-denied', '你不在幹部名單中')
       assertQuota(officerSnap.data(), quantity)
 
@@ -237,9 +262,10 @@ export const sendOfficerTicket = functions
         userId: null,
         invitedByUid: officer.uid,
         ticketCode: newTicketCode(),
-        officer: { email: officer.email, name: officerSnap.data().name || officer.name }
+        officer: { email: officer.email, name: officerSnap.data().name || officer.name, since: officerSnap.data().createdAt }
       }))
       tx.create(requestRef(requestId), {
+        kind: 'officer',
         orderId: orderRef.id,
         createdByUid: officer.uid,
         createdAt: FieldValue.serverTimestamp()
@@ -261,19 +287,22 @@ export const createOfficerInvite = functions
     try {
       return await db.runTransaction(async (tx) => {
         const [request, officerSnap] = await tx.getAll(requestRef(requestId), officerRef(officer.email))
-        if (request.exists) return { id: request.data().inviteId }
+        const earlier = replayed(request, 'invite', officer.uid)
+        if (earlier) return { id: earlier.inviteId }
         if (!officerSnap.exists) throw new HttpsError('permission-denied', '你不在幹部名單中')
         assertQuota(officerSnap.data(), quantity)
 
         tx.create(ref, {
           officerEmail: officer.email,
           officerName: officerSnap.data().name || officer.name,
+          officerSince: officerSnap.data().createdAt,
           quantity,
           status: 'open',
           createdByUid: officer.uid,
           createdAt: FieldValue.serverTimestamp()
         })
         tx.create(requestRef(requestId), {
+          kind: 'invite',
           inviteId: ref.id,
           createdByUid: officer.uid,
           createdAt: FieldValue.serverTimestamp()
@@ -296,21 +325,19 @@ export const revokeOfficerInvite = functions
     const account = getBuyerAccount(context)
     const inviteId = sanitizeInviteId(data)
     const ref = inviteRef(inviteId)
-
-    const snap = await ref.get()
-    if (!snap.exists) return { revoked: false }
-    if (snap.data().officerEmail !== account.email) await assertRole(context, 'super_admin')
+    const isSuperAdmin = (await getRoleRank(account.uid)) >= ROLE_RANK.super_admin
 
     try {
       return await db.runTransaction(async (tx) => {
         const invite = await tx.get(ref)
         if (!invite.exists) return { revoked: false }
-        const { status, officerEmail, quantity } = invite.data()
+        const { status, officerEmail, officerSince, quantity } = invite.data()
+        if (officerEmail !== account.email && !isSuperAdmin) throw new HttpsError('permission-denied', '權限不足')
         if (status !== 'open') throw new HttpsError('failed-precondition', '這個連結已經被領取，無法撤銷')
 
         const officer = await tx.get(officerRef(officerEmail))
         tx.delete(ref)
-        if (officer.exists) {
+        if (isSameOfficer(officer, officerSince)) {
           tx.update(officer.ref, { used: Math.max(0, (Number(officer.data().used) || 0) - quantity) })
         }
         return { revoked: true }
@@ -335,14 +362,15 @@ export const claimOfficerInvite = functions
     return withNewOrder('claimOfficerInvite', async (orderRef, tx) => {
       const invite = await tx.get(ref)
       if (!invite.exists) throw new HttpsError('not-found', '這個邀請連結無效或已失效')
-      const { status, officerEmail, officerName, quantity, orderId, claimedByUid } = invite.data()
+      const { status, officerEmail, officerName, officerSince, quantity, orderId, claimedByUid } = invite.data()
 
       if (status === 'claimed') {
         if (claimedByUid === account.uid) return { id: orderId }
         throw new HttpsError('failed-precondition', '這個邀請連結已經被領取')
       }
-      // an officer taken off the list: their links no longer work
-      if (!(await tx.get(officerRef(officerEmail))).exists) {
+      // an officer taken off the list (even if added again): their links no
+      // longer work
+      if (!isSameOfficer(await tx.get(officerRef(officerEmail)), officerSince)) {
         throw new HttpsError('not-found', '這個邀請連結無效或已失效')
       }
 
@@ -352,7 +380,7 @@ export const claimOfficerInvite = functions
         userId: account.uid,
         invitedByUid: invite.data().createdByUid || null,
         ticketCode: newTicketCode(),
-        officer: { email: officerEmail, name: officerName },
+        officer: { email: officerEmail, name: officerName, since: officerSince },
         inviteId
       }))
       tx.update(ref, {
@@ -366,7 +394,8 @@ export const claimOfficerInvite = functions
   })
 
 // When an officer's ticket is deleted (by an admin or purgeOrders), its
-// tickets go back to that officer's quota, once.
+// tickets go back to that officer's quota, once (not to a later entry for
+// the same email).
 export const releaseOfficerQuota = functions
   .region(REGION)
   .runWith({ failurePolicy: true }) // retried on failure; its marker makes it a no-op once done
@@ -380,7 +409,7 @@ export const releaseOfficerQuota = functions
     await db.runTransaction(async (tx) => {
       const [released, officerSnap] = await tx.getAll(marker, officer)
       if (released.exists) return
-      if (officerSnap.exists) {
+      if (isSameOfficer(officerSnap, order.officerSince)) {
         tx.update(officer, { used: Math.max(0, (Number(officerSnap.data().used) || 0) - ticketCountOf(order)) })
       }
       tx.create(marker, { officerEmail: order.officerEmail, createdAt: FieldValue.serverTimestamp() })

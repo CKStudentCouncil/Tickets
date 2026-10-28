@@ -773,6 +773,7 @@ describe('公關票 (officers, officerInvites)', () => {
       { quota: 1.5 },
       { quota: '10' },
       { name: 'x'.repeat(51) },
+      { name: '  ' },
       { email: 'someone@example.com' },
       { createdAt: Timestamp.fromMillis(0) },
       { note: 'x' }
@@ -790,6 +791,7 @@ describe('公關票 (officers, officerInvites)', () => {
     await assertFails(updateDoc(officerDoc(staff.superAdmin), { quota: 3 }))
     await assertFails(updateDoc(officerDoc(staff.superAdmin), { used: 0 }))
     await assertFails(updateDoc(officerDoc(staff.superAdmin), { quota: 501 }))
+    await assertFails(updateDoc(officerDoc(staff.superAdmin), { name: '' }))
     // setDoc over an existing officer resets used and createdAt: refused
     await assertFails(setDoc(officerDoc(staff.superAdmin), entry()))
     await assertFails(updateDoc(officerDoc(officer), { quota: 100 }))
@@ -834,7 +836,8 @@ describe('公關票 (officers, officerInvites)', () => {
     }
   })
 
-  test('officers read the tickets they sent, and no others', async () => {
+  test('officers read the tickets they sent, and no others, while on the list', async () => {
+    await seedOfficer()
     await seed(async (db) => {
       await setDoc(doc(db, 'orders', 'PR20261026K7Q2MX'), { complimentary: true, officerEmail: OFFICER_EMAIL, customerEmail: 'guest@example.com', userId: null })
       await setDoc(doc(db, 'orders', 'PR20261026AAAAAA'), { complimentary: true, officerEmail: 'someone@example.com', customerEmail: 'b@example.com', userId: null })
@@ -846,6 +849,11 @@ describe('公關票 (officers, officerInvites)', () => {
     await assertSucceeds(getDocs(query(collection(as(officer), 'orders'), where('officerEmail', '==', OFFICER_EMAIL))))
     await assertFails(getDocs(query(collection(as(officer), 'orders'), where('complimentary', '==', true))))
     await assertFails(deleteDoc(doc(as(officer), 'orders', 'PR20261026K7Q2MX')))
+
+    // taken off the list: no longer
+    await seed((db) => deleteDoc(doc(db, 'officers', OFFICER_EMAIL)))
+    await assertFails(getDoc(doc(as(officer), 'orders', 'PR20261026K7Q2MX')))
+    await assertFails(getDocs(query(collection(as(officer), 'orders'), where('officerEmail', '==', OFFICER_EMAIL))))
   })
 
   test('super admins list the 公關票 orders; the functions\' markers are for nobody', async () => {

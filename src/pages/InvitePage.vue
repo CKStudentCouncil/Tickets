@@ -149,7 +149,10 @@ async function claim() {
     await load()
   } catch (error) {
     console.error('Claim invite error:', error)
-    if (REFUSALS.includes(error?.code)) {
+    if (error?.code === 'functions/not-found') {
+      // revoked, or its officer taken off the list
+      invite.value = null
+    } else if (REFUSALS.includes(error?.code)) {
       await load()
       claimError.value = error.message
     } else {
