@@ -50,16 +50,16 @@ export const FONT =
 
 export const MONO = "'SF Mono',SFMono-Regular,Consolas,Menlo,monospace";
 
-const HERO_TERRAIN = readFileSync(new URL('./assets/hero-terrain.png', import.meta.url));
+const HERO = readFileSync(new URL('./assets/hero.jpg', import.meta.url));
 
-// Inline image referenced by the hero as cid:hero-terrain; every email that
-// uses renderEmail() must attach it.
+// Inline image referenced by the hero as cid:hero; every email that uses
+// renderEmail() must attach it.
 export function heroAttachment() {
   return {
-    filename: 'cosmos-horizon.png',
-    content: HERO_TERRAIN,
-    contentType: 'image/png',
-    cid: 'hero-terrain',
+    filename: 'cosmos.jpg',
+    content: HERO,
+    contentType: 'image/jpeg',
+    cid: 'hero',
     contentDisposition: 'inline'
   };
 }
@@ -430,21 +430,6 @@ export function renderEmail({ title, preheader, content, heroCaption }) {
         border: 0 !important;
       }
 
-      .hero-copy {
-        padding: 52px 20px 16px !important;
-      }
-
-      .lockup-sub {
-        letter-spacing: .42em !important;
-        padding-left: .42em !important;
-      }
-
-      .brand {
-        font-size: 32px !important;
-        letter-spacing: .4em !important;
-        padding-left: .4em !important;
-      }
-
       .content-pad {
         padding: 36px 20px 44px !important;
       }
@@ -501,17 +486,6 @@ export function renderEmail({ title, preheader, content, heroCaption }) {
 
     /* Very small phones */
     @media only screen and (max-width: 380px) {
-      .lockup-sub {
-        letter-spacing: .3em !important;
-        padding-left: .3em !important;
-      }
-
-      .brand {
-        font-size: 27px !important;
-        letter-spacing: .32em !important;
-        padding-left: .32em !important;
-      }
-
       .content-pad,
       .footer-pad {
         padding-left: 16px !important;
@@ -549,59 +523,23 @@ export function renderEmail({ title, preheader, content, heroCaption }) {
 
         <table role="presentation" class="mail" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.void}" style="width:100%;max-width:640px;background:${C.void};border:1px solid ${C.line};">
 
-          <!-- Hero: the homepage's night sky, lockup and horizon -->
+          <!-- Hero: the homepage poster with the COSMOS lockup, then the email's caption -->
           <tr>
-            <td
-              align="center"
-              bgcolor="#0b101a"
-              style="
-                padding:0;
-                background-color:#0b101a;
-                background-image:
-                  radial-gradient(1.6px 1.6px at 8% 14%,#fff,transparent),
-                  radial-gradient(1.2px 1.2px at 18% 32%,#fff,transparent),
-                  radial-gradient(1.4px 1.4px at 27% 8%,#fff,transparent),
-                  radial-gradient(1px 1px at 36% 46%,#cfd6df,transparent),
-                  radial-gradient(1.8px 1.8px at 44% 18%,#fff,transparent),
-                  radial-gradient(1.1px 1.1px at 52% 36%,#fff,transparent),
-                  radial-gradient(1.3px 1.3px at 61% 12%,#fff,transparent),
-                  radial-gradient(1px 1px at 69% 27%,#cfd6df,transparent),
-                  radial-gradient(1.6px 1.6px at 78% 9%,#fff,transparent),
-                  radial-gradient(1.2px 1.2px at 85% 22%,#fff,transparent),
-                  radial-gradient(1.4px 1.4px at 92% 15%,#fff,transparent),
-                  radial-gradient(1.3px 1.3px at 14% 24%,#fff,transparent),
-                  radial-gradient(1.4px 1.4px at 96% 34%,#fff,transparent),
-                  radial-gradient(ellipse 55% 50% at 78% 40%,rgba(150,90,44,.28),transparent 65%),
-                  radial-gradient(ellipse 40% 45% at 15% 70%,rgba(90,58,32,.18),transparent 70%),
-                  linear-gradient(180deg,#030405 0%,#0a0e16 38%,#0d1420 62%,#171d27 100%);
-              "
-            >
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
-                <tr>
-                  <td class="hero-copy" align="center" style="padding:68px 24px 20px;text-align:center;">
-                    <p class="lockup-sub" style="margin:0 0 22px;padding-left:.7em;font-family:${FONT};font-size:11px;font-weight:400;line-height:1.4;letter-spacing:.7em;color:${C.lunar};">
-                      2026 · CK PARTY NIGHT
-                    </p>
-                    <h1 class="brand" style="margin:0;padding-left:.5em;font-family:${FONT};font-size:44px;font-weight:400;line-height:1.1;letter-spacing:.5em;color:#ffffff;">
-                      COSMOS
-                    </h1>
-                    <p style="margin:26px 0 0;font-family:${FONT};font-size:13px;line-height:1.6;letter-spacing:.05em;color:${C.muted};">
-                      ${heroCaption}
-                    </p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:0;font-size:0;line-height:0;">
-                    <img
-                      src="cid:hero-terrain"
-                      width="640"
-                      height="71"
-                      alt=""
-                      style="display:block;width:100%;max-width:640px;height:auto;border:0;"
-                    >
-                  </td>
-                </tr>
-              </table>
+            <td bgcolor="${C.void}" style="padding:0;font-size:0;line-height:0;background:${C.void};">
+              <img
+                src="cid:hero"
+                width="640"
+                height="380"
+                alt="2026 CK PARTY NIGHT · COSMOS"
+                style="display:block;width:100%;max-width:640px;height:auto;border:0;color:${C.text};font-family:${FONT};font-size:16px;line-height:1.4;text-align:center;"
+              >
+            </td>
+          </tr>
+          <tr>
+            <td align="center" bgcolor="${C.void}" style="padding:0 24px;background:${C.void};text-align:center;">
+              <p style="margin:0;font-family:${FONT};font-size:13px;line-height:1.6;letter-spacing:.05em;color:${C.muted};">
+                ${heroCaption}
+              </p>
             </td>
           </tr>
 
