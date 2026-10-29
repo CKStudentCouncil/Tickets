@@ -20,7 +20,10 @@ import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 // and their quotas; an officer gives tickets out on /officer by name and
 // email or as one-time invite links, which guests claim on /invite/{id}.
 //   officers/{email}           { email, name, quota, used }; used is kept by the functions
-//   officerInvites/{id}        an invite link; status 'open' or 'claimed'
+//   officerInvites/{id}        an invite link; status 'open' or 'claimed'; a
+//                              super admin's has council: true and no officer
+//   officerInviteNotes/{id}    { note }: what the link is for, for its officer
+//                              and super admins only
 //   orders/{id}                the tickets, NT$0 orders with complimentary: true
 
 const callables = {
@@ -88,10 +91,17 @@ export async function fetchMyInvites(email) {
   return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
 }
 
+// { [inviteId]: note }
+const notesOf = (snapshot) => Object.fromEntries(snapshot.docs.map((d) => [d.id, String(d.data().note || '')]))
+
+export async function fetchMyInviteNotes(email) {
+  return notesOf(await getDocs(query(collection(db, 'officerInviteNotes'), where('officerEmail', '==', email.trim().toLowerCase()))))
+}
+
 // { requestId, name, email, quantity, allowDuplicate }; returns { id } of the order
 export const sendOfficerTicket = (input) => call('sendOfficerTicket', input)
 
-// { requestId, quantity }; returns { id } of the invite
+// { requestId, quantity, note }; returns { id } of the invite
 export const createOfficerInvite = (input) => call('createOfficerInvite', input)
 
 export const revokeOfficerInvite = (inviteId) => call('revokeOfficerInvite', { inviteId })
@@ -118,6 +128,14 @@ export async function fetchAllInvites() {
   const snapshot = await getDocs(collection(db, 'officerInvites'))
   return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
 }
+
+export async function fetchAllInviteNotes() {
+  return notesOf(await getDocs(collection(db, 'officerInviteNotes')))
+}
+
+// A link in the council's name, outside any quota: { requestId, quantity,
+// note }; returns { id } of the invite
+export const createCouncilInvite = (input) => call('createOfficerInvite', { ...input, council: true })
 
 export function addOfficer({ email, name, quota }) {
   const address = email.trim().toLowerCase()

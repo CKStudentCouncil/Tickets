@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, guestRelationText } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, guestRelationText } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -72,6 +72,7 @@ test('公關票 limits and relation text match src/data/guests.js', async () => 
   const guests = await import(srcFile('data/guests.js'))
   assert.equal(guests.MAX_GUEST_TICKETS, MAX_GUEST_TICKETS)
   assert.equal(guests.MAX_OFFICER_QUOTA, MAX_OFFICER_QUOTA)
+  assert.equal(guests.MAX_INVITE_NOTE, MAX_INVITE_NOTE)
   for (const guest of [
     { relation: 'alumni', relationDetail: '78 屆' },
     { relation: 'friend', relationDetail: ' 王小明 ' },

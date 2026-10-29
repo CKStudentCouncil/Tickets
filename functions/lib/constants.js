@@ -54,6 +54,8 @@ export const MAX_SELLER_TICKETS = 200
 // firestore.rules
 export const MAX_GUEST_TICKETS = 10
 export const MAX_OFFICER_QUOTA = 500
+// characters in an invite link's note (officerInviteNotes)
+export const MAX_INVITE_NOTE = 100
 
 // How a guest invited before the officer quotas knew the council, kept on
 // their order: "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友".

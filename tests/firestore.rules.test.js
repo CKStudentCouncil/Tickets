@@ -836,6 +836,35 @@ describe('公關票 (officers, officerInvites)', () => {
     }
   })
 
+  test('a link\'s note is for its officer and super admins only', async () => {
+    await seedOfficer()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'officerInviteNotes', INVITE_ID), { note: '給學長', officerEmail: OFFICER_EMAIL, createdAt: Timestamp.now() })
+      await setDoc(doc(db, 'officerInviteNotes', 'ZyXwVuTsRqPoNmLkJiHgFeDc'), { note: '校友會', officerEmail: null, createdAt: Timestamp.now() })
+    })
+    const mine = (who) => doc(as(who), 'officerInviteNotes', INVITE_ID)
+
+    await assertSucceeds(getDoc(mine(officer)))
+    await assertSucceeds(getDocs(query(collection(as(officer), 'officerInviteNotes'), where('officerEmail', '==', OFFICER_EMAIL))))
+    await assertFails(getDocs(collection(as(officer), 'officerInviteNotes')))
+    await assertFails(getDoc(doc(as(officer), 'officerInviteNotes', 'ZyXwVuTsRqPoNmLkJiHgFeDc')))
+    // the guest holding the link, and staff below super admin
+    for (const who of [other, staff.manager, staff.admin]) {
+      await assertFails(getDoc(mine(who)))
+    }
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'officerInviteNotes')))
+
+    // only createOfficerInvite writes them
+    for (const who of [officer, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'officerInviteNotes', 'NewNewNewNewNewNewNewNewN'), { note: 'x', officerEmail: OFFICER_EMAIL }))
+      await assertFails(updateDoc(mine(who), { note: '改' }))
+      await assertFails(deleteDoc(mine(who)))
+    }
+
+    await seed((db) => deleteDoc(doc(db, 'officers', OFFICER_EMAIL)))
+    await assertFails(getDoc(mine(officer)))
+  })
+
   test('officers read the tickets they sent, and no others, while on the list', async () => {
     await seedOfficer()
     await seed(async (db) => {

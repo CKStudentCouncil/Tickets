@@ -286,3 +286,37 @@ td.mono a {
   .send-step { margin-top: 6px; padding: 14px; }
   .send-step-actions .btn { flex: 1; }
 }
+
+/* ---------- invite links ---------- */
+.new-link {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 8px;
+
+  .share-link { margin: 0; }
+}
+
+.new-link-label {
+  margin: 0;
+  color: var(--ember);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+
+.sub-heading {
+  margin: 28px 0 8px;
+  color: var(--lunar);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+
+  .num { margin-left: 6px; color: var(--off-white); }
+}
+
+td.note-cell {
+  max-width: 280px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

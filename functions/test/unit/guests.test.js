@@ -51,8 +51,17 @@ test('malformed sends are refused', () => {
   cases.forEach((data) => assert.equal(code(() => sanitizeGuestInput(data)), 'invalid-argument', JSON.stringify(data)))
 })
 
-test('an invite link takes a request id and a quantity', () => {
-  assert.deepEqual(sanitizeInviteInput({ requestId: REQUEST_ID, quantity: 3 }), { requestId: REQUEST_ID, quantity: 3 })
+test('an invite link takes a request id, a quantity and an optional note', () => {
+  assert.deepEqual(sanitizeInviteInput({ requestId: REQUEST_ID, quantity: 3 }), { requestId: REQUEST_ID, quantity: 3, note: '', council: false })
+  assert.deepEqual(sanitizeInviteInput({ requestId: REQUEST_ID, quantity: 1, note: ' 給學長 ', council: true }), {
+    requestId: REQUEST_ID,
+    quantity: 1,
+    note: '給學長',
+    council: true
+  })
+  assert.equal(sanitizeInviteInput({ requestId: REQUEST_ID, note: 'x'.repeat(150) }).note.length, 100)
+  // only exactly true asks for a council link
+  assert.equal(sanitizeInviteInput({ requestId: REQUEST_ID, council: 'yes' }).council, false)
   assert.equal(code(() => sanitizeInviteInput({ requestId: REQUEST_ID, quantity: 11 })), 'invalid-argument')
   assert.equal(code(() => sanitizeInviteInput({ quantity: 1 })), 'invalid-argument')
 })

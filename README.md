@@ -18,7 +18,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Party introduction, lineup pages and a user survey managed from the admin UI
 - 銷售報表 for super admins: live sales against an earlier year (全期 / 同期, by day of the sale), recent windows against the window before, identities, order values, ticket types and marketing charts, with PDF export and 匯入往年資料
 - 清除所有訂單 for super admins: Excel backup, then a Firestore archive (`salesArchives`), then deletion with stock release and an audit log; nothing is deleted unless the backup and archive succeed
-- 公關票 by officer quota: super admins give each officer (幹部) a quota; officers send free tickets on `/officer`, by name and email or as one-time invite links that guests claim on `/invite/:id`, and super admins may send one directly outside any quota. Each has the same QR code and check-in as an order
+- 公關票 by officer quota: super admins give each officer (幹部) a quota; officers send free tickets on `/officer`, by name and email or as one-time invite links that guests claim on `/invite/:id`, and super admins may send one directly or make a link outside any quota. Links can carry a note only the officer and super admins see. Each has the same QR code and check-in as an order
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 
 ## Tech Stack
@@ -235,7 +235,7 @@ firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,function
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |
 | `/super_admin/analytics` | 銷售報表 (super admins) |
-| `/super_admin/guests` | 公關票: officers and their quotas, direct sends and every ticket (super admins) |
+| `/super_admin/guests` | 公關票: officers and their quotas, direct sends, council invite links and every ticket (super admins) |
 | `/officer` | 公關票 for officers: send tickets and make invite links within their quota |
 | `/invite/:id` | 公關票 invite link: the guest signs in and claims the ticket (not in the menu) |
 | `/comingsoon` | Pre-launch landing page |

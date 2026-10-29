@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
 
 import { db, HttpsError, assertRole, getRoleRank } from './common.js'
-import { MAX_GUEST_TICKETS, REGION, ROLE_RANK } from './constants.js'
+import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE, REGION, ROLE_RANK } from './constants.js'
 import { getBuyerAccount } from './orders.js'
 import { generateOrderId, isValidRequestId } from './orderValidation.js'
 import { getTaiwanDateKey } from './time.js'
@@ -28,6 +28,13 @@ import { getTaiwanDateKey } from './time.js'
 //                                   status: 'open' | 'claimed', createdAt }
 //                                   and, once claimed, orderId, claimedByUid,
 //                                   claimedAt. Revoking an open one deletes it.
+//                                   A super admin's link (council: true) has
+//                                   no officer and takes no quota.
+//   officerInviteNotes/{inviteId}   { note, officerEmail, createdAt }: what
+//                                   the link is for, kept apart because
+//                                   whoever holds the link reads the invite
+//                                   (and later owns the order); only its
+//                                   officer and super admins read it
 //   invitationRequests/{requestId}  { kind, createdByUid, orderId | inviteId }:
 //                                   the same caller retrying the same kind of
 //                                   call gets the same ticket or link back
@@ -59,6 +66,7 @@ const officerRef = (email) => db.doc(`officers/${email}`)
 const inviteRef = (id) => db.doc(`officerInvites/${id}`)
 const requestRef = (id) => db.doc(`invitationRequests/${id}`)
 const releaseRef = (orderId) => db.doc(`officerReleases/${orderId}`)
+const noteRef = (inviteId) => db.doc(`officerInviteNotes/${inviteId}`)
 
 export const newInviteId = () => randomBytes(18).toString('base64url')
 
@@ -113,8 +121,14 @@ export function sanitizeGuestInput(data) {
   return { requestId, quantity, guest: { name, email } }
 }
 
+// { requestId, quantity, note, council }: `council` is a super admin's link
 export function sanitizeInviteInput(data) {
-  return { requestId: checkRequestId(data), quantity: sanitizeQuantity(data) }
+  return {
+    requestId: checkRequestId(data),
+    quantity: sanitizeQuantity(data),
+    note: cleanString(data?.note, MAX_INVITE_NOTE),
+    council: data?.council === true
+  }
 }
 
 export function sanitizeInviteId(data) {
@@ -277,37 +291,53 @@ export const sendOfficerTicket = functions
 
 // An officer makes a one-time invite link for `quantity` tickets; they come
 // off the quota now and go back if the link is revoked before it is used.
+// With `council`, a super admin makes one in the council's name, outside any
+// quota. An optional `note` says who it is for.
 export const createOfficerInvite = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
-    const officer = await getOfficer(context)
-    const { requestId, quantity } = sanitizeInviteInput(data)
+    const { requestId, quantity, note, council } = sanitizeInviteInput(data)
+    let officer = null
+    if (council) await assertRole(context, 'super_admin')
+    else officer = await getOfficer(context)
+    const uid = context.auth.uid
+    const kind = council ? 'council-invite' : 'invite'
     const ref = inviteRef(newInviteId())
 
     try {
       return await db.runTransaction(async (tx) => {
-        const [request, officerSnap] = await tx.getAll(requestRef(requestId), officerRef(officer.email))
-        const earlier = replayed(request, 'invite', officer.uid)
+        const [request, officerSnap] = await tx.getAll(requestRef(requestId), ...(officer ? [officerRef(officer.email)] : []))
+        const earlier = replayed(request, kind, uid)
         if (earlier) return { id: earlier.inviteId }
-        if (!officerSnap.exists) throw new HttpsError('permission-denied', '你不在幹部名單中')
-        assertQuota(officerSnap.data(), quantity)
+        if (officer) {
+          if (!officerSnap.exists) throw new HttpsError('permission-denied', '你不在幹部名單中')
+          assertQuota(officerSnap.data(), quantity)
+        }
 
         tx.create(ref, {
-          officerEmail: officer.email,
-          officerName: officerSnap.data().name || officer.name,
-          officerSince: officerSnap.data().createdAt,
+          officerEmail: officer?.email || null,
+          officerName: officer ? officerSnap.data().name || officer.name : null,
+          officerSince: officer ? officerSnap.data().createdAt : null,
+          council,
           quantity,
           status: 'open',
-          createdByUid: officer.uid,
+          createdByUid: uid,
           createdAt: FieldValue.serverTimestamp()
         })
+        if (note) {
+          tx.create(noteRef(ref.id), {
+            note,
+            officerEmail: officer?.email || null,
+            createdAt: FieldValue.serverTimestamp()
+          })
+        }
         tx.create(requestRef(requestId), {
-          kind: 'invite',
+          kind,
           inviteId: ref.id,
-          createdByUid: officer.uid,
+          createdByUid: uid,
           createdAt: FieldValue.serverTimestamp()
         })
-        tx.update(officerRef(officer.email), { used: FieldValue.increment(quantity) })
+        if (officer) tx.update(officerRef(officer.email), { used: FieldValue.increment(quantity) })
         return { id: ref.id }
       })
     } catch (error) {
@@ -318,7 +348,8 @@ export const createOfficerInvite = functions
   })
 
 // The officer who made it, or a super admin, revokes an unclaimed link; its
-// tickets go back to the quota. Revoking one already gone is a no-op.
+// tickets go back to the quota, and its note goes with it. Revoking one
+// already gone is a no-op.
 export const revokeOfficerInvite = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
@@ -332,12 +363,16 @@ export const revokeOfficerInvite = functions
         const invite = await tx.get(ref)
         if (!invite.exists) return { revoked: false }
         const { status, officerEmail, officerSince, quantity } = invite.data()
-        if (officerEmail !== account.email && !isSuperAdmin) throw new HttpsError('permission-denied', '權限不足')
+        // a council link has no officer: only super admins revoke it
+        if ((!officerEmail || officerEmail !== account.email) && !isSuperAdmin) {
+          throw new HttpsError('permission-denied', '權限不足')
+        }
         if (status !== 'open') throw new HttpsError('failed-precondition', '這個連結已經被領取，無法撤銷')
 
-        const officer = await tx.get(officerRef(officerEmail))
+        const officer = officerEmail ? await tx.get(officerRef(officerEmail)) : null
         tx.delete(ref)
-        if (isSameOfficer(officer, officerSince)) {
+        tx.delete(noteRef(inviteId))
+        if (officer && isSameOfficer(officer, officerSince)) {
           tx.update(officer.ref, { used: Math.max(0, (Number(officer.data().used) || 0) - quantity) })
         }
         return { revoked: true }
@@ -362,7 +397,7 @@ export const claimOfficerInvite = functions
     return withNewOrder('claimOfficerInvite', async (orderRef, tx) => {
       const invite = await tx.get(ref)
       if (!invite.exists) throw new HttpsError('not-found', '這個邀請連結無效或已失效')
-      const { status, officerEmail, officerName, officerSince, quantity, orderId, claimedByUid } = invite.data()
+      const { status, council, officerEmail, officerName, officerSince, quantity, orderId, claimedByUid } = invite.data()
 
       if (status === 'claimed') {
         if (claimedByUid === account.uid) return { id: orderId }
@@ -370,7 +405,7 @@ export const claimOfficerInvite = functions
       }
       // an officer taken off the list (even if added again): their links no
       // longer work
-      if (!isSameOfficer(await tx.get(officerRef(officerEmail)), officerSince)) {
+      if (council !== true && !(officerEmail && isSameOfficer(await tx.get(officerRef(officerEmail)), officerSince))) {
         throw new HttpsError('not-found', '這個邀請連結無效或已失效')
       }
 
@@ -380,7 +415,7 @@ export const claimOfficerInvite = functions
         userId: account.uid,
         invitedByUid: invite.data().createdByUid || null,
         ticketCode: newTicketCode(),
-        officer: { email: officerEmail, name: officerName, since: officerSince },
+        officer: council === true ? null : { email: officerEmail, name: officerName, since: officerSince },
         inviteId
       }))
       tx.update(ref, {

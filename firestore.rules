@@ -384,10 +384,20 @@ service cloud.firestore {
     // Invite links, written only by the functions. The random id is the
     // secret in the link, so any signed-in account holding it may read it
     // (to see what it is before claiming); officers list their own (lists
-    // must filter on officerEmail), super admins all of them.
+    // must filter on officerEmail), super admins all of them, including
+    // their own council links (no officer).
     match /officerInvites/{inviteId} {
       allow get: if signedIn();
       allow list: if isSuperAdmin() || (
+        isOfficer() && resource.data.officerEmail == signedInEmail()
+      );
+    }
+
+    // What a link is for, written only by createOfficerInvite (at most 100
+    // characters, MAX_INVITE_NOTE in src/data/guests.js). Kept apart from
+    // the link, which its guest reads: only its officer and super admins.
+    match /officerInviteNotes/{inviteId} {
+      allow get, list: if isSuperAdmin() || (
         isOfficer() && resource.data.officerEmail == signedInEmail()
       );
     }

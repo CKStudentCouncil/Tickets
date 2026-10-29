@@ -32,11 +32,12 @@ const send = (extra = {}) => ({
   quantity: 1,
   ...extra
 })
-const invite = (quantity = 1) => ({ requestId: nextRequestId(), quantity })
+const invite = (quantity = 1, extra = {}) => ({ requestId: nextRequestId(), quantity, ...extra })
 
 const orderOf = async (id) => (await db.doc(`orders/${id}`).get()).data()
 const officerOf = async (email = 'officer@example.com') => (await db.doc(`officers/${email}`).get()).data()
 const inviteOf = async (id) => (await db.doc(`officerInvites/${id}`).get()).data()
+const noteOf = async (id) => (await db.doc(`officerInviteNotes/${id}`).get()).data()
 
 // what deleting an order does: the trigger gets the deleted snapshot
 async function deleteOrder(id) {
@@ -300,6 +301,71 @@ describe('invite links', () => {
   test('only officers make links', async () => {
     await assert.rejects(callCreateInvite(invite(), as(STRANGER)), { code: 'permission-denied' })
     await assert.rejects(callCreateInvite(invite(), as(SUPER)), { code: 'permission-denied' })
+  })
+
+  test('a link\'s note is kept apart, for its officer, and goes when the link is revoked', async () => {
+    const { id } = await callCreateInvite(invite(1, { note: ' 給小明的學長 ' }), as(OFFICER))
+    assert.equal((await inviteOf(id)).note, undefined)
+    const note = await noteOf(id)
+    assert.equal(note.note, '給小明的學長')
+    assert.equal(note.officerEmail, 'officer@example.com')
+
+    const { id: plain } = await callCreateInvite(invite(1), as(OFFICER))
+    assert.equal(await noteOf(plain), undefined)
+
+    await callRevokeInvite({ inviteId: id }, as(OFFICER))
+    assert.equal(await noteOf(id), undefined)
+
+    // a claimed link keeps its note, for the ledger
+    const { id: claimed } = await callCreateInvite(invite(1, { note: '給阿姨' }), as(OFFICER))
+    const { id: orderId } = await callClaimInvite({ inviteId: claimed, name: '陳小華' }, as(GUEST))
+    assert.equal((await noteOf(claimed)).note, '給阿姨')
+    assert.equal((await orderOf(orderId)).note, undefined)
+  })
+})
+
+describe('council invite links (super admins, outside any quota)', () => {
+  const councilInvite = (quantity = 1, extra = {}) => invite(quantity, { council: true, ...extra })
+
+  test('a super admin\'s link takes no quota and its ticket names no officer', async () => {
+    const { id: inviteId } = await callCreateInvite(councilInvite(3, { note: '校友會會長' }), as(SUPER))
+
+    const link = await inviteOf(inviteId)
+    assert.equal(link.council, true)
+    assert.equal(link.officerEmail, null)
+    assert.equal(link.quantity, 3)
+    assert.equal((await noteOf(inviteId)).officerEmail, null)
+
+    const { id } = await callClaimInvite({ inviteId, name: '陳小華' }, as(GUEST))
+    const order = await orderOf(id)
+    assert.equal(order.officerEmail, null)
+    assert.equal(order.officerName, null)
+    assert.equal(order.inviteId, inviteId)
+    assert.equal(order.customerEmail, 'guest@example.com')
+    assert.equal(order.items[0].quantity, 3)
+
+    // deleting it gives nothing to anyone
+    await (await deleteOrder(id))()
+    assert.equal((await officerOf()).used, 0)
+  })
+
+  test('only super admins make or revoke them', async () => {
+    for (const who of [OFFICER, ADMIN, STRANGER]) {
+      await assert.rejects(callCreateInvite(councilInvite(), as(who)), { code: 'permission-denied' })
+    }
+    const { id } = await callCreateInvite(councilInvite(2), as(SUPER))
+    await assert.rejects(callRevokeInvite({ inviteId: id }, as(OFFICER)), { code: 'permission-denied' })
+    assert.deepEqual(await callRevokeInvite({ inviteId: id }, as(SUPER)), { revoked: true })
+    assert.equal(await inviteOf(id), undefined)
+    assert.equal((await officerOf()).used, 0)
+  })
+
+  test('a retried request returns the same link; its id is no officer link\'s retry key', async () => {
+    const request = councilInvite(1)
+    const first = await callCreateInvite(request, as(SUPER))
+    assert.equal((await callCreateInvite(request, as(SUPER))).id, first.id)
+    assert.equal((await db.collection('officerInvites').get()).size, 1)
+    await assert.rejects(callSend(send({ requestId: request.requestId }), as(SUPER)), { code: 'invalid-argument' })
   })
 })
 

@@ -214,6 +214,88 @@
         </form>
       </section>
 
+      <section class="panel" aria-labelledby="links-title">
+        <div class="notify-header">
+          <h2 id="links-title">邀請連結</h2>
+        </div>
+        <p class="panel-copy">
+          以班聯會名義產生一次性連結，不佔任何幹部的額度：對方用 Google 帳號登入、填上姓名就能領票。備註只有幹部本人和總管理看得到
+        </p>
+
+        <div v-if="createdInvite" class="new-link" role="status">
+          <p class="new-link-label">
+            新的連結・<span class="num">{{ createdInvite.quantity }}</span> 張<template v-if="createdInvite.note">・{{ createdInvite.note }}</template>
+          </p>
+          <div class="share-link">
+            <span class="mono">{{ inviteUrl(createdInvite.id) }}</span>
+            <button type="button" class="btn" @click="copyText(inviteUrl(createdInvite.id), '已複製連結')">複製連結</button>
+            <button type="button" class="btn-outline" @click="createdInvite = null">完成</button>
+          </div>
+        </div>
+
+        <form v-else class="send-form" @submit.prevent="createInvite">
+          <div class="form-grid">
+            <div class="field">
+              <span>張數</span>
+              <QuantityStepper v-model="inviteQuantity" :max="MAX_GUEST_TICKETS" :disabled="creating" />
+            </div>
+            <label class="field">
+              <span>備註</span>
+              <input
+                v-model="inviteNote"
+                type="text"
+                :maxlength="MAX_INVITE_NOTE"
+                autocomplete="off"
+                placeholder="例：給校友會會長"
+                :disabled="creating"
+              >
+            </label>
+          </div>
+          <p v-if="inviteError" class="error" role="alert">{{ inviteError }}</p>
+          <button type="submit" class="btn" :disabled="creating || !validInviteQuantity">
+            {{ creating ? '產生中...' : '產生邀請連結' }}
+          </button>
+        </form>
+
+        <h3 class="sub-heading">還沒被領取的連結 <span class="num">{{ openInvites.length }}</span></h3>
+        <p v-if="openInvites.length === 0" class="empty">沒有未領取的連結</p>
+        <div v-else class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>產生者</th>
+                <th>張數</th>
+                <th>備註</th>
+                <th>產生時間</th>
+                <th>連結</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="invite in openInvites" :key="invite.id">
+                <td class="strong">{{ invite.officerEmail ? invite.officerName || invite.officerEmail : '班聯會' }}</td>
+                <td class="num">{{ invite.quantity }}</td>
+                <td class="note-cell">{{ notes[invite.id] || '—' }}</td>
+                <td class="num">{{ formatDateTime(invite.createdAt) }}</td>
+                <td>
+                  <button type="button" class="btn-outline btn-small" @click="copyText(inviteUrl(invite.id), '已複製連結')">複製</button>
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    class="btn-outline btn-small danger"
+                    :disabled="revokingIds.has(invite.id)"
+                    @click="revoke(invite)"
+                  >
+                    {{ revokingIds.has(invite.id) ? '撤銷中...' : '撤銷' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="panel" aria-labelledby="ledger-title">
         <div class="notify-header">
           <h2 id="ledger-title">已寄出的公關票</h2>
@@ -254,7 +336,9 @@
             <tbody>
               <tr v-for="ticket in shownTickets" :key="ticket.id">
                 <td class="strong">{{ ticket.customerName }}</td>
-                <td>{{ guestSourceText(ticket) }}<span v-if="ticket.inviteId" class="via">・連結</span></td>
+                <td>
+                  {{ guestSourceText(ticket) }}<span v-if="ticket.inviteId" class="via">・連結<template v-if="notes[ticket.inviteId]">（{{ notes[ticket.inviteId] }}）</template></span>
+                </td>
                 <td class="num">{{ quantityOf(ticket) }}</td>
                 <td>
                   <span class="status" :class="{ on: ticket.delivered }">{{ ticket.delivered ? '已領票' : '未領票' }}</span>
@@ -279,15 +363,19 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useToastStore } from 'src/stores/toast'
 import QuantityStepper from 'src/components/QuantityStepper.vue'
 import { SITE_URL } from 'src/config/app'
-import { MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, guestSourceText } from 'src/data/guests'
+import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE, MAX_OFFICER_QUOTA, guestSourceText } from 'src/data/guests'
 import {
   addOfficer,
+  createCouncilInvite,
   deleteOfficer,
+  fetchAllInviteNotes,
   fetchAllInvites,
   fetchGuestTickets,
   fetchOfficers,
+  inviteUrl,
   quantityOf,
   remainingOf,
+  revokeOfficerInvite,
   sendGuestInvitation,
   updateOfficer
 } from 'src/services/guestService'
@@ -308,6 +396,8 @@ const refreshing = ref(false)
 const loadError = ref(false)
 const officers = ref([])
 const invites = ref([])
+// { [inviteId]: note }
+const notes = ref({})
 const tickets = ref([])
 const officerSearch = ref('')
 const sourceFilter = ref('')
@@ -330,6 +420,18 @@ const form = ref(emptyForm())
 const directReview = ref(false)
 const directError = ref('')
 const sending = ref(false)
+
+// a council invite link, outside any quota
+const inviteQuantity = ref(1)
+const inviteNote = ref('')
+const creating = ref(false)
+const inviteError = ref('')
+// the link just made, shown until it is copied
+const createdInvite = ref(null)
+const revokingIds = reactive(new Set())
+const validInviteQuantity = computed(
+  () => Number.isInteger(inviteQuantity.value) && inviteQuantity.value >= 1 && inviteQuantity.value <= MAX_GUEST_TICKETS
+)
 
 const validQuota = (quota, min = 0) => Number.isInteger(quota) && quota >= min && quota <= MAX_OFFICER_QUOTA
 
@@ -391,9 +493,15 @@ async function load(showLoading = true) {
   loadError.value = false
 
   try {
-    const [officerList, inviteList, sent] = await Promise.all([fetchOfficers(), fetchAllInvites(), fetchGuestTickets()])
+    const [officerList, inviteList, sent, noteMap] = await Promise.all([
+      fetchOfficers(),
+      fetchAllInvites(),
+      fetchGuestTickets(),
+      fetchAllInviteNotes()
+    ])
     officers.value = officerList
     invites.value = inviteList
+    notes.value = noteMap
     tickets.value = sent
   } catch (error) {
     console.error('Load guests error:', error)
@@ -520,6 +628,54 @@ async function sendDirect() {
     }
   } finally {
     sending.value = false
+  }
+}
+
+async function createInvite() {
+  if (!validInviteQuantity.value || creating.value) return
+
+  creating.value = true
+  inviteError.value = ''
+  const input = { quantity: inviteQuantity.value, note: inviteNote.value.trim() }
+  const key = JSON.stringify({ invite: input })
+  if (pending?.key !== key) pending = { key, requestId: createRequestId() }
+
+  try {
+    const { id } = await createCouncilInvite({ ...input, requestId: pending.requestId })
+    pending = null
+    createdInvite.value = { id, ...input }
+    inviteQuantity.value = 1
+    inviteNote.value = ''
+    await load(false)
+  } catch (error) {
+    console.error('Create council invite error:', error)
+    if (REFUSALS.includes(error?.code)) {
+      pending = null
+      inviteError.value = error.message
+    } else {
+      inviteError.value = '產生失敗，請稍後再試（再按一次不會重複產生）'
+    }
+  } finally {
+    creating.value = false
+  }
+}
+
+async function revoke(invite) {
+  const owner = invite.officerEmail ? `${invite.officerName || invite.officerEmail} 的` : '班聯會的'
+  const refund = invite.officerEmail ? '，張數會退回該幹部的額度' : ''
+  if (!window.confirm(`確定要撤銷${owner} ${invite.quantity} 張連結嗎？撤銷後連結就不能用了${refund}`)) return
+
+  revokingIds.add(invite.id)
+  try {
+    await revokeOfficerInvite(invite.id)
+    if (createdInvite.value?.id === invite.id) createdInvite.value = null
+    toast.show('已撤銷連結')
+  } catch (error) {
+    console.error('Revoke invite error:', error)
+    toast.show(REFUSALS.includes(error?.code) ? error.message : '撤銷失敗，請稍後再試')
+  } finally {
+    revokingIds.delete(invite.id)
+    await load(false)
   }
 }
 

@@ -119,7 +119,7 @@
           <p class="muted">把連結傳給對方，對方用 Google 帳號登入、填上姓名就能領票，票會寄到他登入的 Email；每個連結只能用一次</p>
 
           <div v-if="createdInvite" class="new-link" role="status">
-            <p class="new-link-label">新的連結・<span class="num">{{ createdInvite.quantity }}</span> 張</p>
+            <p class="new-link-label">新的連結・<span class="num">{{ createdInvite.quantity }}</span> 張<template v-if="createdInvite.note">・{{ createdInvite.note }}</template></p>
             <p class="link-text mono">{{ inviteUrl(createdInvite.id) }}</p>
             <div class="row-actions">
               <button type="button" class="primary-button" @click="copyLink(createdInvite.id)">
@@ -137,6 +137,17 @@
               <span>張數 <small>最多 {{ maxQuantity }} 張</small></span>
               <QuantityStepper v-model="inviteQuantity" :max="maxQuantity" :disabled="creating" />
             </div>
+            <label class="field">
+              <span>備註 <small>只有你和總副召看得到</small></span>
+              <input
+                v-model="inviteNote"
+                type="text"
+                :maxlength="MAX_INVITE_NOTE"
+                autocomplete="off"
+                placeholder="例：給小明的學長"
+                :disabled="creating"
+              >
+            </label>
             <p v-if="inviteError" class="error" role="alert">{{ inviteError }}</p>
             <button type="submit" class="primary-button" :disabled="creating || !validQuantity(inviteQuantity)">
               <span>{{ creating ? '產生中…' : '產生邀請連結' }}</span>
@@ -156,7 +167,7 @@
         <ul v-else class="history">
           <li v-for="invite in openInvites" :key="invite.id">
             <div class="history-copy">
-              <p class="history-main"><span class="num">{{ invite.quantity }}</span> 張</p>
+              <p class="history-main"><span class="num">{{ invite.quantity }}</span> 張<template v-if="notes[invite.id]">・{{ notes[invite.id] }}</template></p>
               <p class="muted num">{{ formatDateTime(invite.createdAt) }} 產生</p>
               <p class="link-text mono">{{ inviteUrl(invite.id) }}</p>
             </div>
@@ -187,7 +198,9 @@
             <div class="history-copy">
               <p class="history-main">{{ ticket.customerName }}・<span class="num">{{ quantityOf(ticket) }}</span> 張</p>
               <p class="muted mono">{{ ticket.customerEmail }}</p>
-              <p class="muted num">{{ formatDateTime(ticket.createdAt) }}・{{ ticket.inviteId ? '透過連結領取' : '直接寄送' }}</p>
+              <p class="muted num">
+                {{ formatDateTime(ticket.createdAt) }}・{{ ticket.inviteId ? '透過連結領取' : '直接寄送' }}<template v-if="notes[ticket.inviteId]">（{{ notes[ticket.inviteId] }}）</template>
+              </p>
             </div>
             <div class="badges">
               <span class="badge" :class="{ on: ticket.emailStatus === 'accepted' || ticket.emailStatus === 'sent' }">
@@ -207,9 +220,10 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import QuantityStepper from 'src/components/QuantityStepper.vue'
-import { MAX_GUEST_TICKETS } from 'src/data/guests'
+import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE } from 'src/data/guests'
 import {
   createOfficerInvite,
+  fetchMyInviteNotes,
   fetchMyInvites,
   fetchMyOfficer,
   fetchMyOfficerTickets,
@@ -235,6 +249,8 @@ const loading = ref(true)
 const loadError = ref(false)
 const officer = ref({ quota: 0, used: 0 })
 const invites = ref([])
+// { [inviteId]: note } of this officer's links
+const notes = ref({})
 const tickets = ref([])
 
 const form = ref(emptyForm())
@@ -244,6 +260,7 @@ const directError = ref('')
 const duplicate = ref(false)
 
 const inviteQuantity = ref(1)
+const inviteNote = ref('')
 const creating = ref(false)
 const inviteError = ref('')
 // the link just made, shown until the officer copies it and moves on
@@ -273,10 +290,11 @@ watch(() => [form.value.name, form.value.email], () => { duplicate.value = false
 async function load() {
   loadError.value = false
   try {
-    const [mine, myInvites, myTickets] = await Promise.all([
+    const [mine, myInvites, myTickets, myNotes] = await Promise.all([
       fetchMyOfficer(auth.email),
       fetchMyInvites(auth.email),
-      fetchMyOfficerTickets(auth.email)
+      fetchMyOfficerTickets(auth.email),
+      fetchMyInviteNotes(auth.email)
     ])
     if (!mine) {
       // taken off the list meanwhile
@@ -286,6 +304,7 @@ async function load() {
     officer.value = mine
     invites.value = myInvites
     tickets.value = myTickets
+    notes.value = myNotes
   } catch (error) {
     console.error('Load officer page error:', error)
     loadError.value = true
@@ -354,13 +373,14 @@ async function createInvite() {
 
   creating.value = true
   inviteError.value = ''
-  const input = { quantity: inviteQuantity.value }
+  const input = { quantity: inviteQuantity.value, note: inviteNote.value.trim() }
 
   try {
     const { id } = await createOfficerInvite({ ...input, requestId: requestIdFor('invite', input) })
     pending.invite = null
-    createdInvite.value = { id, quantity: input.quantity }
+    createdInvite.value = { id, quantity: input.quantity, note: input.note }
     inviteQuantity.value = 1
+    inviteNote.value = ''
     await load()
   } catch (error) {
     console.error('Create officer invite error:', error)
