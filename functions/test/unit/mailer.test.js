@@ -57,16 +57,16 @@ test('confirmation email shows Taiwan time, the office, and escapes buyer input'
 
 test('every inline image the emails reference is attached', () => {
   const hero = heroAttachment()
-  assert.equal(hero.cid, 'hero-terrain')
+  assert.equal(hero.cid, 'hero')
   assert.ok(hero.content.length > 0)
 
   const cids = (html) => [...html.matchAll(/src="cid:([^"]+)"/g)].map((m) => m[1]).sort()
 
   const confirmation = generateEmailHTML('CKS202611050001', { school: '建國中學', items: [], finalTotal: 0 })
-  assert.deepEqual(cids(confirmation), ['hero-terrain', 'qrcode'])
+  assert.deepEqual(cids(confirmation), ['hero', 'qrcode'])
 
   for (const type of ['payment', 'pickup', 'both', 'custom', 'survey']) {
     const html = generateOrderNotificationHTML({ type, paymentTime: 't', pickupTime: 't', location: 'l', message: 'm' })
-    assert.deepEqual(cids(html), ['hero-terrain'], type)
+    assert.deepEqual(cids(html), ['hero'], type)
   }
 })
