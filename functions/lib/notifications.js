@@ -1,10 +1,12 @@
 import * as functions from 'firebase-functions/v1'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { db, HttpsError, assertRole } from './common.js'
-import { REGION } from './constants.js'
+import { REGION, SCHOOL_CODES } from './constants.js'
 import { SENDER_EMAIL } from './mailer.js'
 import { enqueueNotificationBatch, MAX_BCC_PER_BATCH } from './mailQueue.js'
 import { notificationProgress } from './mailQueueCore.js'
+import { TICKET_TYPE_ID_PATTERN } from './orderValidation.js'
+import { GUEST_SCHOOL } from './guests.js'
 
 export { batchDelayMs } from './mailQueueCore.js'
 
@@ -65,9 +67,104 @@ export function needsNotice(order, type) {
   return true
 }
 
-async function collectRecipients(school, type) {
+const PAID_FILTERS = ['any', 'unpaid', 'paid']
+const DELIVERED_FILTERS = ['any', 'undelivered', 'delivered']
+const COMPLIMENTARY_FILTERS = ['include', 'exclude', 'only']
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const MAX_TICKET_TYPE_FILTERS = 50
+
+function readChoice(value, choices) {
+  if (value === undefined || value === null || value === '') return choices[0]
+  if (!choices.includes(value)) throw new HttpsError('invalid-argument', '篩選條件不正確')
+  return value
+}
+
+function readDate(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  if (!DATE_PATTERN.test(text) || Number.isNaN(new Date(`${text}T00:00:00+08:00`).getTime())) {
+    throw new HttpsError('invalid-argument', '訂購日期格式不正確')
+  }
+  return text
+}
+
+function readList(value, valid, limit, label) {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value) || value.length > limit) throw new HttpsError('invalid-argument', `${label}篩選不正確`)
+  const list = [...new Set(value.map((item) => String(item || '').trim()))]
+  if (list.some((item) => !valid(item))) throw new HttpsError('invalid-argument', `${label}篩選不正確`)
+  return list.sort()
+}
+
+// Who a notice goes to, on top of what needsNotice requires for its type.
+// Empty lists mean every school / ticket type. Dates are inclusive Taiwan
+// calendar days. The older `school` field ('all' or one school) still works.
+export function readRecipientFilters(data, type) {
+  const input = data?.filters && typeof data.filters === 'object' ? data.filters : {}
+  const legacySchool = String(data?.school || '').trim()
+  const filters = {
+    schools: readList(input.schools ?? (legacySchool && legacySchool !== 'all' ? [legacySchool] : []),
+      (school) => Object.hasOwn(SCHOOL_CODES, school) || school === GUEST_SCHOOL, Object.keys(SCHOOL_CODES).length + 1, '學校'),
+    ticketTypeIds: readList(input.ticketTypeIds, (id) => TICKET_TYPE_ID_PATTERN.test(id), MAX_TICKET_TYPE_FILTERS, '票種'),
+    paid: readChoice(input.paid, PAID_FILTERS),
+    delivered: readChoice(input.delivered, DELIVERED_FILTERS),
+    complimentary: readChoice(input.complimentary, COMPLIMENTARY_FILTERS),
+    createdFrom: readDate(input.createdFrom),
+    createdTo: readDate(input.createdTo)
+  }
+  if (filters.createdFrom && filters.createdTo && filters.createdFrom > filters.createdTo) {
+    throw new HttpsError('invalid-argument', '訂購日期的開始日不能晚於結束日')
+  }
+  // Payment and pickup notices already pick unpaid / undelivered orders
+  // (needsNotice); a contrary status filter could only empty the list.
+  if (type !== 'custom') {
+    filters.paid = 'any'
+    filters.delivered = 'any'
+  }
+  // 公關票 guests all sit under GUEST_SCHOOL, so the school list does not
+  // apply to them
+  if (filters.complimentary === 'only') filters.schools = []
+  return filters
+}
+
+const orderTicketTypeIds = (order) => (Array.isArray(order.items) ? order.items : [])
+  .filter((item) => Number(item?.quantity) > 0)
+  .map((item) => String(item?.ticketTypeId || item?.id || ''))
+
+function createdAtMillis(order) {
+  const value = order.createdAt
+  if (typeof value?.toMillis === 'function') return value.toMillis()
+  if (value instanceof Date) return value.getTime()
+  return null
+}
+
+export function matchesRecipientFilters(order, filters) {
+  const complimentary = order.complimentary === true
+  if (filters.complimentary === 'exclude' && complimentary) return false
+  if (filters.complimentary === 'only' && !complimentary) return false
+  if (filters.schools.length && !filters.schools.includes(order.school)) return false
+  if (filters.ticketTypeIds.length && !orderTicketTypeIds(order).some((id) => filters.ticketTypeIds.includes(id))) return false
+  // 公關票 orders are saved as paid; they have nothing to pay either way
+  const paid = order.paid === true || complimentary
+  if (filters.paid === 'unpaid' && paid) return false
+  if (filters.paid === 'paid' && !paid) return false
+  const delivered = order.delivered === true
+  if (filters.delivered === 'undelivered' && delivered) return false
+  if (filters.delivered === 'delivered' && !delivered) return false
+  if (filters.createdFrom || filters.createdTo) {
+    const created = createdAtMillis(order)
+    if (created === null) return false
+    if (filters.createdFrom && created < new Date(`${filters.createdFrom}T00:00:00+08:00`).getTime()) return false
+    if (filters.createdTo && created >= new Date(`${filters.createdTo}T00:00:00+08:00`).getTime() + 86_400_000) return false
+  }
+  return true
+}
+
+async function collectRecipients(filters, type) {
   let query = db.collection('orders')
-  if (school !== 'all') query = query.where('school', '==', school)
+  // one school narrows the scan; several are checked per order below
+  if (filters.complimentary === 'only') query = query.where('school', '==', GUEST_SCHOOL)
+  else if (filters.schools.length === 1) query = query.where('school', '==', filters.schools[0])
   query = query.orderBy(FieldPath.documentId()).limit(250)
   const emails = new Set()
   let cursor
@@ -75,11 +172,11 @@ async function collectRecipients(school, type) {
     const snapshot = await (cursor ? query.startAfter(cursor) : query).get()
     if (snapshot.empty) break
     snapshot.forEach((doc) => {
-      if (!needsNotice(doc.data(), type)) return
+      if (!needsNotice(doc.data(), type) || !matchesRecipientFilters(doc.data(), filters)) return
       const email = String(doc.data().customerEmail || '').trim().toLowerCase()
       if (email && email.length <= 320 && email !== SENDER_EMAIL && !email.startsWith('no-reply@') && !email.startsWith('noreply@')) emails.add(email)
     })
-    if (emails.size > MAX_RECIPIENTS) throw new HttpsError('resource-exhausted', '收件人過多，請依學校分批建立通知')
+    if (emails.size > MAX_RECIPIENTS) throw new HttpsError('resource-exhausted', '收件人過多，請縮小篩選條件後分批建立通知')
     cursor = snapshot.docs.at(-1)
     if (snapshot.size < 250) break
   }
@@ -120,16 +217,18 @@ async function progressOf(ref) {
 export const prepareOrderNotification = functions.region(REGION).https.onCall(async (data, context) => {
   await assertRole(context, 'manager')
   const type = NOTIFY_TYPES.includes(data?.type) ? data.type : 'payment'
-  const school = readField(data, 'school') || 'all'
+  const filters = readRecipientFilters(data, type)
   const fields = { paymentTime: readField(data, 'paymentTime'), pickupTime: readField(data, 'pickupTime'),
     location: readField(data, 'location'), message: readField(data, 'message', 8000) }
   validateNotification(type, fields)
   if (type === 'survey') await assertPartySurveyOpen(Number(data?.year))
-  const recipients = await collectRecipients(school, type)
+  const recipients = await collectRecipients(filters, type)
   if (!recipients.length) return { status: 'empty', jobId: null, sentCount: 0, total: 0 }
   const ref = db.collection('notificationJobs').doc()
   const batch = db.batch()
-  batch.create(ref, { type, school, subject: resolveSubject(type, readField(data, 'subject', 200)),
+  // `school` stays for older readers of notificationJobs
+  const school = filters.schools.length === 1 ? filters.schools[0] : filters.schools.length ? 'multiple' : 'all'
+  batch.create(ref, { type, school, filters, subject: resolveSubject(type, readField(data, 'subject', 200)),
     fields, total: recipients.length, batchCount: Math.ceil(recipients.length / MAX_BCC_PER_BATCH),
     schemaVersion: 2, nextIndex: 0, status: 'ready',
     createdBy: context.auth.uid, createdAt: FieldValue.serverTimestamp() })
