@@ -421,6 +421,24 @@ describe('notifications and 公關票', () => {
     assert.deepEqual(await recipientsOf(pickup.jobId), ['alumni@example.com', 'buyer@example.com'])
   })
 
+  test('recipient filters pick schools, ticket types, status and 公關票', async () => {
+    await callSend(send(), as(SUPER))
+    await db.doc('orders/O20261026AAAAAA').set({ customerEmail: 'buyer@example.com', school: '其他學校或社會人士', paid: true, items: [{ id: 'early', quantity: 1 }] })
+    await db.doc('orders/T20261026BBBBBB').set({ customerEmail: 'girl@example.com', school: '北一女中', paid: false, items: [{ id: 'normal', quantity: 2 }] })
+
+    const custom = (filters) => callPrepare({ type: 'custom', message: '測試', filters }, as(ADMIN))
+    assert.deepEqual(await recipientsOf((await custom({ complimentary: 'only', schools: ['北一女中'] })).jobId), ['alumni@example.com'])
+    assert.deepEqual(await recipientsOf((await custom({ complimentary: 'exclude' })).jobId), ['buyer@example.com', 'girl@example.com'])
+    assert.deepEqual(await recipientsOf((await custom({ schools: ['北一女中', '其他學校或社會人士'], paid: 'unpaid' })).jobId), ['girl@example.com'])
+    assert.deepEqual(await recipientsOf((await custom({ ticketTypeIds: ['early'] })).jobId), ['buyer@example.com'])
+    assert.equal((await custom({ schools: ['建國中學'] })).total, 0)
+
+    const job = await custom({ schools: ['北一女中'] })
+    const saved = (await db.doc(`notificationJobs/${job.jobId}`).get()).data()
+    assert.equal(saved.school, '北一女中')
+    assert.deepEqual(saved.filters.schools, ['北一女中'])
+  })
+
   test('the party survey goes to buyers and guests, only while that year is open', async () => {
     await callSend(send(), as(SUPER))
     await db.doc('orders/O20261026AAAAAA').set({ customerEmail: 'buyer@example.com', school: '其他學校或社會人士', paid: true, delivered: true })
