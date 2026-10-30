@@ -891,6 +891,89 @@ textarea::placeholder {
   margin-top: 22px;
 }
 
+/* ---------- recipient filters ---------- */
+
+.recipient-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+
+  margin: 0 0 22px;
+  padding: 18px;
+
+  border: 1px solid var(--line-soft);
+  min-width: 0;
+}
+
+.recipient-filters legend {
+  margin: 0;
+  padding: 0 6px;
+
+  color: var(--ember);
+}
+
+.recipient-filters .filter-group .field-label {
+  margin-bottom: 9px;
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 7px;
+}
+
+.check-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 8px 10px;
+
+  border: 1px solid var(--line);
+
+  color: rgba(242, 240, 233, .7);
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+.check-option:has(input:checked) {
+  border-color: var(--ember);
+
+  color: var(--ember);
+
+  background: rgba(228, 164, 104, .05);
+}
+
+.check-option input {
+  flex: none;
+  margin: 0;
+
+  accent-color: var(--ember);
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.filter-row input[type="date"] {
+  color-scheme: dark;
+}
+
+.filter-note {
+  margin: 0;
+
+  color: rgba(242, 240, 233, .55);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.filter-note[role="alert"] {
+  color: var(--danger);
+}
+
 .notify-preview {
   margin-top: 28px;
 

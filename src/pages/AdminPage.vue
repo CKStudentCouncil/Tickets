@@ -156,19 +156,64 @@
           </div>
         </div>
 
-        <div class="filter-block">
-          <label for="notify-school" class="field-label">通知對象</label>
-          <select id="notify-school" v-model="notifyForm.school">
-            <option value="all">全部學校</option>
-            <option
-              v-for="school in schools"
-              :key="school"
-              :value="school"
-            >
-              {{ school }}
-            </option>
-          </select>
-        </div>
+        <fieldset class="recipient-filters">
+          <legend class="field-label">收件人篩選</legend>
+
+          <div v-if="notifyFilters.complimentary !== 'only'" class="filter-group">
+            <span class="field-label">學校（都不勾即全部學校）</span>
+            <div class="check-grid">
+              <label v-for="school in schools" :key="school" class="check-option">
+                <input v-model="notifyFilters.schools" type="checkbox" :value="school">
+                <span>{{ school }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <span class="field-label">票種（都不勾即全部票種，勾選後買過其中一種就會收到）</span>
+            <p v-if="ticketTypesError" class="filter-note" role="alert">{{ ticketTypesError }}</p>
+            <div v-else class="check-grid">
+              <label v-for="ticketType in notifyTicketTypes" :key="ticketType.id" class="check-option">
+                <input v-model="notifyFilters.ticketTypeIds" type="checkbox" :value="ticketType.id">
+                <span>{{ ticketType.name }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <label v-if="choosesStatus(notifyForm.type)" class="field">
+              <span>繳費狀態</span>
+              <select v-model="notifyFilters.paid">
+                <option v-for="option in PAID_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label v-if="choosesStatus(notifyForm.type)" class="field">
+              <span>領票狀態</span>
+              <select v-model="notifyFilters.delivered">
+                <option v-for="option in DELIVERED_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label v-if="choosesComplimentary(notifyForm.type)" class="field">
+              <span>公關票</span>
+              <select v-model="notifyFilters.complimentary">
+                <option v-for="option in COMPLIMENTARY_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="filter-row">
+            <label class="field">
+              <span>訂購日期起（選填）</span>
+              <input v-model="notifyFilters.createdFrom" type="date">
+            </label>
+            <label class="field">
+              <span>訂購日期迄（選填，含當天）</span>
+              <input v-model="notifyFilters.createdTo" type="date">
+            </label>
+          </div>
+          <p v-if="!choosesStatus(notifyForm.type)" class="filter-note">{{ notifyTypeLabel }}只會寄給{{ NOTIFY_AUDIENCE[notifyForm.type] }}的訂購者。</p>
+          <p v-if="notifyFilterError" class="filter-note" role="alert">{{ notifyFilterError }}</p>
+        </fieldset>
 
         <label v-if="notifyForm.type === 'custom'" class="field">
           <span>主旨</span>
@@ -227,7 +272,7 @@
             <p>地點：<strong>{{ notifyForm.location || '（尚未填寫）' }}</strong></p>
             <p v-if="notifyForm.message">補充說明：{{ notifyForm.message }}</p>
           </template>
-          <p class="preview-count">將發送給{{ notifyTargetSchoolLabel }}{{ notifyAudienceLabel }}的訂購者（確認前會顯示完整人數）</p>
+          <p class="preview-count">將發送給符合條件的訂購者：{{ notifyRecipientLabel }}（確認前會顯示完整人數）</p>
         </div>
 
         <div class="notify-actions">
@@ -577,6 +622,12 @@ import { useNotificationJob } from 'src/composables/useNotificationJob'
 import { useOrderPurge } from 'src/composables/useOrderPurge'
 import { fetchOrder, resendOrderEmail } from 'src/services/orderService'
 import { needsNotificationEnqueue, canClearNotification } from 'src/utils/notificationProgress'
+import {
+  COMPLIMENTARY_OPTIONS, DELIVERED_OPTIONS, NOTIFY_AUDIENCE, PAID_OPTIONS,
+  choosesComplimentary, choosesStatus, createRecipientFilters, describeRecipients,
+  recipientFilterError, recipientFilterPayload
+} from 'src/utils/notificationFilters'
+import { fetchTicketTypes } from 'src/services/ticketTypeService'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -619,7 +670,7 @@ const DEFAULT_NOTIFY_MESSAGE = '請出示 QR Code 給工作人員，以完成繳
 function createNotifyForm(school = 'all') {
   return {
     type: 'payment',
-    school,
+    filters: createRecipientFilters(school),
     subject: '',
     paymentTime: '',
     pickupTime: '',
@@ -667,13 +718,29 @@ const {
 
 const deliveryStats = computed(() => calculateDeliveryStats(currentOrders.value))
 
-const notifyTargetSchoolLabel = computed(() =>
-  notifyForm.value.school === 'all' ? '全部學校' : notifyForm.value.school
-)
+const notifyFilters = computed(() => notifyForm.value.filters)
+const notifyTicketTypes = ref([])
+const ticketTypesError = ref('')
+let ticketTypesLoaded = false
 
-// mirrors needsNotice in functions/lib/notifications.js
-const NOTIFY_AUDIENCE = { payment: '尚未繳費', pickup: '尚未領票', both: '尚未繳費或領票', custom: '' }
-const notifyAudienceLabel = computed(() => NOTIFY_AUDIENCE[notifyForm.value.type] || '')
+// 公關票 orders carry their own ticket type, chosen by the 公關票 filter
+async function loadNotifyTicketTypes() {
+  if (ticketTypesLoaded) return
+  ticketTypesError.value = ''
+  try {
+    notifyTicketTypes.value = await fetchTicketTypes()
+    ticketTypesLoaded = true
+  } catch (error) {
+    console.error('Load ticket types error:', error)
+    ticketTypesError.value = '票種載入失敗，暫時無法依票種篩選。'
+  }
+}
+
+const notifyRecipientLabel = computed(() => describeRecipients(
+  notifyFilters.value, notifyForm.value.type,
+  Object.fromEntries(notifyTicketTypes.value.map((type) => [type.id, type.name]))
+))
+const notifyFilterError = computed(() => recipientFilterError(notifyFilters.value))
 
 // Only admins may list every order (firestore.rules); managers get the
 // notification tools only
@@ -720,6 +787,7 @@ const notifyTypeLabel = computed(() => {
 
 const canSendNotify = computed(() => {
   const f = notifyForm.value
+  if (notifyFilterError.value) return false
   if (f.type === 'custom') return !!f.message.trim()
   if (!f.location.trim()) return false
   if (f.type === 'payment') return !!f.paymentTime.trim()
@@ -728,8 +796,9 @@ const canSendNotify = computed(() => {
 })
 
 function openNotifyModal() {
-  notifyForm.value.school = selectedSchool.value
+  notifyForm.value.filters = createRecipientFilters(selectedSchool.value)
   showNotifyModal.value = true
+  loadNotifyTicketTypes()
 }
 
 function closeNotifyModal() {
@@ -739,7 +808,8 @@ function closeNotifyModal() {
 
 async function confirmSendNotify() {
   if (!canSendNotify.value) {
-    toast.show(notifyForm.value.type === 'custom' ? '請填寫訊息內容' : '請填寫必要的時間與地點')
+    if (notifyFilterError.value) toast.show(notifyFilterError.value)
+    else toast.show(notifyForm.value.type === 'custom' ? '請填寫訊息內容' : '請填寫必要的時間與地點')
     return
   }
 
@@ -748,7 +818,7 @@ async function confirmSendNotify() {
   try {
     job = await prepareNotification({
       type: notifyForm.value.type,
-      school: notifyForm.value.school,
+      filters: recipientFilterPayload(notifyFilters.value, notifyForm.value.type),
       // the subject input only exists for custom notices (PARTY-22)
       subject: notifyForm.value.type === 'custom' ? notifyForm.value.subject.trim() : '',
       paymentTime: notifyForm.value.paymentTime.trim(),
@@ -763,13 +833,13 @@ async function confirmSendNotify() {
   }
 
   if (!job.total) {
-    toast.show(`${notifyTargetSchoolLabel.value}目前沒有可寄送的訂購者`)
+    toast.show(`目前沒有符合條件的訂購者（${notifyRecipientLabel.value}）`)
     return
   }
 
   if (
     !window.confirm(
-      `確定要寄送${notifyTypeLabel.value}給${notifyTargetSchoolLabel.value} ${job.total} 位訂購者嗎？此動作無法復原。`
+      `確定要寄送${notifyTypeLabel.value}給 ${job.total} 位訂購者嗎？\n條件：${notifyRecipientLabel.value}\n此動作無法復原。`
     )
   ) {
     return
