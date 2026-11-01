@@ -259,14 +259,3 @@ h1 {
   .login-page { padding: 110px 16px 72px; }
   .login-card { padding: 32px 22px 28px; }
 }
-
-/* 學生優先購買: mail us when a school account cannot be verified */
-.school-hint a,
-.login-notes a,
-.account-warning a,
-.edu-help a {
-  color: var(--ember);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  white-space: nowrap;
-}

@@ -410,17 +410,6 @@ h1 {
   }
 }
 
-/* 學生優先購買: mail us when a school account cannot be verified */
-.school-hint a,
-.login-notes a,
-.account-warning a,
-.edu-help a {
-  color: var(--ember);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  white-space: nowrap;
-}
-
 /* 學生身分切結書: a small secondary way in, under 改用學校帳號登入 */
 .declaration-link {
   display: block;

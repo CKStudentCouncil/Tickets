@@ -50,12 +50,6 @@
             目前僅開放學生以學校帳號（Email 結尾為 edu.tw）登入購買，{{ formatDateTime(studentOnlyUntil) }} 起開放所有人
           </p>
 
-          <p v-if="isStudentPhase" class="ticket-limit edu-help">
-            沒有學校帳號，或學校帳號無法完成驗證？請寄信到
-            <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>
-            告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理
-          </p>
-
           <p class="ticket-limit">
             以學校帳號（Email 結尾為 edu.tw）購買或填寫學生切結者，須確認為在學學生，領票時須出示學生證，資格不符者不得領票；其他以一般帳號（如 Gmail）購買者不需要
           </p>
@@ -101,8 +95,6 @@
               目前僅開放學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
               <span class="account-email">{{ auth.email }}</span>，
               {{ formatDateTime(studentOnlyUntil) }} 起開放所有人（倒數 {{ formatCountdown(studentOnlyUntil, now) }}）。
-              無法使用學校帳號完成驗證的話，請寄信到
-              <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a> 告知我們。
             </p>
             <p v-else class="account-warning">
               此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
@@ -260,7 +252,7 @@ import { useToastStore } from 'src/stores/toast'
 import { getPendingCheckout, submitOrder } from 'src/services/orderService'
 import TurnstileWidget from 'src/components/TurnstileWidget.vue'
 import StudentDeclarationDialog from 'src/components/StudentDeclarationDialog.vue'
-import { CONTACT_EMAIL, EDU_HELP_MAILTO, TURNSTILE_SITE_KEY } from 'src/config/app'
+import { TURNSTILE_SITE_KEY } from 'src/config/app'
 import {
   ELIGIBLE_IDENTITIES,
   fetchSoldOut,
