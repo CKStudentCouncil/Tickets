@@ -130,7 +130,7 @@ For a new development project, bootstrap the first super admin by adding `users/
 
 Keep price, eligibility, sale windows, stock limits, and purchase limits authoritative on the server. Changes to validation belong in [functions/lib/orderValidation.js](functions/lib/orderValidation.js) and its tests, with matching frontend feedback where needed. Preserve the same request ID when retrying an uncertain checkout result.
 
-Campus-only tickets require both the school `建國中學` and an account at `@gl.ck.tp.edu.tw`. Per-person ticket allowance is counted by account email. Buyer order-list queries must filter on `userId`; Firestore rejects queries that could return another buyer's orders.
+Campus-only tickets require both the school `建國中學` and an account at `@gl.ck.tp.edu.tw`. 學生 tickets (`edu_students`) require a school account whose domain is `edu.tw` or ends in `.edu.tw`, and a school other than `建中家長會` / `建中老師`. Teachers and university students have such accounts too, so `createOrder` copies each type's `eligibleBuyerIdentity` onto its order item and the staff order view asks for a student ID (學生證 or 酷課雲) before a 學生 ticket can be collected. Deploy the functions before offering a new eligibility in the management page: `createOrder` treats a value it does not know as open to everyone. Per-person ticket allowance is counted by account email. Buyer order-list queries must filter on `userId`; Firestore rejects queries that could return another buyer's orders.
 
 ### Key Firestore records
 

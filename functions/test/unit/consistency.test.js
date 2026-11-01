@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, guestRelationText } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, NON_STUDENT_SCHOOLS, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, guestRelationText } from '../../lib/constants.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -56,6 +56,15 @@ test('school lists match src/data/schools.js', async () => {
   assert.deepEqual(schools.CAMPUS_SCHOOLS, [...CAMPUS_SCHOOLS])
   assert.equal(schools.HOME_SCHOOL, HOME_SCHOOL)
   assert.equal(schools.SCHOOL_ACCOUNT_DOMAIN, SCHOOL_ACCOUNT_DOMAIN)
+  assert.deepEqual(schools.NON_STUDENT_SCHOOLS, [...NON_STUDENT_SCHOOLS])
+})
+
+test('isEduAccount matches src/data/schools.js', async () => {
+  const schools = await import(srcFile('data/schools.js'))
+  const { isEduAccount } = await import('../../lib/orderValidation.js')
+  for (const email of ['a@gl.ck.tp.edu.tw', 'A@EDU.TW', 'a@fakeedu.tw', 'a@edu.tw.evil.com', 'a@-x.edu.tw', 'a@gmail.com', '']) {
+    assert.equal(schools.isEduAccount(email), isEduAccount(email), email)
+  }
 })
 
 test('ELIGIBLE_IDENTITIES match src/data/ticketTypes.js (PARTY-27)', async () => {

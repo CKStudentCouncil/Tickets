@@ -175,6 +175,10 @@
                   本校學生（限建國中學）
                 </option>
 
+                <option value="edu_students">
+                  學生（edu.tw 學校帳號，領票驗學生證）
+                </option>
+
                 <option value="all_users">
                   所有使用者
                 </option>

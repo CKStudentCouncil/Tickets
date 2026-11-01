@@ -14,7 +14,7 @@ import {
   ticketHead,
   ticketQr
 } from './shared.js';
-import { SITE_URL } from '../lib/constants.js';
+import { ELIGIBLE_IDENTITIES, SITE_URL } from '../lib/constants.js';
 
 function formatCurrency(amount) {
   const num = Number(amount) || 0;
@@ -106,6 +106,14 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
             </tr>
           </table>`);
 
+  // 學生 tickets: the buyer shows a student ID when collecting them
+  const hasStudentTickets = items.some(
+    (item) => item?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.EDU_STUDENTS
+  );
+  const note = hasStudentTickets
+    ? '學生票領票時須出示學生證或酷課雲等學生身分證明，資格不符者不得入場。入場時須持紙本票券方可入場，敬請妥善保存'
+    : '入場時須持紙本票券方可入場，敬請妥善保存';
+
   /* ---------- page ---------- */
 
   const buttons = [
@@ -126,7 +134,7 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
       </tr>
       <tr>
         <td style="padding:32px 0 0;">
-          ${card(head + qr + buyer + tickets + cardNote('入場時須持紙本票券方可入場，敬請妥善保存') + cardFooter())}
+          ${card(head + qr + buyer + tickets + cardNote(note) + cardFooter())}
         </td>
       </tr>
       <tr>

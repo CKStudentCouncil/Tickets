@@ -16,6 +16,8 @@ import {
   checkTicketType,
   getBuyerKey,
   isSchoolAccount,
+  isEduAccount,
+  getEligibleIdentity,
   MAX_TICKETS_PER_ORDER
 } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime, getTaiwanDateKey } from '../../lib/time.js'
@@ -191,6 +193,35 @@ describe('checkTicketType', () => {
     assert.equal(isSchoolAccount('S1234@GL.CK.TP.EDU.TW'), true)
     assert.equal(isSchoolAccount('s1234@gl.ck.tp.edu.tw.evil.com'), false)
     assert.equal(isSchoolAccount('s1234@sub.gl.ck.tp.edu.tw'), false)
+  })
+
+  test('學生 tickets need an edu.tw school account and a student identity', () => {
+    const students = { ...ticketType, eligibleBuyerIdentity: 'edu_students' }
+    const student = { ...ok, school: '北一女中', email: 's1234@gs.fg.tp.edu.tw' }
+    assert.doesNotThrow(() => checkTicketType(students, 1, student))
+    for (const school of ['建國中學', '景美女中', '其他學校或社會人士']) {
+      assert.doesNotThrow(() => checkTicketType(students, 1, { ...student, school }))
+    }
+    for (const school of ['建中老師', '建中家長會']) {
+      expectHttpsError(() => checkTicketType(students, 1, { ...student, school }), 'permission-denied')
+    }
+    for (const email of ['s1234@gmail.com', 's1234@fakeedu.tw', 'x@edu.tw.evil.com', 'edu.tw@gmail.com', undefined]) {
+      expectHttpsError(() => checkTicketType(students, 1, { ...student, email }), 'permission-denied')
+    }
+  })
+
+  test('isEduAccount takes edu.tw and its subdomains only', () => {
+    for (const email of ['s1234@gl.ck.tp.edu.tw', 'S1234@APPS.NTPC.EDU.TW', ' a@st.tc.edu.tw ', 'a@edu.tw', 'a@mail-1.x.edu.tw']) {
+      assert.equal(isEduAccount(email), true, email)
+    }
+    for (const email of ['a@fakeedu.tw', 'a@x.fakeedu.tw', 'a@edu.tw.evil.com', 'a@x.edu.tw.', 'a@-x.edu.tw', 'a@x..edu.tw', 'a@gmail.com', 'edu.tw', '', null]) {
+      assert.equal(isEduAccount(email), false, String(email))
+    }
+  })
+
+  test('types without an identity are open to everyone', () => {
+    assert.equal(getEligibleIdentity({}), 'all_users')
+    assert.equal(getEligibleIdentity({ eligibleBuyerIdentity: 'edu_students' }), 'edu_students')
   })
 
   test('per-person limit counts earlier purchases; unlimited skips it', () => {

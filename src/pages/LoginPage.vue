@@ -17,6 +17,9 @@
       <p v-if="wantsSchoolAccount" class="school-hint">
         如若要購買早鳥票或一售票，請使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）登入。
       </p>
+      <p v-else-if="wantsEduAccount" class="school-hint">
+        學生票限使用學校帳號（Email 結尾為 edu.tw）登入購買。建中同學請用建中帳號，友校同學請選「使用其他 Google 帳號登入」並選擇學校帳號。
+      </p>
 
       <div class="sign-in-options">
         <button
@@ -68,6 +71,7 @@
           早鳥票、一售票限建中在學學生購買，必須以
           <span class="mono">@{{ SCHOOL_ACCOUNT_DOMAIN }}</span> 帳號登入。
         </li>
+        <li>學生票限在學學生以學校帳號（Email 結尾為 edu.tw）登入購買，領票時須出示學生證或酷課雲等學生身分證明。</li>
         <li>訂單確認信會寄到你登入的 Google 帳號信箱，之後用同一個帳號登入即可查看訂單。</li>
         <li>建班及友校幹部請使用已開通權限的 Google 帳號登入，登入後即可進入後台。</li>
       </ul>
@@ -81,7 +85,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
-import { SCHOOL_ACCOUNT_DOMAIN, isSchoolAccount } from 'src/data/schools'
+import { SCHOOL_ACCOUNT_DOMAIN, isEduAccount, isSchoolAccount } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { safeRedirect } from 'src/utils/redirect'
@@ -110,8 +114,9 @@ const toast = useToastStore()
 const agree = ref(false)
 const loadingMode = ref('')
 
-// set by the product page of a 本校學生 ticket
+// set by the product page of a 本校學生 ticket, or `edu` by a 學生 ticket
 const wantsSchoolAccount = route.query.account === 'school'
+const wantsEduAccount = route.query.account === 'edu'
 
 const userAgent = navigator.userAgent
 const inAppBrowser = IN_APP_BROWSERS.find(([, pattern]) => pattern.test(userAgent))?.[0] || ''
@@ -221,6 +226,8 @@ async function afterLogin(user, mode) {
 
   if (mode === 'school' && !isSchoolAccount(user.email)) {
     toast.show(`${user.email} 不是 @${SCHOOL_ACCOUNT_DOMAIN} 帳號，無法購買本校學生票`)
+  } else if (wantsEduAccount && !isEduAccount(user.email)) {
+    toast.show(`${user.email} 不是學校帳號（edu.tw），無法購買學生票`)
   } else {
     toast.show(isStaff ? '登入成功，歡迎回來' : '登入成功')
   }

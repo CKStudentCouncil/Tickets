@@ -45,6 +45,10 @@
           限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，入場時須出示學生證，資格不符者不得入場
         </p>
 
+        <p v-if="isEduTicket" class="ticket-limit">
+          限在學學生以學校帳號（Email 結尾為 edu.tw）登入購買，領票時須出示學生證或酷課雲等學生身分證明，資格不符者不得入場
+        </p>
+
         <div class="divider" />
 
         <aside v-if="pendingCheckout" class="checkout-recovery" role="status">
@@ -81,12 +85,16 @@
           </button>
 
           <template v-else-if="needsOtherAccount">
-            <p class="account-warning">
+            <p v-if="isEduTicket" class="account-warning">
+              此票種限使用學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
+              <span class="account-email">{{ auth.email }}</span>。
+            </p>
+            <p v-else class="account-warning">
               此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
               <span class="account-email">{{ auth.email }}</span>。
             </p>
             <button type="button" class="primary-button" @click="switchAccount">
-              改用建中帳號登入
+              {{ isEduTicket ? '改用學校帳號登入' : '改用建中帳號登入' }}
             </button>
           </template>
 
@@ -230,7 +238,7 @@ import {
   getTicketStatus,
   isTicketTypeListed
 } from 'src/services/ticketTypeService'
-import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
+import { CAMPUS_SCHOOLS, HOME_SCHOOL, NON_STUDENT_SCHOOLS, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useNow } from 'src/composables/useNow'
 import { formatCountdown, formatDateTime } from 'src/utils/datetime'
@@ -318,14 +326,29 @@ const isCampusTicket = computed(() =>
   ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
 )
 
-const needsOtherAccount = computed(() => isCampusTicket.value && !auth.isSchoolAccount)
+// 學生 tickets: any school's students signed in with an edu.tw school
+// account (checked again by createOrder; staff check a student ID at pickup)
+const isEduTicket = computed(() =>
+  ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.EDU_STUDENTS
+)
 
-const schoolOptions = computed(() => (isCampusTicket.value ? [HOME_SCHOOL] : SCHOOLS))
+const needsOtherAccount = computed(
+  () =>
+    (isCampusTicket.value && !auth.isSchoolAccount) ||
+    (isEduTicket.value && !auth.isEduAccount)
+)
+
+const schoolOptions = computed(() => {
+  if (isCampusTicket.value) return [HOME_SCHOOL]
+  if (isEduTicket.value) return SCHOOLS.filter((s) => !NON_STUDENT_SCHOOLS.includes(s))
+  return SCHOOLS
+})
 
 function goToLogin() {
+  const account = isCampusTicket.value ? 'school' : isEduTicket.value ? 'edu' : null
   router.push({
     name: 'login',
-    query: { redirect: route.fullPath, ...(isCampusTicket.value ? { account: 'school' } : {}) }
+    query: { redirect: route.fullPath, ...(account ? { account } : {}) }
   })
 }
 

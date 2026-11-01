@@ -12,6 +12,7 @@ import {
   allocateStock,
   checkSaleOpen,
   checkTicketType,
+  getEligibleIdentity,
   generateOrderId,
   getAvailable,
   getBuyerKey,
@@ -450,7 +451,10 @@ export const createOrder = functions
                 ticketTypeId: id,
                 name: String(ticketType.name || ''),
                 price: Number(ticketType.price) || 0,
-                quantity
+                quantity,
+                // who the type was sold to, so door staff know to check a
+                // student ID when the ticket is collected
+                eligibleBuyerIdentity: getEligibleIdentity(ticketType)
               }
             })
 

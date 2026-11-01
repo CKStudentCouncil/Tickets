@@ -35,3 +35,15 @@ export function isCampusSchool(school) {
 export function isSchoolAccount(email) {
   return String(email || '').trim().toLowerCase().endsWith(`@${SCHOOL_ACCOUNT_DOMAIN}`)
 }
+
+// 學生 (edu_students) tickets: any school's students, signed in with a school
+// account whose domain is edu.tw or ends in .edu.tw (anyone may register a
+// name like fakeedu.tw, so the label must be whole)
+const EDU_ACCOUNT_PATTERN = /@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*edu\.tw$/
+
+export function isEduAccount(email) {
+  return EDU_ACCOUNT_PATTERN.test(String(email || '').trim().toLowerCase())
+}
+
+// The school/identity choices that may not buy 學生 tickets
+export const NON_STUDENT_SCHOOLS = ['建中家長會', '建中老師']

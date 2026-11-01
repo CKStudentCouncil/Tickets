@@ -2,7 +2,14 @@
 import { createHash, randomInt } from 'node:crypto'
 import { https } from 'firebase-functions/v1'
 
-import { SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES } from './constants.js'
+import {
+  SCHOOL_CODES,
+  CAMPUS_SCHOOLS,
+  HOME_SCHOOL,
+  SCHOOL_ACCOUNT_DOMAIN,
+  ELIGIBLE_IDENTITIES,
+  NON_STUDENT_SCHOOLS
+} from './constants.js'
 import { parseTaipeiDateTime } from './time.js'
 
 const { HttpsError } = https
@@ -46,6 +53,20 @@ export function isCampusSchool(school) {
 
 export function isSchoolAccount(email) {
   return String(email || '').trim().toLowerCase().endsWith(`@${SCHOOL_ACCOUNT_DOMAIN}`)
+}
+
+// A Taiwanese school account: the domain is edu.tw or ends in .edu.tw.
+// Anyone may register a name like fakeedu.tw, so the label must be whole.
+const EDU_ACCOUNT_PATTERN = /@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*edu\.tw$/
+
+export function isEduAccount(email) {
+  return EDU_ACCOUNT_PATTERN.test(String(email || '').trim().toLowerCase())
+}
+
+// The identity a ticket type is sold to; types saved before the field existed
+// were open to everyone
+export function getEligibleIdentity(ticketType) {
+  return ticketType?.eligibleBuyerIdentity || ELIGIBLE_IDENTITIES.ALL_USERS
 }
 
 // Whitelists the buyer fields and ticket quantities; everything else the
@@ -242,6 +263,19 @@ export function checkSaleOpen(ticketType, { now, school, email }) {
     }
     if (school !== HOME_SCHOOL) {
       throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
+    }
+  }
+
+  // 學生 tickets: any school's students, signed in with a school account
+  if (ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.EDU_STUDENTS) {
+    if (!isEduAccount(email)) {
+      throw new HttpsError(
+        'permission-denied',
+        `${ticketType.name}僅限使用學校帳號（結尾為 edu.tw）登入購買`
+      )
+    }
+    if (NON_STUDENT_SCHOOLS.has(school)) {
+      throw new HttpsError('permission-denied', `${ticketType.name}僅限在學學生購買`)
     }
   }
 }
