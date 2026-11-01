@@ -207,6 +207,18 @@ describe('createOrder', () => {
     const adult = await callCreate(order([{ id: 'open', quantity: 1 }]), as('adult@gmail.com'))
     assert.equal((await db.doc(`orders/${adult.id}`).get()).data().buyerType, 'public')
 
+    // 學生身分切結書: other accounts may buy during 學生優先購買 and count as 學生
+    const declared = (items) => ({ orderPayload: { ...buyer(), items, studentDeclared: true } })
+    const signed = await callCreate(declared(students), as('signed@gmail.com'))
+    const signedOrder = (await db.doc(`orders/${signed.id}`).get()).data()
+    assert.equal(signedOrder.buyerType, 'student')
+    assert.equal(signedOrder.studentDeclared, true)
+    // it means nothing on other types
+    const ignored = await callCreate(declared([{ id: 'open', quantity: 1 }]), as('other@gmail.com'))
+    const ignoredOrder = (await db.doc(`orders/${ignored.id}`).get()).data()
+    assert.equal(ignoredOrder.buyerType, 'public')
+    assert.equal(ignoredOrder.studentDeclared, false)
+
     // after the priority time everyone may buy
     await db.doc('settings/ticketTypes').set({ types: TICKET_TYPES.map((t) => (t.id === 'students' ? { ...t, studentOnlyUntil: iso(-HOUR / 2) } : t)) })
     await assert.doesNotReject(callCreate(order(students), as('later@gmail.com')))

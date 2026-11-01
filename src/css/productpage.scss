@@ -420,3 +420,29 @@ h1 {
   text-underline-offset: 3px;
   white-space: nowrap;
 }
+
+/* 學生身分切結書: a small secondary way in, under 改用學校帳號登入 */
+.declaration-link {
+  display: block;
+  margin: 12px auto 0;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--lunar);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.declaration-link:hover {
+  color: var(--ember);
+}
+
+.declaration-note {
+  margin: 0 0 16px;
+  color: var(--ember);
+  font-size: 13px;
+  line-height: 1.7;
+}

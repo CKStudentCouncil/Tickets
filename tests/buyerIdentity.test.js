@@ -6,6 +6,7 @@ test('labels orders 學生 or 社會人士', () => {
   assert.equal(getBuyerTypeLabel({ buyerType: 'student' }), '學生')
   assert.equal(getBuyerTypeLabel({ buyerType: 'public' }), '社會人士')
   assert.equal(getBuyerTypeLabel({}), '')
+  assert.equal(getBuyerTypeLabel({ buyerType: 'student', studentDeclared: true }), '學生（切結）')
   assert.equal(getBuyerTypeLabel(null), '')
 })
 

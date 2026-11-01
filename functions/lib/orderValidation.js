@@ -64,8 +64,10 @@ export function isEduAccount(email) {
 }
 
 // 學生 or 社會人士, from the verified account email (staff see it on orders)
-export function getBuyerType(email) {
-  return isEduAccount(email) ? BUYER_TYPES.STUDENT : BUYER_TYPES.PUBLIC
+// 學生: a school account, or another account that signed the 學生身分切結書
+// (`studentDeclared`) to buy a type sold to students first
+export function getBuyerType(email, studentDeclared = false) {
+  return isEduAccount(email) || studentDeclared === true ? BUYER_TYPES.STUDENT : BUYER_TYPES.PUBLIC
 }
 
 // 學生優先購買至: before this time only school accounts may buy the type
@@ -91,7 +93,9 @@ export function sanitizeOrderInput(payload, accountEmail) {
     office: cleanString(payload.office, 30),
     // 「我確認我是在學學生…」, needed from school accounts buying a type sold
     // to students first
-    studentConfirmed: payload.studentConfirmed === true
+    studentConfirmed: payload.studentConfirmed === true,
+    // 學生身分切結書: lets other accounts buy such a type during 學生優先購買
+    studentDeclared: payload.studentDeclared === true
   }
 
   if (!order.customerName || !order.customerPhone) {
@@ -247,7 +251,7 @@ export function planShards({ caps, sold, quantity, random, spread = false }) {
 // Throws when this type is not on sale now or not for this buyer. `email` is
 // the verified account email. Also checked before the transaction, so a
 // buyer is told this rather than that the type is sold out.
-export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed }) {
+export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared }) {
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -273,9 +277,10 @@ export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed
     }
   }
 
-  // 學生優先購買: until studentOnlyUntil only school accounts (edu.tw)
+  // 學生優先購買: until studentOnlyUntil only school accounts (edu.tw), or
+  // others who signed the 學生身分切結書 (their student ID is checked at pickup)
   const studentOnlyUntil = getStudentOnlyUntil(ticketType)
-  if (studentOnlyUntil && now < studentOnlyUntil && !isEduAccount(email)) {
+  if (studentOnlyUntil && now < studentOnlyUntil && !isEduAccount(email) && studentDeclared !== true) {
     throw new HttpsError(
       'permission-denied',
       `${ticketType.name}目前僅開放學生以學校帳號（結尾為 edu.tw）購買`
@@ -291,8 +296,8 @@ export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed
 // Throws when this buyer may not buy `quantity` tickets of this type now.
 // `alreadyBought` comes from the counter read in the transaction. Stock is
 // checked by allocateStock.
-export function checkTicketType(ticketType, quantity, { now, school, email, studentConfirmed, alreadyBought }) {
-  checkSaleOpen(ticketType, { now, school, email, studentConfirmed })
+export function checkTicketType(ticketType, quantity, { now, school, email, studentConfirmed, studentDeclared, alreadyBought }) {
+  checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared })
 
   const limit = getPurchaseLimit(ticketType)
 

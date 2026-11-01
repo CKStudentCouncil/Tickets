@@ -119,13 +119,15 @@ describe('sanitizeOrderInput', () => {
         userId: 'someone-else',
         accessToken: 'x',
         buyerType: 'student',
-        studentConfirmed: 'yes'
+        studentConfirmed: 'yes',
+        studentDeclared: 'yes'
       })
     )
     assert.deepEqual(Object.keys(order).sort(), [
-      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school', 'studentConfirmed'
+      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school', 'studentConfirmed', 'studentDeclared'
     ])
     assert.equal(order.studentConfirmed, false)
+    assert.equal(order.studentDeclared, false)
   })
 
   test('teachers keep their office but not class / seat number', () => {
@@ -209,6 +211,9 @@ describe('checkTicketType', () => {
       expectHttpsError(() => checkTicketType(priority, 1, { ...when, email: 's1234@gs.fg.tp.edu.tw', studentConfirmed: 'yes' }), 'failed-precondition')
     }
     assert.doesNotThrow(() => checkTicketType(ticketType, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw' }))
+    // other accounts may sign the 學生身分切結書 instead
+    assert.doesNotThrow(() => checkTicketType(priority, 1, { ...before, email: 'a@gmail.com', studentDeclared: true }))
+    expectHttpsError(() => checkTicketType(priority, 1, { ...before, email: 'a@gmail.com', studentDeclared: 'yes' }), 'permission-denied')
     for (const email of ['a@gmail.com', 'a@fakeedu.tw', undefined]) {
       expectHttpsError(() => checkTicketType(priority, 1, { ...before, email }), 'permission-denied')
       assert.doesNotThrow(() => checkTicketType(priority, 1, { ...after, email }))

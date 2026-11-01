@@ -57,7 +57,7 @@
           </p>
 
           <p class="ticket-limit">
-            以學校帳號（Email 結尾為 edu.tw）購買者，須勾選確認為在學學生，領票時須出示學生證，資格不符者不得領票；以一般帳號（如 Gmail）購買者不需要
+            以學校帳號（Email 結尾為 edu.tw）購買或填寫學生切結者，須確認為在學學生，領票時須出示學生證，資格不符者不得領票；其他以一般帳號（如 Gmail）購買者不需要
           </p>
         </template>
 
@@ -110,6 +110,9 @@
             </p>
             <button type="button" class="primary-button" @click="switchAccount">
               {{ isCampusTicket ? '改用建中帳號登入' : '改用學校帳號登入' }}
+            </button>
+            <button v-if="!isCampusTicket" type="button" class="declaration-link" @click="declarationOpen = true">
+              無法使用學校帳號？填寫學生切結後購買
             </button>
           </template>
 
@@ -209,6 +212,8 @@
             <p id="student-error" v-if="validationAttempted && fieldErrors.student" class="field-error">{{ fieldErrors.student }}</p>
           </template>
 
+          <p v-if="usesDeclaration" class="declaration-note">你已切結為在學學生，領票時須出示學生證</p>
+
           <TurnstileWidget
             v-if="TURNSTILE_SITE_KEY"
             ref="turnstile"
@@ -243,6 +248,8 @@
         </form>
       </section>
     </div>
+
+    <StudentDeclarationDialog v-model="declarationOpen" @agree="agreeDeclaration" />
   </div>
 </template>
 
@@ -252,6 +259,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from 'src/stores/toast'
 import { getPendingCheckout, submitOrder } from 'src/services/orderService'
 import TurnstileWidget from 'src/components/TurnstileWidget.vue'
+import StudentDeclarationDialog from 'src/components/StudentDeclarationDialog.vue'
 import { CONTACT_EMAIL, EDU_HELP_MAILTO, TURNSTILE_SITE_KEY } from 'src/config/app'
 import {
   ELIGIBLE_IDENTITIES,
@@ -360,11 +368,28 @@ const isStudentPhase = computed(
 const needsStudentConfirm = computed(() => !!studentOnlyUntil.value && auth.isEduAccount)
 const studentConfirmed = ref(false)
 
+// 學生身分切結書: a buyer without a usable school account may sign it to buy
+// during 學生優先購買 instead (createOrder takes it as studentDeclared; the
+// student ID is checked at pickup). Not a replacement for the school account.
+const declarationOpen = ref(false)
+const studentDeclared = ref(false)
+const usesDeclaration = computed(
+  () => studentDeclared.value && isStudentPhase.value && !isCampusTicket.value && !auth.isEduAccount
+)
+watch(() => [auth.user?.uid, ticketType.value?.id], () => {
+  studentDeclared.value = false
+})
+
 const needsOtherAccount = computed(
   () =>
     (isCampusTicket.value && !auth.isSchoolAccount) ||
-    (!isCampusTicket.value && isStudentPhase.value && !auth.isEduAccount)
+    (!isCampusTicket.value && isStudentPhase.value && !auth.isEduAccount && !studentDeclared.value)
 )
+
+function agreeDeclaration() {
+  studentDeclared.value = true
+  openOrderForm()
+}
 
 const schoolOptions = computed(() => (isCampusTicket.value ? [HOME_SCHOOL] : SCHOOLS))
 
@@ -453,6 +478,7 @@ async function submitDirectOrder() {
     number: needsClass.value ? buyer.value.number.trim() : '',
     office: school === '建中老師' ? buyer.value.office.trim() : '',
     ...(needsStudentConfirm.value ? { studentConfirmed: studentConfirmed.value } : {}),
+    ...(usesDeclaration.value ? { studentDeclared: true } : {}),
     items: [{ id: ticketType.value.id, quantity: quantity.value }]
   })
 }
