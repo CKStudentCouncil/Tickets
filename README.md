@@ -7,6 +7,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 ## Highlights
 
 - Ticket types (price, sale window, eligibility, stock, per-person limit) configured in the admin UI
+- 學生優先購買 on a ticket type: until a set time only school accounts (`edu.tw`) may buy it, then everyone, from the same stock; school-account buyers tick a box confirming they are students. Orders are marked 學生 or 社會人士 from the account email for staff only, and the check-in desk asks 學生 buyers of such tickets for a student ID before they are collected
 - Server-side order validation in a Cloud Function transaction, so tickets cannot be oversold
 - Confirmation email with a QR code that door staff scan into the admin order view, with the phone's camera app or the in-page scanner on `/admin/scan`
 - A 購票教學 (buying guide) that opens on a visitor's first visit and from the ? in the header afterwards (steps in `src/data/buyGuide.js`)

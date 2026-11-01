@@ -55,6 +55,20 @@ test('confirmation email shows Taiwan time, the office, and escapes buyer input'
 })
 
 
+test('confirmation email asks school-account buyers for a student ID on types sold to students first', () => {
+  const order = (item, buyerType = 'student') => ({
+    school: '北一女中',
+    buyerType,
+    items: [{ name: '二售', price: 900, quantity: 1, ...item }],
+    finalTotal: 900
+  })
+  const checked = generateEmailHTML('TFG20261105AAAAAA', order({ checkId: true }))
+  assert.match(checked, /攜帶學生證備查/)
+  assert.doesNotMatch(checked, /社會人士票|學生票/)
+  assert.doesNotMatch(generateEmailHTML('O20261105AAAAAA', order({})), /學生證/)
+  assert.doesNotMatch(generateEmailHTML('O20261105AAAAAA', order({ checkId: true }, 'public')), /學生證/)
+})
+
 test('every inline image the emails reference is attached', () => {
   const hero = heroAttachment()
   assert.equal(hero.cid, 'hero')

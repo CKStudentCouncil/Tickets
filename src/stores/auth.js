@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
-import { isSchoolAccount as isSchoolEmail } from 'src/data/schools'
+import { isEduAccount as isEduEmail, isSchoolAccount as isSchoolEmail } from 'src/data/schools'
 import { isOnSellerList } from 'src/services/sellerService'
 import { isOnOfficerList } from 'src/services/guestService'
 
@@ -29,6 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
   // Everyone signs in with Google to buy; 本校學生 tickets need a school account
   const email = computed(() => user.value?.email || '')
   const isSchoolAccount = computed(() => isSchoolEmail(email.value))
+  // 學生 tickets need any school's account (edu.tw)
+  const isEduAccount = computed(() => isEduEmail(email.value))
 
   // Name recorded on orders / content edited by this staff member
   const displayName = computed(
@@ -116,6 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
     isOfficer,
     email,
     isSchoolAccount,
+    isEduAccount,
     displayName,
     init,
     refresh,

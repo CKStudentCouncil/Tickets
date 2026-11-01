@@ -16,6 +16,8 @@ import {
   checkTicketType,
   getBuyerKey,
   isSchoolAccount,
+  isEduAccount,
+  getBuyerType,
   MAX_TICKETS_PER_ORDER
 } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime, getTaiwanDateKey } from '../../lib/time.js'
@@ -115,12 +117,17 @@ describe('sanitizeOrderInput', () => {
         prPackageUsed: true,
         isAdminOrder: true,
         userId: 'someone-else',
-        accessToken: 'x'
+        accessToken: 'x',
+        buyerType: 'student',
+        studentConfirmed: 'yes',
+        studentDeclared: 'yes'
       })
     )
     assert.deepEqual(Object.keys(order).sort(), [
-      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school'
+      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school', 'studentConfirmed', 'studentDeclared'
     ])
+    assert.equal(order.studentConfirmed, false)
+    assert.equal(order.studentDeclared, false)
   })
 
   test('teachers keep their office but not class / seat number', () => {
@@ -191,6 +198,43 @@ describe('checkTicketType', () => {
     assert.equal(isSchoolAccount('S1234@GL.CK.TP.EDU.TW'), true)
     assert.equal(isSchoolAccount('s1234@gl.ck.tp.edu.tw.evil.com'), false)
     assert.equal(isSchoolAccount('s1234@sub.gl.ck.tp.edu.tw'), false)
+  })
+
+  test('學生優先購買: only school accounts until studentOnlyUntil, then everyone', () => {
+    const priority = { ...ticketType, studentOnlyUntil: '2026-11-06T12:00:00+08:00' }
+    const before = { ...ok, school: '其他學校或社會人士' }
+    const after = { ...before, now: new Date('2026-11-06T04:00:00Z') } // 12:00 in Taiwan
+    assert.doesNotThrow(() => checkTicketType(priority, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw', studentConfirmed: true }))
+    // school accounts must confirm they are students, before and after the priority time
+    for (const when of [before, after]) {
+      expectHttpsError(() => checkTicketType(priority, 1, { ...when, email: 's1234@gs.fg.tp.edu.tw' }), 'failed-precondition')
+      expectHttpsError(() => checkTicketType(priority, 1, { ...when, email: 's1234@gs.fg.tp.edu.tw', studentConfirmed: 'yes' }), 'failed-precondition')
+    }
+    assert.doesNotThrow(() => checkTicketType(ticketType, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw' }))
+    // other accounts may sign the 學生身分切結書 instead
+    assert.doesNotThrow(() => checkTicketType(priority, 1, { ...before, email: 'a@gmail.com', studentDeclared: true }))
+    expectHttpsError(() => checkTicketType(priority, 1, { ...before, email: 'a@gmail.com', studentDeclared: 'yes' }), 'permission-denied')
+    for (const email of ['a@gmail.com', 'a@fakeedu.tw', undefined]) {
+      expectHttpsError(() => checkTicketType(priority, 1, { ...before, email }), 'permission-denied')
+      assert.doesNotThrow(() => checkTicketType(priority, 1, { ...after, email }))
+    }
+    assert.doesNotThrow(() => checkTicketType({ ...priority, studentOnlyUntil: '' }, 1, { ...before, email: 'a@gmail.com' }))
+  })
+
+  test('isEduAccount takes edu.tw and its subdomains only', () => {
+    for (const email of ['s1234@gl.ck.tp.edu.tw', 'S1234@APPS.NTPC.EDU.TW', ' a@st.tc.edu.tw ', 'a@edu.tw', 'a@mail-1.x.edu.tw']) {
+      assert.equal(isEduAccount(email), true, email)
+    }
+    for (const email of ['a@fakeedu.tw', 'a@x.fakeedu.tw', 'a@edu.tw.evil.com', 'a@x.edu.tw.', 'a@-x.edu.tw', 'a@x..edu.tw', 'a@gmail.com', 'edu.tw', '', null]) {
+      assert.equal(isEduAccount(email), false, String(email))
+    }
+  })
+
+  test('orders from school accounts are 學生, the rest 社會人士', () => {
+    assert.equal(getBuyerType('S1@GL.CK.TP.EDU.TW'), 'student')
+    assert.equal(getBuyerType('a@apps.ntpc.edu.tw'), 'student')
+    assert.equal(getBuyerType('a@gmail.com'), 'public')
+    assert.equal(getBuyerType('a@fakeedu.tw'), 'public')
   })
 
   test('per-person limit counts earlier purchases; unlimited skips it', () => {

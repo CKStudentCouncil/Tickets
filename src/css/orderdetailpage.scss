@@ -271,6 +271,61 @@
   color: #e0a0a0;
 }
 
+/* ---------- buyer identity (學生 / 社會人士, staff only) ---------- */
+
+.identity-check {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+
+  border: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.identity-check p {
+  margin: 0;
+}
+
+.identity-check p + p {
+  margin-top: 2px;
+}
+
+.identity-check.student {
+  border-color: rgba(228, 164, 104, .55);
+  background: rgba(228, 164, 104, .12);
+  color: var(--ember);
+}
+
+.identity-check.general {
+  color: rgba(242, 240, 233, 0.62);
+}
+
+.identity-title {
+  margin-bottom: 4px !important;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.identity-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-top: 10px;
+
+  color: var(--off-white);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.identity-confirm input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ember);
+}
+
+
 /* ---------- status bars (same as admin order cards) ---------- */
 
 .status-block {

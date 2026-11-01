@@ -16,6 +16,7 @@ const TICKET_TYPES = [
   { id: 'open', name: '一階票', price: 900, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 100, purchaseLimitPerPerson: 4 },
   { id: 'small', name: '限量票', price: 500, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 5, unlimited: true, purchaseLimitPerPerson: null },
   { id: 'campus', name: '校內票', price: 700, eligibleBuyerIdentity: 'campus_students', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), unlimitedStock: true, purchaseLimitPerPerson: 2 },
+  { id: 'students', name: '二售', price: 800, eligibleBuyerIdentity: 'all_users', studentOnlyUntil: iso(HOUR / 2), salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), unlimitedStock: true, purchaseLimitPerPerson: 2 },
   { id: 'future', name: '二階票', price: 1200, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(HOUR), salesEndTime: iso(2 * HOUR), totalTicketQuantity: 0, purchaseLimitPerPerson: null }
 ]
 
@@ -185,6 +186,42 @@ describe('createOrder', () => {
       await assert.rejects(callCreate(order(campus, { school }), student), { code: 'permission-denied' })
     }
     await assert.doesNotReject(callCreate(order(campus, { school: '建國中學' }), student))
+  })
+
+  test('學生優先購買; orders say 學生 or 社會人士', async () => {
+    const students = [{ id: 'students', quantity: 1 }]
+
+    const confirmed = (items) => ({ orderPayload: { ...buyer(), items, studentConfirmed: true } })
+
+    for (const email of ['s1234@gmail.com', 's1234@fakeedu.tw']) {
+      await assert.rejects(callCreate(order(students), as(email)), { code: 'permission-denied' })
+    }
+    // school accounts confirm they are students
+    await assert.rejects(callCreate(order(students), as('s1234@gs.fg.tp.edu.tw')), { code: 'failed-precondition' })
+    const result = await callCreate(confirmed([...students, { id: 'open', quantity: 1 }]), as('s1234@gs.fg.tp.edu.tw'))
+    const saved = (await db.doc(`orders/${result.id}`).get()).data()
+    assert.equal(saved.buyerType, 'student')
+    assert.equal(saved.studentConfirmed, true)
+    assert.deepEqual(saved.items.map((item) => [item.id, item.checkId]), [['students', true], ['open', undefined]])
+
+    const adult = await callCreate(order([{ id: 'open', quantity: 1 }]), as('adult@gmail.com'))
+    assert.equal((await db.doc(`orders/${adult.id}`).get()).data().buyerType, 'public')
+
+    // 學生身分切結書: other accounts may buy during 學生優先購買 and count as 學生
+    const declared = (items) => ({ orderPayload: { ...buyer(), items, studentDeclared: true } })
+    const signed = await callCreate(declared(students), as('signed@gmail.com'))
+    const signedOrder = (await db.doc(`orders/${signed.id}`).get()).data()
+    assert.equal(signedOrder.buyerType, 'student')
+    assert.equal(signedOrder.studentDeclared, true)
+    // it means nothing on other types
+    const ignored = await callCreate(declared([{ id: 'open', quantity: 1 }]), as('other@gmail.com'))
+    const ignoredOrder = (await db.doc(`orders/${ignored.id}`).get()).data()
+    assert.equal(ignoredOrder.buyerType, 'public')
+    assert.equal(ignoredOrder.studentDeclared, false)
+
+    // after the priority time everyone may buy
+    await db.doc('settings/ticketTypes').set({ types: TICKET_TYPES.map((t) => (t.id === 'students' ? { ...t, studentOnlyUntil: iso(-HOUR / 2) } : t)) })
+    await assert.doesNotReject(callCreate(order(students), as('later@gmail.com')))
   })
 
   test('concurrent checkouts never oversell (PARTY-5)', async (t) => {

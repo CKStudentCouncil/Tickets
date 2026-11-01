@@ -43,6 +43,11 @@ export const ELIGIBLE_IDENTITIES = {
   ALL_USERS: 'all_users'
 }
 
+// orders.buyerType, set by createOrder from the account email and shown to
+// staff only: a school account (edu.tw) is 學生, anything else 社會人士.
+// Keep in sync with src/data/ticketTypes.js
+export const BUYER_TYPES = { STUDENT: 'student', PUBLIC: 'public' }
+
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 
 // 學弟登記賣票: tickets one registration may take (a seller sold 120 last

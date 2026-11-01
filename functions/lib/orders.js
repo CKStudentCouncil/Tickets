@@ -12,6 +12,9 @@ import {
   allocateStock,
   checkSaleOpen,
   checkTicketType,
+  getBuyerType,
+  isEduAccount,
+  getStudentOnlyUntil,
   generateOrderId,
   getAvailable,
   getBuyerKey,
@@ -180,7 +183,13 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
 
   ticketTypeIds.forEach((id, i) => {
     const ticketType = ticketTypeOf(ticketTypes, id)
-    checkSaleOpen(ticketType, { now, school: order.school, email: account.email })
+    checkSaleOpen(ticketType, {
+      now,
+      school: order.school,
+      email: account.email,
+      studentConfirmed: order.studentConfirmed,
+      studentDeclared: order.studentDeclared
+    })
     const stock = getStockLimit(ticketType)
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
   })
@@ -442,6 +451,8 @@ export const createOrder = functions
                 now,
                 school: order.school,
                 email: account.email,
+                studentConfirmed: order.studentConfirmed,
+                studentDeclared: order.studentDeclared,
                 alreadyBought: Number(bought[id] || 0)
               })
 
@@ -450,7 +461,10 @@ export const createOrder = functions
                 ticketTypeId: id,
                 name: String(ticketType.name || ''),
                 price: Number(ticketType.price) || 0,
-                quantity
+                quantity,
+                // door staff check the student ID of 學生 buyers when
+                // collecting types sold to students first
+                ...(getStudentOnlyUntil(ticketType) ? { checkId: true } : {})
               }
             })
 
@@ -475,9 +489,15 @@ export const createOrder = functions
             )
 
             const finalTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+            // the 切結書 counts only for a non-school account buying a type
+            // sold to students first
+            const studentDeclared =
+              order.studentDeclared === true && !isEduAccount(account.email) && items.some((item) => item.checkId)
 
             tx.create(orderRef, {
               ...order,
+              studentDeclared,
+              buyerType: getBuyerType(account.email, studentDeclared), // 學生 / 社會人士, staff only
               items,
               originalTotal: finalTotal,
               finalTotal,

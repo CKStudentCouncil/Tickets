@@ -35,3 +35,12 @@ export function isCampusSchool(school) {
 export function isSchoolAccount(email) {
   return String(email || '').trim().toLowerCase().endsWith(`@${SCHOOL_ACCOUNT_DOMAIN}`)
 }
+
+// Any school's account (學生優先購買, and orders' 學生 / 社會人士): the domain
+// is edu.tw or ends in .edu.tw (anyone may register a name like fakeedu.tw,
+// so the label must be whole). Keep in sync with functions/lib/orderValidation.js
+const EDU_ACCOUNT_PATTERN = /@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*edu\.tw$/
+
+export function isEduAccount(email) {
+  return EDU_ACCOUNT_PATTERN.test(String(email || '').trim().toLowerCase())
+}
