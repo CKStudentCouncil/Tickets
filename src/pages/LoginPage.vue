@@ -19,6 +19,8 @@
       </p>
       <p v-else-if="wantsEduAccount" class="school-hint">
         學生票限使用學校帳號（Email 結尾為 edu.tw）登入購買。建中同學請用建中帳號，友校同學請選「使用其他 Google 帳號登入」並選擇學校帳號。
+        無法使用學校帳號完成驗證的話，請寄信到
+        <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a> 告知我們。
       </p>
 
       <div class="sign-in-options">
@@ -72,6 +74,10 @@
           <span class="mono">@{{ SCHOOL_ACCOUNT_DOMAIN }}</span> 帳號登入。
         </li>
         <li>學生票限在學學生以學校帳號（Email 結尾為 edu.tw）登入購買，領票時須出示學生證或酷課雲等學生身分證明。</li>
+        <li>
+          沒有學校帳號，或學校帳號無法完成驗證（例如學校不允許用學校帳號登入外部網站）？請寄信到
+          <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>，告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理。
+        </li>
         <li>訂單確認信會寄到你登入的 Google 帳號信箱，之後用同一個帳號登入即可查看訂單。</li>
         <li>建班及友校幹部請使用已開通權限的 Google 帳號登入，登入後即可進入後台。</li>
       </ul>
@@ -85,6 +91,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
+import { CONTACT_EMAIL, EDU_HELP_MAILTO } from 'src/config/app'
 import { SCHOOL_ACCOUNT_DOMAIN, isEduAccount, isSchoolAccount } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'

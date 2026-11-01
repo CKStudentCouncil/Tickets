@@ -409,3 +409,14 @@ h1 {
     font-size: 20px;
   }
 }
+
+/* 學生票: mail us when a school account cannot be verified */
+.school-hint a,
+.login-notes a,
+.account-warning a,
+.edu-help a {
+  color: var(--ember);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}

@@ -49,6 +49,12 @@
           限在學學生以學校帳號（Email 結尾為 edu.tw）登入購買，領票時須出示學生證或酷課雲等學生身分證明，資格不符者不得入場
         </p>
 
+        <p v-if="isEduTicket" class="ticket-limit edu-help">
+          沒有學校帳號，或學校帳號無法完成驗證？請寄信到
+          <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>
+          告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理
+        </p>
+
         <div class="divider" />
 
         <aside v-if="pendingCheckout" class="checkout-recovery" role="status">
@@ -88,6 +94,8 @@
             <p v-if="isEduTicket" class="account-warning">
               此票種限使用學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
               <span class="account-email">{{ auth.email }}</span>。
+              無法使用學校帳號完成驗證的話，請寄信到
+              <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a> 告知我們。
             </p>
             <p v-else class="account-warning">
               此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
@@ -229,7 +237,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from 'src/stores/toast'
 import { getPendingCheckout, submitOrder } from 'src/services/orderService'
 import TurnstileWidget from 'src/components/TurnstileWidget.vue'
-import { TURNSTILE_SITE_KEY } from 'src/config/app'
+import { CONTACT_EMAIL, EDU_HELP_MAILTO, TURNSTILE_SITE_KEY } from 'src/config/app'
 import {
   ELIGIBLE_IDENTITIES,
   fetchSoldOut,

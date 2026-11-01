@@ -18,6 +18,11 @@ export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
 // do. Keep in sync with functions/lib/constants.js
 export const SHOP_OPEN_AT = new Date('2026-11-05T12:00:00+08:00')
 
+// 班聯會 contact address (also in the email footer, functions/templates/shared.js).
+// 學生票 buyers who cannot verify a school account write here.
+export const CONTACT_EMAIL = 'ckhssc@gl.ck.tp.edu.tw'
+export const EDU_HELP_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('學生票：無法完成學校帳號驗證')}`
+
 // Party date and venue shown on the home page and receipts.
 export const EVENT_DATE = '2026/12/13'
 export const EVENT_DATE_LONG = '2026 年 12 月 13 日'
