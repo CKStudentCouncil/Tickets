@@ -191,12 +191,17 @@ describe('createOrder', () => {
   test('學生優先購買; orders say 學生 or 社會人士', async () => {
     const students = [{ id: 'students', quantity: 1 }]
 
+    const confirmed = (items) => ({ orderPayload: { ...buyer(), items, studentConfirmed: true } })
+
     for (const email of ['s1234@gmail.com', 's1234@fakeedu.tw']) {
       await assert.rejects(callCreate(order(students), as(email)), { code: 'permission-denied' })
     }
-    const result = await callCreate(order([...students, { id: 'open', quantity: 1 }]), as('s1234@gs.fg.tp.edu.tw'))
+    // school accounts confirm they are students
+    await assert.rejects(callCreate(order(students), as('s1234@gs.fg.tp.edu.tw')), { code: 'failed-precondition' })
+    const result = await callCreate(confirmed([...students, { id: 'open', quantity: 1 }]), as('s1234@gs.fg.tp.edu.tw'))
     const saved = (await db.doc(`orders/${result.id}`).get()).data()
     assert.equal(saved.buyerType, 'student')
+    assert.equal(saved.studentConfirmed, true)
     assert.deepEqual(saved.items.map((item) => [item.id, item.checkId]), [['students', true], ['open', undefined]])
 
     const adult = await callCreate(order([{ id: 'open', quantity: 1 }]), as('adult@gmail.com'))

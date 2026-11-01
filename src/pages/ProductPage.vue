@@ -57,7 +57,7 @@
           </p>
 
           <p class="ticket-limit">
-            以學校帳號購買者，領票時須出示學生證，資格不符者不得領票
+            以學校帳號（Email 結尾為 edu.tw）購買者，須勾選確認為在學學生，領票時須出示學生證，資格不符者不得領票；以一般帳號（如 Gmail）購買者不需要
           </p>
         </template>
 
@@ -200,6 +200,14 @@
             </span>
           </label>
           <p id="terms-error" v-if="validationAttempted && fieldErrors.terms" class="field-error">{{ fieldErrors.terms }}</p>
+
+          <template v-if="needsStudentConfirm">
+            <label class="terms-consent">
+              <input v-model="studentConfirmed" type="checkbox" :aria-invalid="validationAttempted && !!fieldErrors.student" aria-describedby="student-error" required>
+              <span>我確認我是在學學生，並了解領票時須攜帶學生證，資格不符者不得領票</span>
+            </label>
+            <p id="student-error" v-if="validationAttempted && fieldErrors.student" class="field-error">{{ fieldErrors.student }}</p>
+          </template>
 
           <TurnstileWidget
             v-if="TURNSTILE_SITE_KEY"
@@ -347,6 +355,10 @@ const studentOnlyUntil = computed(() => ticketType.value?.studentOnlyUntil || ''
 const isStudentPhase = computed(
   () => !!studentOnlyUntil.value && now.value < parseDate(studentOnlyUntil.value)
 )
+// school accounts buying such a type confirm they are students (createOrder
+// checks this too); their student ID is checked at pickup
+const needsStudentConfirm = computed(() => !!studentOnlyUntil.value && auth.isEduAccount)
+const studentConfirmed = ref(false)
 
 const needsOtherAccount = computed(
   () =>
@@ -386,6 +398,7 @@ const fieldErrors = computed(() => {
   if (!buyer.value.customerName.trim()) errors.customerName = '請填寫購票人姓名'
   if (!buyer.value.customerPhone.trim()) errors.customerPhone = '請填寫聯絡電話'
   if (!acceptedTerms.value) errors.terms = '請閱讀並同意銷售與使用者條款'
+  if (needsStudentConfirm.value && !studentConfirmed.value) errors.student = '請確認你是在學學生'
   return errors
 })
 
@@ -439,6 +452,7 @@ async function submitDirectOrder() {
     class: needsClass.value ? buyer.value.class.trim() : '',
     number: needsClass.value ? buyer.value.number.trim() : '',
     office: school === '建中老師' ? buyer.value.office.trim() : '',
+    ...(needsStudentConfirm.value ? { studentConfirmed: studentConfirmed.value } : {}),
     items: [{ id: ticketType.value.id, quantity: quantity.value }]
   })
 }

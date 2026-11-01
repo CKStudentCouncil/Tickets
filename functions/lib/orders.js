@@ -182,7 +182,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
 
   ticketTypeIds.forEach((id, i) => {
     const ticketType = ticketTypeOf(ticketTypes, id)
-    checkSaleOpen(ticketType, { now, school: order.school, email: account.email })
+    checkSaleOpen(ticketType, { now, school: order.school, email: account.email, studentConfirmed: order.studentConfirmed })
     const stock = getStockLimit(ticketType)
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
   })
@@ -444,6 +444,7 @@ export const createOrder = functions
                 now,
                 school: order.school,
                 email: account.email,
+                studentConfirmed: order.studentConfirmed,
                 alreadyBought: Number(bought[id] || 0)
               })
 

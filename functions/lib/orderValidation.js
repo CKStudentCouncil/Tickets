@@ -88,7 +88,10 @@ export function sanitizeOrderInput(payload, accountEmail) {
     school: cleanString(payload.school, 30),
     class: cleanString(payload.class, 20),
     number: cleanString(payload.number, 10),
-    office: cleanString(payload.office, 30)
+    office: cleanString(payload.office, 30),
+    // 「我確認我是在學學生…」, needed from school accounts buying a type sold
+    // to students first
+    studentConfirmed: payload.studentConfirmed === true
   }
 
   if (!order.customerName || !order.customerPhone) {
@@ -244,7 +247,7 @@ export function planShards({ caps, sold, quantity, random, spread = false }) {
 // Throws when this type is not on sale now or not for this buyer. `email` is
 // the verified account email. Also checked before the transaction, so a
 // buyer is told this rather than that the type is sold out.
-export function checkSaleOpen(ticketType, { now, school, email }) {
+export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed }) {
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -278,13 +281,18 @@ export function checkSaleOpen(ticketType, { now, school, email }) {
       `${ticketType.name}目前僅開放學生以學校帳號（結尾為 edu.tw）購買`
     )
   }
+
+  // school accounts confirm they are students and will bring a student ID
+  if (studentOnlyUntil && isEduAccount(email) && studentConfirmed !== true) {
+    throw new HttpsError('failed-precondition', `購買${ticketType.name}請先勾選確認你是在學學生`)
+  }
 }
 
 // Throws when this buyer may not buy `quantity` tickets of this type now.
 // `alreadyBought` comes from the counter read in the transaction. Stock is
 // checked by allocateStock.
-export function checkTicketType(ticketType, quantity, { now, school, email, alreadyBought }) {
-  checkSaleOpen(ticketType, { now, school, email })
+export function checkTicketType(ticketType, quantity, { now, school, email, studentConfirmed, alreadyBought }) {
+  checkSaleOpen(ticketType, { now, school, email, studentConfirmed })
 
   const limit = getPurchaseLimit(ticketType)
 

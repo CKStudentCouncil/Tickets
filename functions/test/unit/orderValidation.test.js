@@ -118,12 +118,14 @@ describe('sanitizeOrderInput', () => {
         isAdminOrder: true,
         userId: 'someone-else',
         accessToken: 'x',
-        buyerType: 'student'
+        buyerType: 'student',
+        studentConfirmed: 'yes'
       })
     )
     assert.deepEqual(Object.keys(order).sort(), [
-      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school'
+      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school', 'studentConfirmed'
     ])
+    assert.equal(order.studentConfirmed, false)
   })
 
   test('teachers keep their office but not class / seat number', () => {
@@ -200,7 +202,13 @@ describe('checkTicketType', () => {
     const priority = { ...ticketType, studentOnlyUntil: '2026-11-06T12:00:00+08:00' }
     const before = { ...ok, school: '其他學校或社會人士' }
     const after = { ...before, now: new Date('2026-11-06T04:00:00Z') } // 12:00 in Taiwan
-    assert.doesNotThrow(() => checkTicketType(priority, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw' }))
+    assert.doesNotThrow(() => checkTicketType(priority, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw', studentConfirmed: true }))
+    // school accounts must confirm they are students, before and after the priority time
+    for (const when of [before, after]) {
+      expectHttpsError(() => checkTicketType(priority, 1, { ...when, email: 's1234@gs.fg.tp.edu.tw' }), 'failed-precondition')
+      expectHttpsError(() => checkTicketType(priority, 1, { ...when, email: 's1234@gs.fg.tp.edu.tw', studentConfirmed: 'yes' }), 'failed-precondition')
+    }
+    assert.doesNotThrow(() => checkTicketType(ticketType, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw' }))
     for (const email of ['a@gmail.com', 'a@fakeedu.tw', undefined]) {
       expectHttpsError(() => checkTicketType(priority, 1, { ...before, email }), 'permission-denied')
       assert.doesNotThrow(() => checkTicketType(priority, 1, { ...after, email }))
