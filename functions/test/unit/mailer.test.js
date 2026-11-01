@@ -55,14 +55,17 @@ test('confirmation email shows Taiwan time, the office, and escapes buyer input'
 })
 
 
-test('confirmation email asks 學生票 buyers to bring a student ID', () => {
-  const order = (eligibleBuyerIdentity) => ({
+test('confirmation email asks for ID on types checked at pickup, without saying 學生 or 社會人士', () => {
+  const order = (item) => ({
     school: '北一女中',
-    items: [{ name: '二售', price: 900, quantity: 1, eligibleBuyerIdentity }],
+    buyerType: 'student',
+    items: [{ name: '二售', price: 900, quantity: 1, ...item }],
     finalTotal: 900
   })
-  assert.match(generateEmailHTML('TFG20261105AAAAAA', order('edu_students')), /學生證或酷課雲/)
-  assert.doesNotMatch(generateEmailHTML('O20261105AAAAAA', order('all_users')), /學生證/)
+  const checked = generateEmailHTML('TFG20261105AAAAAA', order({ checkId: true }))
+  assert.match(checked, /學生證或身分證件/)
+  assert.doesNotMatch(checked, /社會人士票|學生票/)
+  assert.doesNotMatch(generateEmailHTML('O20261105AAAAAA', order({})), /學生證/)
 })
 
 test('every inline image the emails reference is attached', () => {

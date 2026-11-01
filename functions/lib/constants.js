@@ -38,18 +38,15 @@ export const CAMPUS_SCHOOLS = new Set([
   '師大附中'
 ])
 
-// 學生 (edu_students): any school's students, bought while signed in with a
-// school account whose domain is edu.tw or ends in .edu.tw. Teachers and
-// university students have such accounts too, so door staff check a student
-// ID when the ticket is collected (the admin order view says so).
 export const ELIGIBLE_IDENTITIES = {
   CAMPUS_STUDENTS: 'campus_students',
-  EDU_STUDENTS: 'edu_students',
   ALL_USERS: 'all_users'
 }
 
-// 學生 tickets: the school/identity choices that are not students
-export const NON_STUDENT_SCHOOLS = new Set(['建中家長會', '建中老師'])
+// orders.buyerType, set by createOrder from the account email and shown to
+// staff only: a school account (edu.tw) is 學生, anything else 社會人士.
+// Keep in sync with src/data/ticketTypes.js
+export const BUYER_TYPES = { STUDENT: 'student', PUBLIC: 'public' }
 
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
 

@@ -18,7 +18,7 @@
         如若要購買早鳥票或一售票，請使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）登入。
       </p>
       <p v-else-if="wantsEduAccount" class="school-hint">
-        學生票限使用學校帳號（Email 結尾為 edu.tw）登入購買。建中同學請用建中帳號，友校同學請選「使用其他 Google 帳號登入」並選擇學校帳號。
+        學生優先購買期間須使用學校帳號（Email 結尾為 edu.tw）登入。建中同學請用建中帳號，友校同學請選「使用其他 Google 帳號登入」並選擇學校帳號。
         無法使用學校帳號完成驗證的話，請寄信到
         <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a> 告知我們。
       </p>
@@ -73,7 +73,7 @@
           早鳥票、一售票限建中在學學生購買，必須以
           <span class="mono">@{{ SCHOOL_ACCOUNT_DOMAIN }}</span> 帳號登入。
         </li>
-        <li>學生票限在學學生以學校帳號（Email 結尾為 edu.tw）登入購買，領票時須出示學生證或酷課雲等學生身分證明。</li>
+        <li>部分票種開賣初期為學生優先購買，期間須以學校帳號（Email 結尾為 edu.tw）登入。</li>
         <li>
           沒有學校帳號，或學校帳號無法完成驗證（例如學校不允許用學校帳號登入外部網站）？請寄信到
           <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>，告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理。
@@ -234,7 +234,7 @@ async function afterLogin(user, mode) {
   if (mode === 'school' && !isSchoolAccount(user.email)) {
     toast.show(`${user.email} 不是 @${SCHOOL_ACCOUNT_DOMAIN} 帳號，無法購買本校學生票`)
   } else if (wantsEduAccount && !isEduAccount(user.email)) {
-    toast.show(`${user.email} 不是學校帳號（edu.tw），無法購買學生票`)
+    toast.show(`${user.email} 不是學校帳號（edu.tw），學生優先購買期間無法購買`)
   } else {
     toast.show(isStaff ? '登入成功，歡迎回來' : '登入成功')
   }

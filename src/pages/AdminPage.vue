@@ -417,6 +417,7 @@
             <li v-if="order.customerName">姓名：{{ order.customerName }}</li>
             <li v-if="order.customerPhone">電話：<span class="mono">{{ order.customerPhone }}</span></li>
             <li v-if="order.customerEmail">Email：<span class="mono">{{ order.customerEmail }}</span></li>
+            <li v-if="getBuyerTypeLabel(order)">購票身分：{{ getBuyerTypeLabel(order) }}</li>
             <li v-if="order.school">學校：{{ order.school }}</li>
             <li v-if="order.class">班級：{{ order.class }}</li>
             <li v-if="order.number">座號：{{ order.number }}</li>
@@ -627,6 +628,7 @@ import {
   choosesComplimentary, choosesStatus, createRecipientFilters, describeRecipients,
   recipientFilterError, recipientFilterPayload
 } from 'src/utils/notificationFilters'
+import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 
 const router = useRouter()

@@ -1,37 +1,24 @@
-// Who an order's tickets were sold to, for the check-in desk. createOrder
-// copies each type's eligibleBuyerIdentity onto its item; orders made before
-// that carry none and show nothing.
-import { ELIGIBLE_IDENTITIES } from '../data/ticketTypes.js'
+// 學生 / 社會人士 on orders, for staff only. createOrder sets order.buyerType
+// from the account email (a school account, edu.tw, is 學生) and marks items
+// whose type is sold to students first or has an age limit with checkId
+// (and maxAge). Orders made before that carry none and show nothing.
+import { BUYER_TYPES, BUYER_TYPE_LABELS } from '../data/ticketTypes.js'
 
-export const IDENTITY_LABELS = {
-  [ELIGIBLE_IDENTITIES.EDU_STUDENTS]: '學生票',
-  [ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS]: '建中學生票',
-  [ELIGIBLE_IDENTITIES.ALL_USERS]: '社會人士票'
+export function getBuyerTypeLabel(order) {
+  return BUYER_TYPE_LABELS[order?.buyerType] || ''
 }
 
-export function getItemIdentityLabel(item) {
-  return IDENTITY_LABELS[item?.eligibleBuyerIdentity] || ''
-}
+// What door staff check when the tickets are collected, or null when none of
+// the order's types asks for it. `student`: show a student ID (or 酷課雲);
+// `maxAge`: show an ID proving the buyer is younger than this.
+export function getIdCheck(order) {
+  const items = (Array.isArray(order?.items) ? order.items : []).filter((item) => item?.checkId)
+  if (!items.length) return null
 
-// { known, studentTickets, generalOnly }: `known` when any item says who it
-// was sold to; `studentTickets` counts the 學生 (edu.tw) tickets whose buyer
-// must show a student ID at pickup; `generalOnly` when every item says it
-// was sold to anyone (社會人士)
-export function getOrderIdentity(order) {
-  const items = Array.isArray(order?.items) ? order.items : []
-  let known = false
-  let studentTickets = 0
-  let generalOnly = items.length > 0
+  const ages = items.map((item) => Number(item.maxAge)).filter((age) => Number.isInteger(age) && age > 0)
 
-  for (const item of items) {
-    const identity = item?.eligibleBuyerIdentity
-    if (identity !== ELIGIBLE_IDENTITIES.ALL_USERS) generalOnly = false
-    if (!IDENTITY_LABELS[identity]) continue
-    known = true
-    if (identity === ELIGIBLE_IDENTITIES.EDU_STUDENTS) {
-      studentTickets += Math.max(0, Number(item.quantity) || 0)
-    }
+  return {
+    student: order.buyerType === BUYER_TYPES.STUDENT,
+    maxAge: ages.length ? Math.min(...ages) : null
   }
-
-  return { known, studentTickets, generalOnly }
 }

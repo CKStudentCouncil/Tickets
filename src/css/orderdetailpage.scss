@@ -271,7 +271,7 @@
   color: #e0a0a0;
 }
 
-/* ---------- buyer identity (學生票 / 社會人士票) ---------- */
+/* ---------- buyer identity (學生 / 社會人士, staff only) ---------- */
 
 .identity-check {
   margin: 12px 0 0;
@@ -284,6 +284,10 @@
 
 .identity-check p {
   margin: 0;
+}
+
+.identity-check p + p {
+  margin-top: 2px;
 }
 
 .identity-check.student {
@@ -321,17 +325,6 @@
   accent-color: var(--ember);
 }
 
-.identity-tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-
-  border: 1px solid currentColor;
-  color: var(--ember);
-  font-size: 10px;
-  letter-spacing: .04em;
-  vertical-align: middle;
-}
 
 /* ---------- status bars (same as admin order cards) ---------- */
 

@@ -1,36 +1,27 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getItemIdentityLabel, getOrderIdentity } from '../src/utils/buyerIdentity.js'
+import { getBuyerTypeLabel, getIdCheck } from '../src/utils/buyerIdentity.js'
 
-test('labels each item by who its type was sold to', () => {
-  assert.equal(getItemIdentityLabel({ eligibleBuyerIdentity: 'edu_students' }), '學生票')
-  assert.equal(getItemIdentityLabel({ eligibleBuyerIdentity: 'campus_students' }), '建中學生票')
-  assert.equal(getItemIdentityLabel({ eligibleBuyerIdentity: 'all_users' }), '社會人士票')
-  assert.equal(getItemIdentityLabel({}), '')
-  assert.equal(getItemIdentityLabel(null), '')
+test('labels orders 學生 or 社會人士', () => {
+  assert.equal(getBuyerTypeLabel({ buyerType: 'student' }), '學生')
+  assert.equal(getBuyerTypeLabel({ buyerType: 'public' }), '社會人士')
+  assert.equal(getBuyerTypeLabel({}), '')
+  assert.equal(getBuyerTypeLabel(null), '')
 })
 
-test('counts the 學生 tickets that need a student ID at pickup', () => {
-  const order = {
-    items: [
-      { eligibleBuyerIdentity: 'edu_students', quantity: 2 },
-      { eligibleBuyerIdentity: 'all_users', quantity: 1 }
-    ]
-  }
-  assert.deepEqual(getOrderIdentity(order), { known: true, studentTickets: 2, generalOnly: false })
+test('says what to check when the order has a type checked at pickup', () => {
+  const items = [{ checkId: true, maxAge: 30, quantity: 2 }, { quantity: 1 }]
+  assert.deepEqual(getIdCheck({ buyerType: 'student', items }), { student: true, maxAge: 30 })
+  assert.deepEqual(getIdCheck({ buyerType: 'public', items: [{ checkId: true }] }), { student: false, maxAge: null })
   assert.deepEqual(
-    getOrderIdentity({ items: [{ eligibleBuyerIdentity: 'all_users', quantity: 3 }] }),
-    { known: true, studentTickets: 0, generalOnly: true }
-  )
-  assert.deepEqual(
-    getOrderIdentity({ items: [{ eligibleBuyerIdentity: 'campus_students', quantity: 1 }] }),
-    { known: true, studentTickets: 0, generalOnly: false }
+    getIdCheck({ buyerType: 'public', items: [{ checkId: true, maxAge: 30 }, { checkId: true, maxAge: 25 }] }),
+    { student: false, maxAge: 25 }
   )
 })
 
-test('orders made before items carried an identity show nothing', () => {
-  const none = { known: false, studentTickets: 0, generalOnly: false }
-  assert.deepEqual(getOrderIdentity({ items: [{ name: '二售', quantity: 1 }] }), none)
-  assert.deepEqual(getOrderIdentity({}), none)
-  assert.deepEqual(getOrderIdentity(null), none)
+test('orders without such a type, or made before, need no check', () => {
+  assert.equal(getIdCheck({ buyerType: 'student', items: [{ quantity: 1 }] }), null)
+  assert.equal(getIdCheck({ items: [{ name: '二售', quantity: 1 }] }), null)
+  assert.equal(getIdCheck({}), null)
+  assert.equal(getIdCheck(null), null)
 })

@@ -12,7 +12,9 @@ import {
   allocateStock,
   checkSaleOpen,
   checkTicketType,
-  getEligibleIdentity,
+  getBuyerType,
+  getMaxAge,
+  getStudentOnlyUntil,
   generateOrderId,
   getAvailable,
   getBuyerKey,
@@ -181,7 +183,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
 
   ticketTypeIds.forEach((id, i) => {
     const ticketType = ticketTypeOf(ticketTypes, id)
-    checkSaleOpen(ticketType, { now, school: order.school, email: account.email })
+    checkSaleOpen(ticketType, { now, school: order.school, email: account.email, ageConfirmed: order.ageConfirmed })
     const stock = getStockLimit(ticketType)
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
   })
@@ -443,6 +445,7 @@ export const createOrder = functions
                 now,
                 school: order.school,
                 email: account.email,
+                ageConfirmed: order.ageConfirmed,
                 alreadyBought: Number(bought[id] || 0)
               })
 
@@ -452,9 +455,10 @@ export const createOrder = functions
                 name: String(ticketType.name || ''),
                 price: Number(ticketType.price) || 0,
                 quantity,
-                // who the type was sold to, so door staff know to check a
-                // student ID when the ticket is collected
-                eligibleBuyerIdentity: getEligibleIdentity(ticketType)
+                // door staff check ID when collecting types sold to students
+                // first or with an age limit (the admin order view says so)
+                ...(getStudentOnlyUntil(ticketType) || getMaxAge(ticketType) ? { checkId: true } : {}),
+                ...(getMaxAge(ticketType) ? { maxAge: getMaxAge(ticketType) } : {})
               }
             })
 
@@ -482,6 +486,7 @@ export const createOrder = functions
 
             tx.create(orderRef, {
               ...order,
+              buyerType: getBuyerType(account.email), // 學生 / 社會人士, staff only
               items,
               originalTotal: finalTotal,
               finalTotal,

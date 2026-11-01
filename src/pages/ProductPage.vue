@@ -45,14 +45,24 @@
           限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，入場時須出示學生證，資格不符者不得入場
         </p>
 
-        <p v-if="isEduTicket" class="ticket-limit">
-          限在學學生以學校帳號（Email 結尾為 edu.tw）登入購買，領票時須出示學生證或酷課雲等學生身分證明，資格不符者不得入場
+        <template v-if="studentOnlyUntil">
+          <p v-if="isStudentPhase" class="ticket-limit">
+            目前僅開放學生以學校帳號（Email 結尾為 edu.tw）登入購買，{{ formatDateTime(studentOnlyUntil) }} 起開放所有人
+          </p>
+
+          <p v-if="isStudentPhase" class="ticket-limit edu-help">
+            沒有學校帳號，或學校帳號無法完成驗證？請寄信到
+            <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>
+            告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理
+          </p>
+        </template>
+
+        <p v-if="maxAge" class="ticket-limit">
+          限未滿 {{ maxAge }} 歲購買
         </p>
 
-        <p v-if="isEduTicket" class="ticket-limit edu-help">
-          沒有學校帳號，或學校帳號無法完成驗證？請寄信到
-          <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>
-          告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理
+        <p v-if="checksId" class="ticket-limit">
+          領票時須出示學生證或身分證件，資格不符者不得領票
         </p>
 
         <div class="divider" />
@@ -91,9 +101,10 @@
           </button>
 
           <template v-else-if="needsOtherAccount">
-            <p v-if="isEduTicket" class="account-warning">
-              此票種限使用學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
-              <span class="account-email">{{ auth.email }}</span>。
+            <p v-if="!isCampusTicket" class="account-warning">
+              目前僅開放學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
+              <span class="account-email">{{ auth.email }}</span>，
+              {{ formatDateTime(studentOnlyUntil) }} 起開放所有人（倒數 {{ formatCountdown(studentOnlyUntil, now) }}）。
               無法使用學校帳號完成驗證的話，請寄信到
               <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a> 告知我們。
             </p>
@@ -102,7 +113,7 @@
               <span class="account-email">{{ auth.email }}</span>。
             </p>
             <button type="button" class="primary-button" @click="switchAccount">
-              {{ isEduTicket ? '改用學校帳號登入' : '改用建中帳號登入' }}
+              {{ isCampusTicket ? '改用建中帳號登入' : '改用學校帳號登入' }}
             </button>
           </template>
 
@@ -194,6 +205,14 @@
           </label>
           <p id="terms-error" v-if="validationAttempted && fieldErrors.terms" class="field-error">{{ fieldErrors.terms }}</p>
 
+          <template v-if="maxAge">
+            <label class="terms-consent">
+              <input v-model="ageConfirmed" type="checkbox" :aria-invalid="validationAttempted && !!fieldErrors.age" aria-describedby="age-error" required>
+              <span>我確認未滿 {{ maxAge }} 歲，並了解領票時須出示身分證件，資格不符者不得領票</span>
+            </label>
+            <p id="age-error" v-if="validationAttempted && fieldErrors.age" class="field-error">{{ fieldErrors.age }}</p>
+          </template>
+
           <TurnstileWidget
             v-if="TURNSTILE_SITE_KEY"
             ref="turnstile"
@@ -246,10 +265,10 @@ import {
   getTicketStatus,
   isTicketTypeListed
 } from 'src/services/ticketTypeService'
-import { CAMPUS_SCHOOLS, HOME_SCHOOL, NON_STUDENT_SCHOOLS, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
+import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useNow } from 'src/composables/useNow'
-import { formatCountdown, formatDateTime } from 'src/utils/datetime'
+import { formatCountdown, formatDateTime, parseDate } from 'src/utils/datetime'
 
 const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orderValidation.js
 
@@ -334,26 +353,34 @@ const isCampusTicket = computed(() =>
   ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
 )
 
-// 學生 tickets: any school's students signed in with an edu.tw school
-// account (checked again by createOrder; staff check a student ID at pickup)
-const isEduTicket = computed(() =>
-  ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.EDU_STUDENTS
+// 學生優先購買: until studentOnlyUntil only school accounts (edu.tw) may buy,
+// then everyone (checked again by createOrder)
+const studentOnlyUntil = computed(() => ticketType.value?.studentOnlyUntil || '')
+const isStudentPhase = computed(
+  () => !!studentOnlyUntil.value && now.value < parseDate(studentOnlyUntil.value)
 )
+
+// 年齡上限: the buyer confirms it; staff check ID at pickup
+const maxAge = computed(() => {
+  const age = Number(ticketType.value?.maxAge)
+  return Number.isInteger(age) && age > 0 ? age : null
+})
+const ageConfirmed = ref(false)
+
+// ID is checked at pickup for types sold to students first or with an age
+// limit; the buyer is not told whether they count as 學生 or 社會人士
+const checksId = computed(() => !!studentOnlyUntil.value || !!maxAge.value)
 
 const needsOtherAccount = computed(
   () =>
     (isCampusTicket.value && !auth.isSchoolAccount) ||
-    (isEduTicket.value && !auth.isEduAccount)
+    (!isCampusTicket.value && isStudentPhase.value && !auth.isEduAccount)
 )
 
-const schoolOptions = computed(() => {
-  if (isCampusTicket.value) return [HOME_SCHOOL]
-  if (isEduTicket.value) return SCHOOLS.filter((s) => !NON_STUDENT_SCHOOLS.includes(s))
-  return SCHOOLS
-})
+const schoolOptions = computed(() => (isCampusTicket.value ? [HOME_SCHOOL] : SCHOOLS))
 
 function goToLogin() {
-  const account = isCampusTicket.value ? 'school' : isEduTicket.value ? 'edu' : null
+  const account = isCampusTicket.value ? 'school' : isStudentPhase.value ? 'edu' : null
   router.push({
     name: 'login',
     query: { redirect: route.fullPath, ...(account ? { account } : {}) }
@@ -382,6 +409,7 @@ const fieldErrors = computed(() => {
   if (!buyer.value.customerName.trim()) errors.customerName = '請填寫購票人姓名'
   if (!buyer.value.customerPhone.trim()) errors.customerPhone = '請填寫聯絡電話'
   if (!acceptedTerms.value) errors.terms = '請閱讀並同意銷售與使用者條款'
+  if (maxAge.value && !ageConfirmed.value) errors.age = `請確認未滿 ${maxAge.value} 歲`
   return errors
 })
 
@@ -403,6 +431,7 @@ function openOrderForm() {
   if (pendingCheckout.value) return
 
   quantity.value = 1
+  ageConfirmed.value = false
   orderError.value = ''
   validationAttempted.value = false
   if (!schoolOptions.value.includes(buyer.value.school)) {
@@ -435,6 +464,7 @@ async function submitDirectOrder() {
     class: needsClass.value ? buyer.value.class.trim() : '',
     number: needsClass.value ? buyer.value.number.trim() : '',
     office: school === '建中老師' ? buyer.value.office.trim() : '',
+    ...(maxAge.value ? { ageConfirmed: ageConfirmed.value } : {}),
     items: [{ id: ticketType.value.id, quantity: quantity.value }]
   })
 }

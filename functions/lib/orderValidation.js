@@ -8,7 +8,7 @@ import {
   HOME_SCHOOL,
   SCHOOL_ACCOUNT_DOMAIN,
   ELIGIBLE_IDENTITIES,
-  NON_STUDENT_SCHOOLS
+  BUYER_TYPES
 } from './constants.js'
 import { parseTaipeiDateTime } from './time.js'
 
@@ -63,10 +63,20 @@ export function isEduAccount(email) {
   return EDU_ACCOUNT_PATTERN.test(String(email || '').trim().toLowerCase())
 }
 
-// The identity a ticket type is sold to; types saved before the field existed
-// were open to everyone
-export function getEligibleIdentity(ticketType) {
-  return ticketType?.eligibleBuyerIdentity || ELIGIBLE_IDENTITIES.ALL_USERS
+// 學生 or 社會人士, from the verified account email (staff see it on orders)
+export function getBuyerType(email) {
+  return isEduAccount(email) ? BUYER_TYPES.STUDENT : BUYER_TYPES.PUBLIC
+}
+
+// 學生優先購買至: before this time only school accounts may buy the type
+export function getStudentOnlyUntil(ticketType) {
+  return parseTaipeiDateTime(ticketType?.studentOnlyUntil)
+}
+
+// 年齡上限: buyers confirm they are younger than this; null when not set
+export function getMaxAge(ticketType) {
+  const age = Number(ticketType?.maxAge)
+  return Number.isInteger(age) && age > 0 ? age : null
 }
 
 // Whitelists the buyer fields and ticket quantities; everything else the
@@ -84,7 +94,9 @@ export function sanitizeOrderInput(payload, accountEmail) {
     school: cleanString(payload.school, 30),
     class: cleanString(payload.class, 20),
     number: cleanString(payload.number, 10),
-    office: cleanString(payload.office, 30)
+    office: cleanString(payload.office, 30),
+    // 「我確認未滿 N 歲」, needed by types with an age limit
+    ageConfirmed: payload.ageConfirmed === true
   }
 
   if (!order.customerName || !order.customerPhone) {
@@ -240,7 +252,7 @@ export function planShards({ caps, sold, quantity, random, spread = false }) {
 // Throws when this type is not on sale now or not for this buyer. `email` is
 // the verified account email. Also checked before the transaction, so a
 // buyer is told this rather than that the type is sold out.
-export function checkSaleOpen(ticketType, { now, school, email }) {
+export function checkSaleOpen(ticketType, { now, school, email, ageConfirmed }) {
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -266,25 +278,26 @@ export function checkSaleOpen(ticketType, { now, school, email }) {
     }
   }
 
-  // 學生 tickets: any school's students, signed in with a school account
-  if (ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.EDU_STUDENTS) {
-    if (!isEduAccount(email)) {
-      throw new HttpsError(
-        'permission-denied',
-        `${ticketType.name}僅限使用學校帳號（結尾為 edu.tw）登入購買`
-      )
-    }
-    if (NON_STUDENT_SCHOOLS.has(school)) {
-      throw new HttpsError('permission-denied', `${ticketType.name}僅限在學學生購買`)
-    }
+  // 學生優先購買: until studentOnlyUntil only school accounts (edu.tw)
+  const studentOnlyUntil = getStudentOnlyUntil(ticketType)
+  if (studentOnlyUntil && now < studentOnlyUntil && !isEduAccount(email)) {
+    throw new HttpsError(
+      'permission-denied',
+      `${ticketType.name}目前僅開放學生以學校帳號（結尾為 edu.tw）購買`
+    )
+  }
+
+  const maxAge = getMaxAge(ticketType)
+  if (maxAge && ageConfirmed !== true) {
+    throw new HttpsError('failed-precondition', `${ticketType.name}限未滿 ${maxAge} 歲購買，請先勾選確認`)
   }
 }
 
 // Throws when this buyer may not buy `quantity` tickets of this type now.
 // `alreadyBought` comes from the counter read in the transaction. Stock is
 // checked by allocateStock.
-export function checkTicketType(ticketType, quantity, { now, school, email, alreadyBought }) {
-  checkSaleOpen(ticketType, { now, school, email })
+export function checkTicketType(ticketType, quantity, { now, school, email, ageConfirmed, alreadyBought }) {
+  checkSaleOpen(ticketType, { now, school, email, ageConfirmed })
 
   const limit = getPurchaseLimit(ticketType)
 

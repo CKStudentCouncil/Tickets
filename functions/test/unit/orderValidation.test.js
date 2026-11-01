@@ -17,7 +17,8 @@ import {
   getBuyerKey,
   isSchoolAccount,
   isEduAccount,
-  getEligibleIdentity,
+  getBuyerType,
+  getMaxAge,
   MAX_TICKETS_PER_ORDER
 } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime, getTaiwanDateKey } from '../../lib/time.js'
@@ -117,12 +118,15 @@ describe('sanitizeOrderInput', () => {
         prPackageUsed: true,
         isAdminOrder: true,
         userId: 'someone-else',
-        accessToken: 'x'
+        accessToken: 'x',
+        buyerType: 'student',
+        ageConfirmed: 'yes'
       })
     )
     assert.deepEqual(Object.keys(order).sort(), [
-      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school'
+      'ageConfirmed', 'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school'
     ])
+    assert.equal(order.ageConfirmed, false)
   })
 
   test('teachers keep their office but not class / seat number', () => {
@@ -195,19 +199,26 @@ describe('checkTicketType', () => {
     assert.equal(isSchoolAccount('s1234@sub.gl.ck.tp.edu.tw'), false)
   })
 
-  test('學生 tickets need an edu.tw school account and a student identity', () => {
-    const students = { ...ticketType, eligibleBuyerIdentity: 'edu_students' }
-    const student = { ...ok, school: '北一女中', email: 's1234@gs.fg.tp.edu.tw' }
-    assert.doesNotThrow(() => checkTicketType(students, 1, student))
-    for (const school of ['建國中學', '景美女中', '其他學校或社會人士']) {
-      assert.doesNotThrow(() => checkTicketType(students, 1, { ...student, school }))
+  test('學生優先購買: only school accounts until studentOnlyUntil, then everyone', () => {
+    const priority = { ...ticketType, studentOnlyUntil: '2026-11-06T12:00:00+08:00' }
+    const before = { ...ok, school: '其他學校或社會人士' }
+    const after = { ...before, now: new Date('2026-11-06T04:00:00Z') } // 12:00 in Taiwan
+    assert.doesNotThrow(() => checkTicketType(priority, 1, { ...before, email: 's1234@gs.fg.tp.edu.tw' }))
+    for (const email of ['a@gmail.com', 'a@fakeedu.tw', undefined]) {
+      expectHttpsError(() => checkTicketType(priority, 1, { ...before, email }), 'permission-denied')
+      assert.doesNotThrow(() => checkTicketType(priority, 1, { ...after, email }))
     }
-    for (const school of ['建中老師', '建中家長會']) {
-      expectHttpsError(() => checkTicketType(students, 1, { ...student, school }), 'permission-denied')
-    }
-    for (const email of ['s1234@gmail.com', 's1234@fakeedu.tw', 'x@edu.tw.evil.com', 'edu.tw@gmail.com', undefined]) {
-      expectHttpsError(() => checkTicketType(students, 1, { ...student, email }), 'permission-denied')
-    }
+    assert.doesNotThrow(() => checkTicketType({ ...priority, studentOnlyUntil: '' }, 1, { ...before, email: 'a@gmail.com' }))
+  })
+
+  test('an age limit needs the buyer to confirm it', () => {
+    const limited = { ...ticketType, maxAge: 30 }
+    expectHttpsError(() => checkTicketType(limited, 1, ok), 'failed-precondition')
+    expectHttpsError(() => checkTicketType(limited, 1, { ...ok, ageConfirmed: 'yes' }), 'failed-precondition')
+    assert.doesNotThrow(() => checkTicketType(limited, 1, { ...ok, ageConfirmed: true }))
+    assert.doesNotThrow(() => checkTicketType({ ...ticketType, maxAge: null }, 1, ok))
+    assert.equal(getMaxAge({ maxAge: '30' }), 30)
+    for (const maxAge of [0, -1, 2.5, '', null, undefined]) assert.equal(getMaxAge({ maxAge }), null)
   })
 
   test('isEduAccount takes edu.tw and its subdomains only', () => {
@@ -219,9 +230,11 @@ describe('checkTicketType', () => {
     }
   })
 
-  test('types without an identity are open to everyone', () => {
-    assert.equal(getEligibleIdentity({}), 'all_users')
-    assert.equal(getEligibleIdentity({ eligibleBuyerIdentity: 'edu_students' }), 'edu_students')
+  test('orders from school accounts are 學生, the rest 社會人士', () => {
+    assert.equal(getBuyerType('S1@GL.CK.TP.EDU.TW'), 'student')
+    assert.equal(getBuyerType('a@apps.ntpc.edu.tw'), 'student')
+    assert.equal(getBuyerType('a@gmail.com'), 'public')
+    assert.equal(getBuyerType('a@fakeedu.tw'), 'public')
   })
 
   test('per-person limit counts earlier purchases; unlimited skips it', () => {

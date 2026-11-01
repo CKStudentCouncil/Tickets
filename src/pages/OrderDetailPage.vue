@@ -63,17 +63,17 @@
             請掃描購票人的票券 QR Code 後領票。管理員可核對身分並填寫原因後手動處理
           </p>
 
-          <template v-if="identity.known">
-            <div v-if="identity.studentTickets" class="identity-check student" role="alert">
-              <p class="identity-title">學生票 × {{ identity.studentTickets }}</p>
-              <p>以學校帳號購買的學生票，領票前請查驗學生證或酷課雲等學生身分證明，資格不符者不得領票</p>
-              <label class="identity-confirm">
-                <input v-model="studentChecked" type="checkbox">
-                <span>已查驗學生身分</span>
-              </label>
-            </div>
-            <p v-else-if="identity.generalOnly" class="identity-check general">社會人士票：不需查驗學生證</p>
-          </template>
+          <div v-if="idCheck" class="identity-check" :class="{ student: needsIdCheck }" role="alert">
+            <p class="identity-title">{{ buyerTypeLabel || '購票身分未知' }}</p>
+            <p v-if="idCheck.student">請查驗學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
+            <p v-else>社會人士：不需查驗學生證</p>
+            <p v-if="idCheck.maxAge">限未滿 {{ idCheck.maxAge }} 歲：請查驗身分證件</p>
+            <label v-if="needsIdCheck" class="identity-confirm">
+              <input v-model="identityChecked" type="checkbox">
+              <span>已查驗身分</span>
+            </label>
+          </div>
+          <p v-else-if="buyerTypeLabel" class="identity-check general">購票身分：{{ buyerTypeLabel }}</p>
 
           <label v-if="auth.isAdmin" class="manual-reason">
             手動領票或重設的原因
@@ -215,10 +215,7 @@
 
         <ul v-if="(order.items || []).length" class="product-stats">
           <li v-for="(item, index) in order.items || []" :key="item.id || index">
-            <span>
-              {{ item.name }}
-              <span v-if="getItemIdentityLabel(item)" class="identity-tag">{{ getItemIdentityLabel(item) }}</span>
-            </span>
+            <span>{{ item.name }}</span>
             <span class="item-meta">
               <span class="num">× {{ item.quantity }}</span>
               <strong class="num">
@@ -301,7 +298,7 @@ import { fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/service
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
-import { getItemIdentityLabel, getOrderIdentity } from 'src/utils/buyerIdentity'
+import { getBuyerTypeLabel, getIdCheck } from 'src/utils/buyerIdentity'
 import { escapeHtml } from 'src/utils/text'
 import { downloadElementAsPdf } from 'src/utils/pdf'
 import { renderOrderQr } from 'src/utils/qrcode'
@@ -472,14 +469,17 @@ const qrCheck = computed(() => {
   if (!scannedCode.value) return 'none'
   return scannedCode.value === order.value.ticketCode ? 'ok' : 'mismatch'
 })
-// 學生 tickets: staff tick 已查驗學生身分 before the ticket can be collected
-const identity = computed(() => getOrderIdentity(order.value))
-const studentChecked = ref(false)
+// 學生 / 社會人士 (staff only). Types sold to students first or with an age
+// limit need 已查驗身分 ticked before the tickets can be collected
+const buyerTypeLabel = computed(() => getBuyerTypeLabel(order.value))
+const idCheck = computed(() => getIdCheck(order.value))
+const needsIdCheck = computed(() => !!idCheck.value && (idCheck.value.student || !!idCheck.value.maxAge))
+const identityChecked = ref(false)
 
 const canCollect = computed(
   () =>
     (qrCheck.value === 'ok' || (auth.isAdmin && !!overrideReason.value.trim())) &&
-    (!identity.value.studentTickets || studentChecked.value)
+    (!needsIdCheck.value || identityChecked.value)
 )
 
 async function loadOrder() {
@@ -487,7 +487,7 @@ async function loadOrder() {
   const id = orderId.value
   loading.value = true
   loadError.value = false
-  if (order.value?.id !== id) studentChecked.value = false
+  if (order.value?.id !== id) identityChecked.value = false
 
   try {
     // staff can read any order, a buyer only their own (firestore.rules)

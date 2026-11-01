@@ -14,7 +14,7 @@ import {
   ticketHead,
   ticketQr
 } from './shared.js';
-import { ELIGIBLE_IDENTITIES, SITE_URL } from '../lib/constants.js';
+import { SITE_URL } from '../lib/constants.js';
 
 function formatCurrency(amount) {
   const num = Number(amount) || 0;
@@ -106,12 +106,10 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
             </tr>
           </table>`);
 
-  // 學生 tickets: the buyer shows a student ID when collecting them
-  const hasStudentTickets = items.some(
-    (item) => item?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.EDU_STUDENTS
-  );
-  const note = hasStudentTickets
-    ? '學生票領票時須出示學生證或酷課雲等學生身分證明，資格不符者不得入場。入場時須持紙本票券方可入場，敬請妥善保存'
+  // types sold to students first or with an age limit: ID is checked at
+  // pickup. The buyer is not told whether they count as 學生 or 社會人士.
+  const note = items.some((item) => item?.checkId)
+    ? '領票時請攜帶學生證或身分證件備查，資格不符者不得領票。入場時須持紙本票券方可入場，敬請妥善保存'
     : '入場時須持紙本票券方可入場，敬請妥善保存';
 
   /* ---------- page ---------- */
