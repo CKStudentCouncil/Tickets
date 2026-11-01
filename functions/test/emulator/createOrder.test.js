@@ -195,16 +195,20 @@ describe('createOrder', () => {
     for (const email of ['s1234@gmail.com', 's1234@fakeedu.tw']) {
       await assert.rejects(callCreate(confirmed(students), as(email)), { code: 'permission-denied' })
     }
-    await assert.rejects(callCreate(order(students), as('s1234@gs.fg.tp.edu.tw')), { code: 'failed-precondition' })
-
-    const result = await callCreate(confirmed([...students, { id: 'open', quantity: 1 }]), as('s1234@gs.fg.tp.edu.tw'))
+    // students skip the age limit
+    const result = await callCreate(order([...students, { id: 'open', quantity: 1 }]), as('s1234@gs.fg.tp.edu.tw'))
     const saved = (await db.doc(`orders/${result.id}`).get()).data()
     assert.equal(saved.buyerType, 'student')
-    assert.equal(saved.ageConfirmed, true)
+    assert.equal(saved.ageConfirmed, false)
     assert.deepEqual(saved.items.map((item) => [item.id, item.checkId, item.maxAge]), [['students', true, 30], ['open', undefined, undefined]])
 
     const adult = await callCreate(order([{ id: 'open', quantity: 1 }]), as('adult@gmail.com'))
     assert.equal((await db.doc(`orders/${adult.id}`).get()).data().buyerType, 'public')
+
+    // 社會人士 must confirm the age limit once the type is open to everyone
+    await db.doc('settings/ticketTypes').set({ types: TICKET_TYPES.map((t) => (t.id === 'students' ? { ...t, studentOnlyUntil: null } : t)) })
+    await assert.rejects(callCreate(order(students), as('older@gmail.com')), { code: 'failed-precondition' })
+    await assert.doesNotReject(callCreate(confirmed(students), as('younger@gmail.com')))
   })
 
   test('concurrent checkouts never oversell (PARTY-5)', async (t) => {

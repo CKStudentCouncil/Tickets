@@ -10,15 +10,14 @@ export function getBuyerTypeLabel(order) {
 
 // What door staff check when the tickets are collected, or null when none of
 // the order's types asks for it. `student`: show a student ID (or 酷課雲);
-// `maxAge`: show an ID proving the buyer is younger than this.
+// `maxAge`: show an ID proving the buyer is younger than this (社會人士
+// only; students are not age-limited).
 export function getIdCheck(order) {
   const items = (Array.isArray(order?.items) ? order.items : []).filter((item) => item?.checkId)
   if (!items.length) return null
 
   const ages = items.map((item) => Number(item.maxAge)).filter((age) => Number.isInteger(age) && age > 0)
 
-  return {
-    student: order.buyerType === BUYER_TYPES.STUDENT,
-    maxAge: ages.length ? Math.min(...ages) : null
-  }
+  const student = order.buyerType === BUYER_TYPES.STUDENT
+  return { student, maxAge: !student && ages.length ? Math.min(...ages) : null }
 }

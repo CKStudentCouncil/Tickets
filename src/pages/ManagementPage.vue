@@ -407,7 +407,7 @@
               <p class="time-summary">
                 {{
                   ticketType.maxAge
-                    ? `購買時須勾選「我確認未滿 ${ticketType.maxAge} 歲」，領票時查驗身分證件`
+                    ? `社會人士購買時須勾選「我確認未滿 ${ticketType.maxAge} 歲」，領票時查驗身分證件；學校帳號（學生）不受限`
                     : '留空：不限年齡'
                 }}
               </p>

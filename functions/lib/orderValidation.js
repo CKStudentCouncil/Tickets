@@ -287,8 +287,9 @@ export function checkSaleOpen(ticketType, { now, school, email, ageConfirmed }) 
     )
   }
 
+  // 年齡上限 applies to 社會人士 only: school accounts (students) skip it
   const maxAge = getMaxAge(ticketType)
-  if (maxAge && ageConfirmed !== true) {
+  if (maxAge && !isEduAccount(email) && ageConfirmed !== true) {
     throw new HttpsError('failed-precondition', `${ticketType.name}限未滿 ${maxAge} 歲購買，請先勾選確認`)
   }
 }

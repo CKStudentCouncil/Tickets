@@ -216,6 +216,8 @@ describe('checkTicketType', () => {
     expectHttpsError(() => checkTicketType(limited, 1, ok), 'failed-precondition')
     expectHttpsError(() => checkTicketType(limited, 1, { ...ok, ageConfirmed: 'yes' }), 'failed-precondition')
     assert.doesNotThrow(() => checkTicketType(limited, 1, { ...ok, ageConfirmed: true }))
+    // school accounts (students) are not age-limited
+    assert.doesNotThrow(() => checkTicketType(limited, 1, { ...ok, email: 's1234@gs.fg.tp.edu.tw' }))
     assert.doesNotThrow(() => checkTicketType({ ...ticketType, maxAge: null }, 1, ok))
     assert.equal(getMaxAge({ maxAge: '30' }), 30)
     for (const maxAge of [0, -1, 2.5, '', null, undefined]) assert.equal(getMaxAge({ maxAge }), null)
