@@ -55,15 +55,11 @@
             <a :href="EDU_HELP_MAILTO">{{ CONTACT_EMAIL }}</a>
             告訴我們你的姓名、學校、班級與遇到的狀況，我們會協助處理
           </p>
+
+          <p class="ticket-limit">
+            以學校帳號購買者，領票時須出示學生證，資格不符者不得領票
+          </p>
         </template>
-
-        <p v-if="maxAge" class="ticket-limit">
-          限未滿 {{ maxAge }} 歲購買（以學校帳號登入的學生不受此限）
-        </p>
-
-        <p v-if="checksId" class="ticket-limit">
-          領票時須出示學生證或身分證件，資格不符者不得領票
-        </p>
 
         <div class="divider" />
 
@@ -204,14 +200,6 @@
             </span>
           </label>
           <p id="terms-error" v-if="validationAttempted && fieldErrors.terms" class="field-error">{{ fieldErrors.terms }}</p>
-
-          <template v-if="needsAgeConfirm">
-            <label class="terms-consent">
-              <input v-model="ageConfirmed" type="checkbox" :aria-invalid="validationAttempted && !!fieldErrors.age" aria-describedby="age-error" required>
-              <span>我確認未滿 {{ maxAge }} 歲，並了解領票時須出示身分證件，資格不符者不得領票</span>
-            </label>
-            <p id="age-error" v-if="validationAttempted && fieldErrors.age" class="field-error">{{ fieldErrors.age }}</p>
-          </template>
 
           <TurnstileWidget
             v-if="TURNSTILE_SITE_KEY"
@@ -360,19 +348,6 @@ const isStudentPhase = computed(
   () => !!studentOnlyUntil.value && now.value < parseDate(studentOnlyUntil.value)
 )
 
-// 年齡上限: the buyer confirms it; staff check ID at pickup
-const maxAge = computed(() => {
-  const age = Number(ticketType.value?.maxAge)
-  return Number.isInteger(age) && age > 0 ? age : null
-})
-const ageConfirmed = ref(false)
-// students (school accounts) are not age-limited
-const needsAgeConfirm = computed(() => !!maxAge.value && !auth.isEduAccount)
-
-// ID is checked at pickup for types sold to students first or with an age
-// limit; the buyer is not told whether they count as 學生 or 社會人士
-const checksId = computed(() => !!studentOnlyUntil.value || !!maxAge.value)
-
 const needsOtherAccount = computed(
   () =>
     (isCampusTicket.value && !auth.isSchoolAccount) ||
@@ -411,7 +386,6 @@ const fieldErrors = computed(() => {
   if (!buyer.value.customerName.trim()) errors.customerName = '請填寫購票人姓名'
   if (!buyer.value.customerPhone.trim()) errors.customerPhone = '請填寫聯絡電話'
   if (!acceptedTerms.value) errors.terms = '請閱讀並同意銷售與使用者條款'
-  if (needsAgeConfirm.value && !ageConfirmed.value) errors.age = `請確認未滿 ${maxAge.value} 歲`
   return errors
 })
 
@@ -433,7 +407,6 @@ function openOrderForm() {
   if (pendingCheckout.value) return
 
   quantity.value = 1
-  ageConfirmed.value = false
   orderError.value = ''
   validationAttempted.value = false
   if (!schoolOptions.value.includes(buyer.value.school)) {
@@ -466,7 +439,6 @@ async function submitDirectOrder() {
     class: needsClass.value ? buyer.value.class.trim() : '',
     number: needsClass.value ? buyer.value.number.trim() : '',
     office: school === '建中老師' ? buyer.value.office.trim() : '',
-    ...(needsAgeConfirm.value ? { ageConfirmed: ageConfirmed.value } : {}),
     items: [{ id: ticketType.value.id, quantity: quantity.value }]
   })
 }

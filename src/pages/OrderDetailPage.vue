@@ -67,7 +67,6 @@
             <p class="identity-title">{{ buyerTypeLabel || '購票身分未知' }}</p>
             <p v-if="idCheck.student">請查驗學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
             <p v-else>社會人士：不需查驗學生證</p>
-            <p v-if="idCheck.maxAge">限未滿 {{ idCheck.maxAge }} 歲：請查驗身分證件</p>
             <label v-if="needsIdCheck" class="identity-confirm">
               <input v-model="identityChecked" type="checkbox">
               <span>已查驗身分</span>
@@ -473,7 +472,7 @@ const qrCheck = computed(() => {
 // limit need 已查驗身分 ticked before the tickets can be collected
 const buyerTypeLabel = computed(() => getBuyerTypeLabel(order.value))
 const idCheck = computed(() => getIdCheck(order.value))
-const needsIdCheck = computed(() => !!idCheck.value && (idCheck.value.student || !!idCheck.value.maxAge))
+const needsIdCheck = computed(() => !!idCheck.value?.student)
 const identityChecked = ref(false)
 
 const canCollect = computed(

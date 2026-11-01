@@ -9,15 +9,10 @@ test('labels orders 學生 or 社會人士', () => {
   assert.equal(getBuyerTypeLabel(null), '')
 })
 
-test('says what to check when the order has a type checked at pickup', () => {
-  const items = [{ checkId: true, maxAge: 30, quantity: 2 }, { quantity: 1 }]
-  assert.deepEqual(getIdCheck({ buyerType: 'student', items }), { student: true, maxAge: null }) // students are not age-limited
-  assert.deepEqual(getIdCheck({ buyerType: 'public', items }), { student: false, maxAge: 30 })
-  assert.deepEqual(getIdCheck({ buyerType: 'public', items: [{ checkId: true }] }), { student: false, maxAge: null })
-  assert.deepEqual(
-    getIdCheck({ buyerType: 'public', items: [{ checkId: true, maxAge: 30 }, { checkId: true, maxAge: 25 }] }),
-    { student: false, maxAge: 25 }
-  )
+test('says whether to check a student ID when the order has a type sold to students first', () => {
+  const items = [{ checkId: true, quantity: 2 }, { quantity: 1 }]
+  assert.deepEqual(getIdCheck({ buyerType: 'student', items }), { student: true })
+  assert.deepEqual(getIdCheck({ buyerType: 'public', items }), { student: false })
 })
 
 test('orders without such a type, or made before, need no check', () => {

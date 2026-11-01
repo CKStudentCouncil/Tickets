@@ -106,10 +106,10 @@ export function generateEmailHTML(orderId, order, orderUrl = '') {
             </tr>
           </table>`);
 
-  // types sold to students first or with an age limit: ID is checked at
-  // pickup. The buyer is not told whether they count as 學生 or 社會人士.
-  const note = items.some((item) => item?.checkId)
-    ? '領票時請攜帶學生證或身分證件備查，資格不符者不得領票。入場時須持紙本票券方可入場，敬請妥善保存'
+  // types sold to students first: a school account's student ID is checked
+  // at pickup. The buyer is not told whether they count as 學生 or 社會人士.
+  const note = order.buyerType === 'student' && items.some((item) => item?.checkId)
+    ? '領票時請攜帶學生證備查，資格不符者不得領票。入場時須持紙本票券方可入場，敬請妥善保存'
     : '入場時須持紙本票券方可入場，敬請妥善保存';
 
   /* ---------- page ---------- */

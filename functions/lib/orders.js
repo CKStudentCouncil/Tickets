@@ -13,7 +13,6 @@ import {
   checkSaleOpen,
   checkTicketType,
   getBuyerType,
-  getMaxAge,
   getStudentOnlyUntil,
   generateOrderId,
   getAvailable,
@@ -183,7 +182,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
 
   ticketTypeIds.forEach((id, i) => {
     const ticketType = ticketTypeOf(ticketTypes, id)
-    checkSaleOpen(ticketType, { now, school: order.school, email: account.email, ageConfirmed: order.ageConfirmed })
+    checkSaleOpen(ticketType, { now, school: order.school, email: account.email })
     const stock = getStockLimit(ticketType)
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
   })
@@ -445,7 +444,6 @@ export const createOrder = functions
                 now,
                 school: order.school,
                 email: account.email,
-                ageConfirmed: order.ageConfirmed,
                 alreadyBought: Number(bought[id] || 0)
               })
 
@@ -455,10 +453,9 @@ export const createOrder = functions
                 name: String(ticketType.name || ''),
                 price: Number(ticketType.price) || 0,
                 quantity,
-                // door staff check ID when collecting types sold to students
-                // first or with an age limit (the admin order view says so)
-                ...(getStudentOnlyUntil(ticketType) || getMaxAge(ticketType) ? { checkId: true } : {}),
-                ...(getMaxAge(ticketType) ? { maxAge: getMaxAge(ticketType) } : {})
+                // door staff check the student ID of 學生 buyers when
+                // collecting types sold to students first
+                ...(getStudentOnlyUntil(ticketType) ? { checkId: true } : {})
               }
             })
 

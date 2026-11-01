@@ -18,7 +18,6 @@ import {
   isSchoolAccount,
   isEduAccount,
   getBuyerType,
-  getMaxAge,
   MAX_TICKETS_PER_ORDER
 } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime, getTaiwanDateKey } from '../../lib/time.js'
@@ -119,14 +118,12 @@ describe('sanitizeOrderInput', () => {
         isAdminOrder: true,
         userId: 'someone-else',
         accessToken: 'x',
-        buyerType: 'student',
-        ageConfirmed: 'yes'
+        buyerType: 'student'
       })
     )
     assert.deepEqual(Object.keys(order).sort(), [
-      'ageConfirmed', 'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school'
+      'class', 'customerEmail', 'customerName', 'customerPhone', 'number', 'office', 'school'
     ])
-    assert.equal(order.ageConfirmed, false)
   })
 
   test('teachers keep their office but not class / seat number', () => {
@@ -209,18 +206,6 @@ describe('checkTicketType', () => {
       assert.doesNotThrow(() => checkTicketType(priority, 1, { ...after, email }))
     }
     assert.doesNotThrow(() => checkTicketType({ ...priority, studentOnlyUntil: '' }, 1, { ...before, email: 'a@gmail.com' }))
-  })
-
-  test('an age limit needs the buyer to confirm it', () => {
-    const limited = { ...ticketType, maxAge: 30 }
-    expectHttpsError(() => checkTicketType(limited, 1, ok), 'failed-precondition')
-    expectHttpsError(() => checkTicketType(limited, 1, { ...ok, ageConfirmed: 'yes' }), 'failed-precondition')
-    assert.doesNotThrow(() => checkTicketType(limited, 1, { ...ok, ageConfirmed: true }))
-    // school accounts (students) are not age-limited
-    assert.doesNotThrow(() => checkTicketType(limited, 1, { ...ok, email: 's1234@gs.fg.tp.edu.tw' }))
-    assert.doesNotThrow(() => checkTicketType({ ...ticketType, maxAge: null }, 1, ok))
-    assert.equal(getMaxAge({ maxAge: '30' }), 30)
-    for (const maxAge of [0, -1, 2.5, '', null, undefined]) assert.equal(getMaxAge({ maxAge }), null)
   })
 
   test('isEduAccount takes edu.tw and its subdomains only', () => {

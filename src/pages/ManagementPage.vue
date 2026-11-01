@@ -392,26 +392,6 @@
                 }}
               </p>
             </div>
-
-            <label class="field">
-              <span>八、年齡上限（選填）</span>
-
-              <input
-                v-model.number="ticketType.maxAge"
-                type="number"
-                min="1"
-                max="120"
-                placeholder="例如：30（留空不限）"
-              >
-
-              <p class="time-summary">
-                {{
-                  ticketType.maxAge
-                    ? `社會人士購買時須勾選「我確認未滿 ${ticketType.maxAge} 歲」，領票時查驗身分證件；學校帳號（學生）不受限`
-                    : '留空：不限年齡'
-                }}
-              </p>
-            </label>
           </div>
         </div>
 
@@ -558,9 +538,8 @@ function createEmptyTicketType() {
     unlimitedStock: false,
     unlimited: false,
     purchaseLimitPerPerson: 1,
-    // 學生優先購買至 and 年齡上限; blank = not used
-    studentOnlyUntil: '',
-    maxAge: null
+    // 學生優先購買至; blank = not used
+    studentOnlyUntil: ''
   }
 }
 
@@ -666,7 +645,6 @@ async function loadTicketTypeSettings() {
           salesStartTime: toDateTimeInput(ticketType.salesStartTime),
           salesEndTime: toDateTimeInput(ticketType.salesEndTime),
           studentOnlyUntil: ticketType.studentOnlyUntil ? toDateTimeInput(ticketType.studentOnlyUntil) : '',
-          maxAge: Number(ticketType.maxAge) > 0 ? Number(ticketType.maxAge) : null,
           // old entries saved 0 meaning "unlimited"; make the admin choose again
           totalTicketQuantity: Number(ticketType.totalTicketQuantity) > 0
             ? Number(ticketType.totalTicketQuantity)
@@ -740,15 +718,6 @@ function validateTicketTypeForm() {
         parseDate(ticketType.studentOnlyUntil) > parseDate(ticketType.salesEndTime))
     ) {
       toast.show(`「${label}」的學生優先購買時間必須在販售期間內`)
-      return false
-    }
-
-    if (
-      ticketType.maxAge !== null &&
-      ticketType.maxAge !== '' &&
-      !(Number.isInteger(Number(ticketType.maxAge)) && Number(ticketType.maxAge) >= 1 && Number(ticketType.maxAge) <= 120)
-    ) {
-      toast.show(`「${label}」的年齡上限請填 1 到 120 的整數，或留空`)
       return false
     }
 
@@ -833,8 +802,7 @@ async function saveTicketTypeSettings() {
           : Number(ticketType.purchaseLimitPerPerson) || 1,
         studentOnlyUntil: ticketType.studentOnlyUntil
           ? toStoredDateTime(ticketType.studentOnlyUntil)
-          : null,
-        maxAge: Number(ticketType.maxAge) > 0 ? Number(ticketType.maxAge) : null
+          : null
       })),
       // uid, not name/email: this document is publicly readable (PARTY-26)
       auth.user.uid
