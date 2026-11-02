@@ -27,6 +27,30 @@ export async function fetchSoldOut() {
   return snapshot.data() || {}
 }
 
+// The home page's ticket types and sold-out list. The router asks for them
+// while it waits for the sign-in state and the opening time
+// (src/router/index.js), so the page doesn't start asking only after those.
+// A prefetch is used once, and only while fresh.
+const PREFETCH_TTL_MS = 30000
+let prefetched = null
+
+const fetchStorefront = () => Promise.all([fetchTicketTypes(), fetchSoldOut()])
+
+export function prefetchStorefront() {
+  if (prefetched && Date.now() - prefetched.at <= PREFETCH_TTL_MS) return
+  const promise = fetchStorefront()
+  promise.catch(() => {}) // reported by loadStorefront, if the page asks
+  prefetched = { at: Date.now(), promise }
+}
+
+// [ticketTypes, soldOut]
+export function loadStorefront() {
+  const fresh = prefetched && Date.now() - prefetched.at <= PREFETCH_TTL_MS
+  const promise = fresh ? prefetched.promise : fetchStorefront()
+  prefetched = null
+  return promise
+}
+
 // soldOut is what fetchSoldOut returned
 export function getTicketStatus(ticketType, now = new Date(), soldOut = {}) {
   const start = parseDate(ticketType.salesStartTime)

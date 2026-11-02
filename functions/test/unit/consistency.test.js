@@ -109,3 +109,13 @@ test('notification email links to this site only', () => {
   assert.doesNotMatch(html, /souvenir\.cksc\.tw/)
   assert.match(html, new RegExp(`${SITE_URL.replace(/\./g, '\\.')}/survey`))
 })
+
+test('submitSurvey takes exactly the options and rating questions of the survey page', async () => {
+  const page = await import(srcFile('data/surveyQuestions.js'))
+  const server = await import('../../lib/survey.js')
+  for (const name of ['IDENTITY_OPTIONS', 'CHANNEL_OPTIONS', 'DEVICE_OPTIONS', 'ISSUE_COUNT_OPTIONS', 'ISSUE_TYPE_OPTIONS']) {
+    assert.deepEqual(server[name], page[name], name)
+  }
+  const pageScores = page.SCALE_SECTIONS.flatMap((section) => section.questions.map((q) => q.id))
+  assert.deepEqual([...server.SCORE_IDS].sort(), [...pageScores].sort())
+})

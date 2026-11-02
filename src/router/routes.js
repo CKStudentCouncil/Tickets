@@ -8,7 +8,8 @@ const routes = [
         path: '',
         name: 'home',
         component: () => import('pages/HomePage.vue'),
-        meta: { shop: true }
+        // shows before the sign-in state has loaded (router/index.js)
+        meta: { shop: true, authOptional: true }
       },
       {
         path: 'survey',

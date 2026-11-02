@@ -25,14 +25,8 @@ import {
   planShards,
   sanitizeOrderInput
 } from './orderValidation.js'
-import {
-  CREATE_ORDER_MIN_INSTANCES,
-  ENFORCE_APP_CHECK,
-  ENFORCE_TURNSTILE,
-  ORDER_LIMIT_PER_ACCOUNT,
-  TURNSTILE_HOSTNAMES
-} from './params.js'
-import { CHECKOUT_ACTION, TURNSTILE_SECRET, parseHostnames, verifyTurnstile } from './turnstile.js'
+import { CREATE_ORDER_MIN_INSTANCES, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
+import { CHECKOUT_ACTION, TURNSTILE_SECRET, checkTurnstile } from './turnstile.js'
 import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
 
 const ORDER_ID_ATTEMPTS = 3
@@ -260,26 +254,14 @@ export async function reserveStock(tx, items, ticketTypes, legacySnaps, chosen) 
   return Object.fromEntries(plans.map((plan) => [plan.item.id, plan.allocation]))
 }
 
-function assertAppCheck(context) {
-  if (ENFORCE_APP_CHECK.value() && !context.app) {
-    throw new HttpsError('failed-precondition', '請使用正式網站購票')
-  }
-}
-
 // Turnstile tokens are single-use, but orderService retries a checkout with
 // the same token and requestId when the server was busy or the response was
 // lost. The first pass is remembered per requestId, so such a retry gets
 // through while a token replayed on another checkout does not.
 async function assertTurnstile(data, context, account, requestId) {
-  if (!ENFORCE_TURNSTILE.value()) return
+  const passed = await checkTurnstile(data, context, CHECKOUT_ACTION)
+  if (passed === undefined) return
 
-  const passed = await verifyTurnstile({
-    token: data?.turnstileToken,
-    action: CHECKOUT_ACTION,
-    hostnames: parseHostnames(TURNSTILE_HOSTNAMES.value()),
-    secret: process.env[TURNSTILE_SECRET]?.trim(),
-    remoteip: context.rawRequest?.ip
-  })
   const passRef = requestId ? db.doc(`turnstilePasses/${requestId}`) : null
 
   if (passed) {
@@ -358,7 +340,6 @@ export const createOrder = functions
   .region(REGION)
   .runWith({ minInstances: CREATE_ORDER_MIN_INSTANCES, secrets: [TURNSTILE_SECRET] })
   .https.onCall(async (data, context) => {
-    assertAppCheck(context)
     const account = getBuyerAccount(context)
 
     const requestId = isValidRequestId(data?.requestId) ? data.requestId : null
@@ -493,10 +474,14 @@ export const createOrder = functions
             // sold to students first
             const studentDeclared =
               order.studentDeclared === true && !isEduAccount(account.email) && items.some((item) => item.checkId)
+            const { studentDeclaration: declarationDetails, ...orderFields } = order
 
             tx.create(orderRef, {
-              ...order,
+              ...orderFields,
               studentDeclared,
+              ...(studentDeclared && declarationDetails
+                ? { studentDeclaration: { ...declarationDetails, signedAt: FieldValue.serverTimestamp() } }
+                : {}),
               buyerType: getBuyerType(account.email, studentDeclared), // 學生 / 社會人士, staff only
               items,
               originalTotal: finalTotal,

@@ -1,21 +1,10 @@
 <template>
   <div class="orders-page">
-    <!-- The COSMOS lettering on every ticket is cut out of the poster, the
-         same way as on the home page; one filter serves all tickets. -->
+    <!-- The COSMOS lettering on every ticket is the poster's, cut out
+         beforehand (public/cosmos-wordmark.png) as on the home page. -->
     <svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false">
       <defs>
-        <filter id="orders-cosmos-lettering" color-interpolation-filters="sRGB">
-          <feColorMatrix type="matrix" values="
-            1 0 0 0 0
-            0 1 0 0 0
-            0 0 1 0 0
-            .2126 .7152 .0722 0 0
-          " />
-          <feComponentTransfer>
-            <feFuncA type="linear" slope="8" intercept="-5.6" />
-          </feComponentTransfer>
-        </filter>
-        <!-- just the letters: the poster's own orbit line is too faint to survive the filter -->
+        <!-- just the letters: the poster's own orbit line is too faint to survive the cut-out -->
         <clipPath id="orders-cosmos-letters">
           <rect x="124" y="1232" width="818" height="76" />
         </clipPath>
@@ -130,10 +119,11 @@
             </div>
             <svg class="ticket-wordmark" viewBox="124 1232 818 108" focusable="false">
               <image
-                href="/poster.jpg"
-                width="1076"
-                height="1522"
-                filter="url(#orders-cosmos-lettering)"
+                href="/cosmos-wordmark.png"
+                x="124"
+                y="1232"
+                width="818"
+                height="80"
                 clip-path="url(#orders-cosmos-letters)"
               />
               <path

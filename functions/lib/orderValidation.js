@@ -98,6 +98,21 @@ export function sanitizeOrderInput(payload, accountEmail) {
     studentDeclared: payload.studentDeclared === true
   }
 
+  if (order.studentDeclared && payload.studentDeclaration != null) {
+    const declaration = payload.studentDeclaration
+    const reasons = new Set(['school_no_edu', 'email_disabled', 'freshman', 'other'])
+    const details = {
+      name: cleanString(declaration?.name, 50),
+      school: cleanString(declaration?.school, 100),
+      studentId: cleanString(declaration?.studentId, 50),
+      reason: cleanString(declaration?.reason, 30)
+    }
+    if (!details.name || !details.school || !details.studentId || !reasons.has(details.reason)) {
+      throw new HttpsError('invalid-argument', '請完成學生身分切結書資料')
+    }
+    order.studentDeclaration = details
+  }
+
   if (!order.customerName || !order.customerPhone) {
     throw new HttpsError('invalid-argument', '請填寫姓名與電話')
   }

@@ -55,7 +55,7 @@
           <nav
             id="site-menu"
             class="primary-nav"
-            :class="{ open: menuOpen }"
+            :class="{ open: menuOpen, 'show-art': menuOpened }"
             aria-label="主要導覽"
           >
             <div class="nav-head">
@@ -74,17 +74,6 @@
             <!-- the poster's lettering and orbit line, as on the home page -->
             <svg class="nav-wordmark" viewBox="124 1232 818 108" aria-hidden="true" focusable="false">
               <defs>
-                <filter id="nav-cosmos-lettering" color-interpolation-filters="sRGB">
-                  <feColorMatrix type="matrix" values="
-                    1 0 0 0 0
-                    0 1 0 0 0
-                    0 0 1 0 0
-                    .2126 .7152 .0722 0 0
-                  " />
-                  <feComponentTransfer>
-                    <feFuncA type="linear" slope="8" intercept="-5.6" />
-                  </feComponentTransfer>
-                </filter>
                 <clipPath id="nav-cosmos-letters">
                   <rect x="124" y="1232" width="818" height="76" />
                 </clipPath>
@@ -95,10 +84,11 @@
                 </linearGradient>
               </defs>
               <image
-                href="/poster.jpg"
-                width="1076"
-                height="1522"
-                filter="url(#nav-cosmos-lettering)"
+                href="/cosmos-wordmark.png"
+                x="124"
+                y="1232"
+                width="818"
+                height="80"
                 clip-path="url(#nav-cosmos-letters)"
               />
               <path
@@ -157,7 +147,7 @@
     </header>
 
     <main class="page-container">
-      <router-view v-if="!auth.loading" :key="$route.fullPath" />
+      <router-view v-if="!auth.loading || route.meta.authOptional" :key="$route.fullPath" />
       <div v-else class="loading-screen" role="status">載入中…</div>
     </main>
 
@@ -247,6 +237,9 @@ watch(
 )
 
 const menuOpen = ref(false)
+// the drawer's poster art (mainlayout.scss) is loaded on first opening, not
+// with every page: the drawer is in the page, only hidden, on phones
+const menuOpened = ref(false)
 const menuToggle = ref(null)
 const menuClose = ref(null)
 
@@ -350,11 +343,14 @@ function handleKeydown(event) {
 // the page behind the phone drawer stays put (app.scss: html.menu-open)
 watch(menuOpen, (open) => {
   document.documentElement.classList.toggle('menu-open', open)
+  if (open) menuOpened.value = true
 })
 
 watch(() => route.fullPath, () => closeMenu())
 
 onMounted(() => {
+  // the first page is ready: take away the loading screen of index.html
+  document.getElementById('app-splash')?.remove()
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleKeydown)
 })
