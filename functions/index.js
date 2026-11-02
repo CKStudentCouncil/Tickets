@@ -4,6 +4,7 @@ export { uploadLineupImage, deleteLineupImage } from './lib/lineup.js'
 export { processMailQueue } from './lib/mailQueue.js'
 export { updateOrderDelivery, updateOrderPayment } from './lib/orderActions.js'
 export { registerSellerTickets, releaseSellerStock } from './lib/sellers.js'
+export { registerStreetSale } from './lib/streetSales.js'
 export { purgeOrders } from './lib/orderPurge.js'
 export { importSalesArchive } from './lib/salesArchive.js'
 export {

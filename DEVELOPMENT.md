@@ -101,6 +101,7 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 | `admin` | Manager capabilities plus list all orders, change payment status, delete orders, and resend confirmation emails |
 | `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup; read 銷售報表 (`/super_admin/analytics`), import earlier years and purge every order; keep the 公關票 officers and their quotas and send 公關票 outside any quota (`/super_admin/guests`) |
 | Seller (on `sellers/{email}`) | Not a staff role: register tickets to sell on `/sell` (學弟登記賣票). Super admins keep the list on `/admin/sellers`; admins see registrations there and record pickup and payment |
+| `admin` and above, on the street | 路宣登記 on `/admin/street`: register tickets sold for cash and handed over as paper tickets (no buyer details, no email). Super admins open it, choose its ticket type and see every sale and each admin's cash on `/super_admin/street` |
 | Officer (on `officers/{email}`) | Not a staff role: give out 公關票 on `/officer` within the quota super admins set, by name and email or as one-time invite links |
 | Guest (any signed-in account) | Not a staff role: claim a 公關票 invite link on `/invite/:id`; the ticket goes to their account email |
 
@@ -136,8 +137,9 @@ Campus-only tickets require both the school `建國中學` and an account at `@g
 | `sellers/{email}`, `sellerRegistrations/{id}`, `sellerStats/summary` | Seller list (super admins), registrations created by `registerSellerTickets` (admins flip `delivered` / `paid` or delete; deleting returns the tickets to stock), and the shared registered total |
 | `officers/{email}` | 公關票 officers: `name` and `quota` written by super admins; `used` (tickets sent plus those held by open invite links) only by the functions, and a quota cannot go below it |
 | `officerInvites/{id}` | 公關票 invite links, written only by the functions; the random id is the secret in the link. `status` `open` or `claimed` (with `orderId`, `claimedByUid`); revoking an open one deletes it and gives its tickets back. A super admin's link has `council: true`, no officer and takes no quota |
+| `settings/streetSale` | Public 路宣登記 settings: `enabled` and the ticket type sold (`ticketTypeId`); written by super admins. The sales are orders with `streetSale: true`, school `路宣` and `promoterEmail` / `promoterName`, created only by `registerStreetSale` |
 | `officerInviteNotes/{id}` | A link's optional note (what it is for), written only by `createOfficerInvite`; kept apart from the link and the order, which the guest reads, so only its officer and super admins see it |
-| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl`, `invitationRequests`, `officerReleases` | Backend-only allowance, recovery, rate-limit, stock-release, campaign, mail-worker, 公關票 retry and quota-release bookkeeping |
+| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl`, `invitationRequests`, `officerReleases`, `streetSaleRequests` | Backend-only allowance, recovery, rate-limit, stock-release, campaign, mail-worker, 公關票 retry, quota-release and 路宣 retry bookkeeping |
 | `salesArchives/{year}`, `.../rows/{n}`, `.../archivedOrders/{id}` | A past sale: summary with `openDate` / `closeDate`, sale rows without buyers' details (what the report compares), and the purged orders themselves. Written only by `purgeOrders` / `importSalesArchive`; super admins read them |
 | `orderPurges/{purgeId}`, `systemLogs/{id}` | A purge run's progress (followed live by `/admin`) and the audit log of purges and imports; function-written, super-admin readable |
 

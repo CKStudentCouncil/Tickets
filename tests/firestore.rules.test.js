@@ -854,3 +854,47 @@ describe('公關票 (officers, officerInvites)', () => {
     await assertFails(getDocs(collection(as(staff.superAdmin), 'guestRegistrations')))
   })
 })
+
+describe('路宣登記 (settings/streetSale, street sale orders)', () => {
+  const seed = (fn) => env.withSecurityRulesDisabled((context) => fn(context.firestore()))
+  // what StreetSaleAdminPage.vue saves (saveStreetProgram)
+  const program = (who, fields = {}) => ({ enabled: true, ticketTypeId: 'open', updatedAt: serverTimestamp(), updatedByUid: who.uid, ...fields })
+  const sale = { streetSale: true, school: '路宣', promoterEmail: staff.admin.email, promoterName: '林管理', customerEmail: '', userId: null, paid: true, delivered: true }
+
+  test('only super admins open it and choose the ticket type, the way the stats page does', async () => {
+    const programDoc = (who) => doc(as(who), 'settings', 'streetSale')
+    await assertSucceeds(getDoc(doc(anon(), 'settings', 'streetSale')))
+    for (const who of [buyer, staff.manager, staff.admin]) {
+      await assertFails(setDoc(programDoc(who), program(who)))
+    }
+    await assertSucceeds(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin)))
+    for (const fields of [{ enabled: 'yes' }, { ticketTypeId: 3 }, { ticketTypeId: 'x'.repeat(101) }, { updatedByUid: staff.admin.uid }, { goal: 10 }]) {
+      await assertFails(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin, fields)))
+    }
+    await assertFails(deleteDoc(programDoc(staff.admin)))
+    await assertSucceeds(deleteDoc(programDoc(staff.superAdmin)))
+  })
+
+  test('admins list the sales they registered and every sale; nobody writes one directly', async () => {
+    await seed((db) => setDoc(doc(db, 'orders', 'ST20261106K7Q2MX'), sale))
+    await assertSucceeds(getDocs(query(collection(as(staff.admin), 'orders'), where('promoterEmail', '==', staff.admin.email))))
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'orders'), where('streetSale', '==', true))))
+    // door staff open single orders only
+    await assertSucceeds(getDoc(doc(as(staff.manager), 'orders', 'ST20261106K7Q2MX')))
+    await assertFails(getDocs(query(collection(as(staff.manager), 'orders'), where('streetSale', '==', true))))
+    // no account owns a street sale
+    await assertFails(getDoc(doc(as(buyer), 'orders', 'ST20261106K7Q2MX')))
+
+    for (const who of [staff.admin, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'orders', 'ST20261106BBBBBB'), sale))
+      await assertFails(updateDoc(doc(as(who), 'orders', 'ST20261106K7Q2MX'), { customerName: '改名' }))
+    }
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'orders', 'ST20261106K7Q2MX')))
+  })
+
+  test('the request markers and the old promoter list are for nobody', async () => {
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'streetSaleRequests', 'street-request-0001')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'streetSaleRequests', 'street-request-0001'), { orderId: ORDER_ID }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'streetPromoters', 'x@example.com'), { email: 'x@example.com' }))
+  })
+})

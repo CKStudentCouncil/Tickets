@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { db, HttpsError, assertRole } from './common.js'
-import { REGION, SCHOOL_CODES } from './constants.js'
+import { REGION, SCHOOL_CODES, STREET_SCHOOL } from './constants.js'
 import { SENDER_EMAIL } from './mailer.js'
 import { enqueueNotificationBatch, MAX_BCC_PER_BATCH } from './mailQueue.js'
 import { notificationProgress } from './mailQueueCore.js'
@@ -104,7 +104,9 @@ export function readRecipientFilters(data, type) {
   const legacySchool = String(data?.school || '').trim()
   const filters = {
     schools: readList(input.schools ?? (legacySchool && legacySchool !== 'all' ? [legacySchool] : []),
-      (school) => Object.hasOwn(SCHOOL_CODES, school) || school === GUEST_SCHOOL, Object.keys(SCHOOL_CODES).length + 1, '學校'),
+      // 路宣 buyers left no email, but the order list's school can carry over
+      (school) => Object.hasOwn(SCHOOL_CODES, school) || school === GUEST_SCHOOL || school === STREET_SCHOOL,
+      Object.keys(SCHOOL_CODES).length + 2, '學校'),
     ticketTypeIds: readList(input.ticketTypeIds, (id) => TICKET_TYPE_ID_PATTERN.test(id), MAX_TICKET_TYPE_FILTERS, '票種'),
     paid: readChoice(input.paid, PAID_FILTERS),
     delivered: readChoice(input.delivered, DELIVERED_FILTERS),

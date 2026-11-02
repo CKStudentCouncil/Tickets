@@ -1,0 +1,95 @@
+/* on top of sellerpage.scss and officerpage.scss: the 路宣登記 page */
+
+.field input[type='tel'] { font-size: 16px; }
+
+.register-form h3 { margin: 10px 0 -6px; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.board-option {
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--white);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .2s ease, background-color .2s ease;
+
+  .board-quantity { font-size: 15px; font-weight: 700; }
+  .board-price { color: var(--lunar); font-size: 12px; white-space: nowrap; }
+
+  &:hover:not(:disabled) { border-color: var(--ember); }
+  &:disabled { opacity: .35; cursor: not-allowed; }
+
+  &.active {
+    border-color: var(--ember);
+    background: rgba(231, 180, 123, .12);
+
+    .board-price { color: var(--ember); }
+  }
+}
+
+.amount-due {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+
+  span { color: var(--lunar); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+  strong { color: var(--ember); font-size: clamp(26px, 4vw, 34px); font-weight: 600; letter-spacing: -.03em; }
+}
+
+.cash-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .secondary-button { flex: 1 1 72px; padding: 0 10px; }
+}
+
+.change-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  background: var(--field);
+
+  span { color: var(--lunar); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+  strong { color: var(--white); font-size: 24px; font-weight: 600; }
+
+  &.ok strong { color: var(--ember); }
+  &.short { border-color: rgba(226, 100, 90, .6); }
+  &.short strong { color: var(--danger); }
+}
+
+.sale-summary {
+  margin: 0;
+  color: var(--white);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.new-link .muted { font-size: 13px; }
+
+.guide-note { margin-top: 18px; }
+
+.history-copy a { color: var(--ember); }
+
+@media (max-width: 480px) {
+  .board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

@@ -193,6 +193,10 @@
             <dt>學校</dt>
             <dd>{{ order.school }}</dd>
           </div>
+          <div v-if="order.streetSale">
+            <dt>路宣登記人</dt>
+            <dd>{{ order.promoterName || order.promoterEmail }}</dd>
+          </div>
           <div v-if="order.class">
             <dt>班級</dt>
             <dd>{{ order.class }}</dd>

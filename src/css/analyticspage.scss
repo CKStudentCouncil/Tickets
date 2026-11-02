@@ -495,6 +495,16 @@
   margin: 0;
 }
 
+.section-heading a {
+  color: var(--accent);
+  font-size: 12.5px;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .stack {
   display: flex;
   flex-direction: column;

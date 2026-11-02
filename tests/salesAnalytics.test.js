@@ -16,6 +16,8 @@ import {
   formatPeriod,
   gradeOf,
   granularityOptions,
+  groupOf,
+  IDENTITY_GROUPS,
   inRange,
   niceTicks,
   peakDays,
@@ -170,6 +172,26 @@ test('identities merge unlisted schools into other schools', () => {
   ])
 })
 
+test('every street sale counts as 路宣, its own identity and group', () => {
+  const report = buildReport({
+    current: thisYear([
+      saleRowOf({ createdAt: ts('2026-11-05T13:00:00+08:00'), school: '路宣', streetSale: true, paid: true, customerEmail: 'a@example.com', finalTotal: 1800, items: [{ id: 'open', name: '一階票', price: 900, quantity: 2 }] }),
+      saleRowOf({ createdAt: ts('2026-11-05T14:00:00+08:00'), school: '松山高中', finalTotal: 900, items: [{ id: 'open', name: '一階票', price: 900, quantity: 1 }] })
+    ]),
+    previous: null,
+    basis: 'full',
+    now: NOW
+  })
+
+  assert.deepEqual(report.identities.map((row) => [row.label, row.current.orders]), [
+    ['其他學校或社會人士', 1], ['路宣', 1]
+  ])
+  const groups = Object.fromEntries(report.identityGroups.current.map((group) => [group.key, [group.orders, group.revenue]]))
+  assert.deepEqual(groups.street, [1, 1800])
+  assert.deepEqual(groups.other, [1, 900])
+  assert.equal(groupOf('路宣'), 'street')
+})
+
 test('identity groups, the week grid, sale stages and repeat buyers', () => {
   const rows = [
     ...current,
@@ -180,7 +202,7 @@ test('identity groups, the week grid, sale stages and repeat buyers', () => {
 
   assert.deepEqual(report.identityGroups.current.map((group) => [group.key, group.orders, group.revenue]), [
     ['home', 3, 2700], ['tfg', 2, 1800], ['zs', 0, 0], ['jm', 0, 0], ['cg', 0, 0],
-    ['hsnu', 0, 0], ['parent', 0, 0], ['teacher', 0, 0], ['other', 0, 0]
+    ['hsnu', 0, 0], ['parent', 0, 0], ['teacher', 0, 0], ['street', 0, 0], ['other', 0, 0]
   ])
   assert.equal(report.identityGroups.current[0].share, 0.6)
   // 本校 4 of 6 tickets this year; the earlier year's 本校 had 3 of 7
@@ -208,7 +230,7 @@ test('identity groups, the week grid, sale stages and repeat buyers', () => {
   assert.deepEqual(report.stageGroups.map((stage) => [stage.label, stage.tickets, stage.groups[0].count, stage.groups[1].share]), [
     ['開賣首日', 4, 3, 0.25], ['第 2–3 天', 2, 1, 0.5]
   ])
-  assert.equal(report.stageGroups[0].groups.length, 9)
+  assert.equal(report.stageGroups[0].groups.length, IDENTITY_GROUPS.length)
 
   assert.equal(report.repeat.buyers, 1)
   assert.deepEqual(report.repeat.bands.map((band) => band.count), [0, 1, 0])

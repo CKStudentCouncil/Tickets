@@ -13,6 +13,11 @@ export const SCHOOL_CODES = {
 
 export const SCHOOLS = Object.keys(SCHOOL_CODES)
 
+// 路宣登記: the school of every street sale (not chosen at checkout), its own
+// identity in the admin lists and the sales report. Keep in sync with
+// functions/lib/constants.js
+export const STREET_SCHOOL = '路宣'
+
 // 本校: tickets marked 本校學生 (campus_students) are for its students only,
 // bought while signed in with a school Google account
 export const HOME_SCHOOL = '建國中學'

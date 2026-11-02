@@ -21,6 +21,7 @@ functions/
 │   ├── mailQueueCore.js         # durable claims, rate reservation and outcomes
 │   ├── notifications.js         # prepareOrderNotification, sendOrderNotification
 │   ├── sellers.js               # registerSellerTickets, releaseSellerStock (學弟登記賣票)
+│   ├── streetSales.js           # registerStreetSale (路宣登記, paper tickets sold for cash)
 │   ├── orderPurge.js            # purgeOrders (清除所有訂單)
 │   ├── salesArchive.js          # salesArchives summaries and sale rows, importSalesArchive
 │   ├── guests.js                # 公關票: officer quotas, invite links, direct sends
@@ -52,6 +53,7 @@ functions/
 | `sendOrderNotification` | callable | manager+ | Enqueues deterministic BCC batches for a prepared job. Repeating the same job ID resumes interrupted enqueue without resetting batches |
 | `getOrderNotificationStatus` | callable | manager+ | Returns queued, accepted, failed and uncertain progress; the frontend polls this separately from enqueue |
 | `registerSellerTickets` | callable | signed-in accounts on `sellers/{email}` | 學弟登記賣票: takes 1–200 tickets of the type in `settings/sellerProgram` (while `enabled`) from its stock shards, locking every shard, and saves `sellerRegistrations/{requestId}`. Ignores the sale window and per-person limit, never the stock. A retried call with the same `requestId` returns the same registration |
+| `registerStreetSale` | callable | admin+ | 路宣登記: sells 1–20 tickets of the type in `settings/streetSale` (while `enabled`; never a 本校學生 type), handed over as paper tickets for cash. Creates a paid, collected order with `streetSale: true` (id `ST…`, school `路宣`, no buyer details, `promoterEmail` / `promoterName` of the admin) and its payment and delivery history entries, locking every stock shard. Ignores the sale window and the per-person limit, never the stock. Nothing is emailed: the mail queue skips street sales. A retried call with the same `requestId` returns the same order (`streetSaleRequests/{requestId}`) |
 | `releaseSellerStock` | `sellerRegistrations/{id}` deleted | — | Returns a deleted registration's tickets to stock and the shared total (once, via `sellerReleases/{id}`) |
 | `purgeOrders` | callable | super admin | 清除所有訂單 for exactly the order ids of the browser's Excel backup, with the typed `confirm` phrase. Archives every order to `salesArchives/{year}/archivedOrders` and writes the yearly summary and sale rows before deleting any; then deletes each order with its archived copy, its `stockReleases` marker and its stock / allowance release in one transaction (planned under 450 writes). Writes `systemLogs/purge_{purgeId}`. Progress is in `orderPurges/{purgeId}` (ids in its `orderIds` subcollection); one run at a time, held by a lease; call again with the same `purgeId` to resume |
 | `importSalesArchive` | callable | super admin | 匯入往年資料: stores an earlier year's sale rows (read in the browser from an Excel export, without names, phones, emails, classes or seats) as `salesArchives/{year}`. Replaces an earlier import, never a purged year; logs to `systemLogs` |

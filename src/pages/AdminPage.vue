@@ -162,7 +162,7 @@
           <div v-if="notifyFilters.complimentary !== 'only'" class="filter-group">
             <span class="field-label">學校（都不勾即全部學校）</span>
             <div class="check-grid">
-              <label v-for="school in schools" :key="school" class="check-option">
+              <label v-for="school in notifySchools" :key="school" class="check-option">
                 <input v-model="notifyFilters.schools" type="checkbox" :value="school">
                 <span>{{ school }}</span>
               </label>
@@ -409,7 +409,7 @@
         <p><strong>最後領票更新者：</strong>{{ order.deliveryUpdatedByName || '—' }}</p>
         <p><strong>最後領票更新時間：</strong>{{ order.deliveryUpdatedAt ? formatDate(order.deliveryUpdatedAt) : '—' }}</p>
         <div
-          v-if="order.customerName || order.customerEmail"
+          v-if="order.customerName || order.customerEmail || order.streetSale"
           class="customer-box"
         >
           <strong>客戶資料：</strong>
@@ -419,6 +419,7 @@
             <li v-if="order.customerEmail">Email：<span class="mono">{{ order.customerEmail }}</span></li>
             <li v-if="getBuyerTypeLabel(order)">購票身分：{{ getBuyerTypeLabel(order) }}</li>
             <li v-if="order.school">學校：{{ order.school }}</li>
+            <li v-if="order.streetSale">路宣登記人：{{ order.promoterName || order.promoterEmail }}</li>
             <li v-if="order.class">班級：{{ order.class }}</li>
             <li v-if="order.number">座號：{{ order.number }}</li>
             <li v-if="order.office">辦公室：{{ order.office }}</li>
@@ -630,6 +631,7 @@ import {
 } from 'src/utils/notificationFilters'
 import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
+import { STREET_SCHOOL } from 'src/data/schools'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -694,6 +696,8 @@ const {
 } = useNotificationJob()
 const resendingIds = ref(new Set())
 const notifyForm = ref(createNotifyForm())
+// 路宣 buyers got paper tickets and left no email, so no notice reaches them
+const notifySchools = computed(() => schools.filter((school) => school !== STREET_SCHOOL))
 
 const {
   schools,

@@ -3,7 +3,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, guestRelationText } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, STREET_SCHOOL, guestRelationText } from '../../lib/constants.js'
+import { MAX_TICKETS_PER_ORDER } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -75,6 +76,15 @@ test('ELIGIBLE_IDENTITIES match src/data/ticketTypes.js (PARTY-27)', async () =>
 test('the seller registration limit matches src/data/sellerGuide.js', async () => {
   const guide = await import(srcFile('data/sellerGuide.js'))
   assert.equal(guide.MAX_SELLER_TICKETS, MAX_SELLER_TICKETS)
+})
+
+test('路宣 sales use the school and per-sale cap of src/data', async () => {
+  const schools = await import(srcFile('data/schools.js'))
+  const street = await import(srcFile('data/streetSales.js'))
+  assert.equal(schools.STREET_SCHOOL, STREET_SCHOOL)
+  // not a school a checkout may choose
+  assert.ok(!Object.hasOwn(SCHOOL_CODES, STREET_SCHOOL))
+  assert.equal(street.MAX_STREET_TICKETS, MAX_TICKETS_PER_ORDER)
 })
 
 test('公關票 limits and relation text match src/data/guests.js', async () => {

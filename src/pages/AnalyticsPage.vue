@@ -148,6 +148,28 @@
         </article>
       </section>
 
+      <!-- 路宣: paper tickets sold for cash on the street, the 路宣 identity -->
+      <section v-if="streetTiles" class="analytics-section" :class="partClass(0)" aria-labelledby="street-summary-title">
+        <div class="section-heading">
+          <p id="street-summary-title" class="eyebrow">路宣紙本票</p>
+          <router-link v-if="!exporting" :to="{ name: 'super-admin-street' }">路宣管理 →</router-link>
+        </div>
+        <div class="kpi-grid period-grid">
+          <article v-for="tile in streetTiles" :key="tile.key" class="kpi">
+            <p class="kpi-label">{{ tile.label }}</p>
+            <p class="kpi-value">{{ tile.value }}</p>
+            <p v-if="tile.previous" class="kpi-compare">
+              <span v-if="tile.change" class="kpi-change" :class="tile.change.direction">
+                <span aria-hidden="true">{{ ARROWS[tile.change.direction] }}</span>
+                <span class="sr-only">{{ CHANGE_WORDS[tile.change.direction] }}</span>
+                {{ tile.change.text }}
+              </span>
+              <span>{{ compareLabel }} {{ tile.previous }}</span>
+            </p>
+          </article>
+        </div>
+      </section>
+
       <section class="analytics-section" :class="partClass(0, true)">
         <div class="section-heading">
           <p class="eyebrow">期間分析</p>
@@ -641,6 +663,7 @@ import LineChart from 'src/components/analytics/LineChart.vue'
 import ScatterChart from 'src/components/analytics/ScatterChart.vue'
 import ShareBar from 'src/components/analytics/ShareBar.vue'
 import { useSalesAnalytics } from 'src/composables/useSalesAnalytics'
+import { STREET_SCHOOL } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { downloadElementPartsAsPdf } from 'src/utils/pdf'
@@ -667,18 +690,20 @@ import {
 // white in the PDF. This year is the accent; the year it's compared with is
 // grey context (contrast checked against both backgrounds). `groups` are
 // the identity groups' categorical slots, validated as a palette against
-// each background; `groupText` is the label colour inside each.
+// each background; `groupText` is the label colour inside each. 路宣's
+// crimson (between 教師 and 其他) clears both neighbours; on screen it is
+// nearer 北一女中 and 家長, which the legend table names.
 const SCREEN_PALETTE = {
   surface: '#0a0b0d', grid: '#1b1e23', axis: '#3b4048', text: '#d9d7d0', muted: '#8d959e',
   current: '#e4a468', previous: '#7d848c',
-  groups: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#8066cc', '#14a6b8', '#a97845', '#707780'],
-  groupText: ['#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
+  groups: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#8066cc', '#14a6b8', '#a97845', '#ac2f3b', '#707780'],
+  groupText: ['#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
 }
 const PRINT_PALETTE = {
   surface: '#ffffff', grid: '#ececf0', axis: '#c7c7cc', text: '#1d1d1f', muted: '#6e6e73',
   current: '#b35f17', previous: '#8a9097',
-  groups: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#8066cc', '#14a6b8', '#a97845', '#707780'],
-  groupText: ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
+  groups: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#8066cc', '#14a6b8', '#a97845', '#ba0135', '#707780'],
+  groupText: ['#ffffff', '#ffffff', '#ffffff', '#0b0b0b', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#ffffff']
 }
 const HEAT_DAYS = ['一', '二', '三', '四', '五', '六', '日']
 const PERIOD_COMPARISONS = { today: '昨天同時段', '7d': '前 7 天', '30d': '前 30 天', month: '上月同期' }
@@ -864,6 +889,29 @@ const kpis = computed(() =>
     }
   })
 )
+
+// 路宣 sales (school STREET_SCHOOL) as the 學校／身分 rows count them, with
+// their share of this year's revenue; null when neither year has any. The
+// compared year shows only when it had street sales too.
+const streetTiles = computed(() => {
+  const row = report.value.identities.find((identity) => identity.label === STREET_SCHOOL)
+  if (!row) return null
+  const revenue = report.value.kpis.find((kpi) => kpi.key === 'revenue')?.value || 0
+  const compared = hasPrevious.value && row.previous.orders > 0
+  const tile = (key, label, format, valueOf) => ({
+    key,
+    label,
+    value: format(valueOf(row.current)),
+    previous: compared ? format(valueOf(row.previous)) : '',
+    change: compared ? change(valueOf(row.current), valueOf(row.previous)) : null
+  })
+  return [
+    tile('orders', '路宣訂單', (n) => `${formatCount(n)} 筆`, (summary) => summary.orders),
+    tile('tickets', '紙本票', formatTickets, (summary) => summary.tickets),
+    tile('revenue', '現金收款', formatCurrency, (summary) => summary.revenue),
+    { key: 'share', label: '佔營收', value: revenue ? formatPercent(row.current.revenue / revenue) : '—', previous: '', change: null }
+  ]
+})
 
 // ---- Time ----
 

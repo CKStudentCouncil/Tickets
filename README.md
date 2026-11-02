@@ -19,6 +19,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Party introduction, lineup pages and a user survey managed from the admin UI
 - 銷售報表 for super admins: live sales against an earlier year (全期 / 同期, by day of the sale), recent windows against the window before, identities, order values, ticket types and marketing charts, with PDF export and 匯入往年資料
 - 清除所有訂單 for super admins: Excel backup, then a Firestore archive (`salesArchives`), then deletion with stock release and an audit log; nothing is deleted unless the backup and archive succeed
+- 路宣登記 for admins: tickets sold for cash on the street and handed over as paper tickets at once, registered on `/admin/street` with a price board and a change calculator. Each is a paid, collected order from stock under the identity 路宣, with nothing about the buyer and no email; only super admins see the totals (`/super_admin/street`, and 路宣 in the 銷售報表)
 - 公關票 by officer quota: super admins give each officer (幹部) a quota; officers send free tickets on `/officer`, by name and email or as one-time invite links that guests claim on `/invite/:id`, and super admins may send one directly or make a link outside any quota. Links can carry a note only the officer and super admins see. Each has the same QR code and check-in as an order
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 

@@ -23,6 +23,11 @@ export const SCHOOL_CODES = {
   其他學校或社會人士: 'O'
 }
 
+// 路宣登記 (streetSales.js): the school of every street sale, so the admin
+// order list, notices and the sales report tell them apart as an identity
+// of their own. Keep in sync with src/data/schools.js
+export const STREET_SCHOOL = '路宣'
+
 // 本校: tickets marked 本校學生 (campus_students) are for its students only,
 // bought while signed in with a school Google account (verified email)
 export const HOME_SCHOOL = '建國中學'

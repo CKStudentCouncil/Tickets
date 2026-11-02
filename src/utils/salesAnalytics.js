@@ -2,7 +2,7 @@
 // against an earlier year's sale (salesArchives), day by day from each
 // sale's opening. Pure (no Firebase), so tests/salesAnalytics.test.js runs
 // it with node.
-import { HOME_SCHOOL, SCHOOLS } from '../data/schools.js'
+import { HOME_SCHOOL, SCHOOLS, STREET_SCHOOL } from '../data/schools.js'
 import { CHANNEL_OPTIONS, IDENTITY_OPTIONS } from '../data/surveyQuestions.js'
 import { parseDate } from './datetime.js'
 
@@ -38,8 +38,9 @@ const REPEAT_BANDS = ['1 筆', '2 筆', '3 筆以上']
 // Monday first, as rows of report.weekHours
 export const WEEKDAY_LABELS = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
 
-// 購買者身分: the school or identity chosen at checkout, grouped. Each group
-// keeps its colour slot (IDENTITY_GROUPS order) whatever a year sold.
+// 購買者身分: the school or identity chosen at checkout, grouped; every street
+// sale is 路宣 (STREET_SCHOOL). Each group keeps its colour slot
+// (IDENTITY_GROUPS order) whatever a year sold.
 export const IDENTITY_GROUPS = [
   { key: 'home', label: '本校學生', schools: [HOME_SCHOOL] },
   { key: 'tfg', label: '北一女中', schools: ['北一女中'] },
@@ -49,14 +50,17 @@ export const IDENTITY_GROUPS = [
   { key: 'hsnu', label: '師大附中', schools: ['師大附中'] },
   { key: 'parent', label: '家長', schools: ['建中家長會'] },
   { key: 'teacher', label: '教師', schools: ['建中老師'] },
+  { key: 'street', label: '路宣', schools: [STREET_SCHOOL] },
   { key: 'other', label: '其他', schools: [] }
 ]
 const GROUP_OF_SCHOOL = new Map(IDENTITY_GROUPS.flatMap((group) => group.schools.map((school) => [school, group.key])))
 export const groupOf = (school) => GROUP_OF_SCHOOL.get(school) || 'other'
 const groupIndexOf = (school) => IDENTITY_GROUPS.findIndex((group) => group.key === groupOf(school))
 
+// 學校／身分 rows: the checkout schools, then 路宣; anything else is 其他
+const IDENTITY_SCHOOLS = [...SCHOOLS, STREET_SCHOOL]
 const identitySchoolOf = (school) =>
-  SCHOOLS.includes(school) ? school : '其他學校或社會人士'
+  IDENTITY_SCHOOLS.includes(school) ? school : '其他學校或社會人士'
 
 /* ---------- dates ---------- */
 
@@ -95,6 +99,7 @@ export function saleRowOf(order) {
     at: parseDate(order?.createdAt)?.getTime() ?? null,
     total: Number(order?.finalTotal) || 0,
     paid: order?.paid === true,
+    streetSale: order?.streetSale === true,
     buyer: order?.userId || order?.customerEmail || null,
     school: String(order?.school || '').trim() || '未填寫',
     grade: gradeOf(order?.school, order?.class),
@@ -492,7 +497,7 @@ export function buildReport({ current, previous, basis, now }) {
       dayStart: (sale, i) => new Date(sale.start + i * DAY_MS)
     },
     hours: { current: currentHours, previous: previousHours },
-    identities: groupRows(current.rows, compared, (row) => identitySchoolOf(row.school), SCHOOLS),
+    identities: groupRows(current.rows, compared, (row) => identitySchoolOf(row.school), IDENTITY_SCHOOLS),
     grades: groupRows(current.rows, compared, (row) => (row.school === HOME_SCHOOL ? GRADE_LABELS[row.grade] : null), GRADE_ORDER),
     values: bandRows(VALUE_BANDS.map((band) => band.label),
       bandsOf(current.rows, valueBand, VALUE_BANDS.length), bandsOf(compared, valueBand, VALUE_BANDS.length)),

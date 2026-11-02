@@ -48,6 +48,10 @@ const queue = createMailQueue({ db, buildMessage,
   recipientsPerSecond: () => SES_RECIPIENTS_PER_SECOND.value() })
 
 export function enqueueOrderConfirmation(orderId, order) {
+  // 路宣 (streetSales.js): paper tickets were handed over at the sale
+  if (order.streetSale === true) {
+    return Promise.resolve({ jobId: null, status: 'skipped', emailStatus: 'skipped' })
+  }
   // Trigger retries use the same ID. Preserve legacy sent confirmations.
   if (order.emailStatus === 'sent' || order.emailStatus === 'accepted' || !order.customerEmail) {
     return Promise.resolve({ jobId: null, status: order.emailStatus || 'skipped', emailStatus: order.emailStatus || 'skipped' })
@@ -59,6 +63,9 @@ export function enqueueOrderConfirmation(orderId, order) {
 }
 
 export function enqueueManualOrderResend(orderId, order, actorUid, { requestId } = {}) {
+  if (order.streetSale === true) {
+    throw new functions.https.HttpsError('failed-precondition', '路宣紙本票不寄送 Email')
+  }
   if (requestId != null && !/^[A-Za-z0-9_-]{8,80}$/.test(String(requestId))) {
     throw new functions.https.HttpsError('invalid-argument', '重寄請求編號無效')
   }
