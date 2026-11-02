@@ -2,11 +2,6 @@
 // edit needed). See functions/README.md.
 import { defineBoolean, defineInt, defineString } from 'firebase-functions/params'
 
-// Reject callable requests without a valid App Check token. Turn on only after
-// App Check (reCAPTCHA Enterprise) is set up and APP_CHECK_SITE_KEY is filled
-// in src/config/app.js, otherwise every order is rejected.
-export const ENFORCE_APP_CHECK = defineBoolean('ENFORCE_APP_CHECK', { default: false })
-
 // Warm createOrder instances kept running; raise to 2-3 around the sale
 // opening to avoid cold starts, set back to 0 afterwards (it costs money).
 export const CREATE_ORDER_MIN_INSTANCES = defineInt('CREATE_ORDER_MIN_INSTANCES', { default: 0 })

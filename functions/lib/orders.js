@@ -27,7 +27,6 @@ import {
 } from './orderValidation.js'
 import {
   CREATE_ORDER_MIN_INSTANCES,
-  ENFORCE_APP_CHECK,
   ENFORCE_TURNSTILE,
   ORDER_LIMIT_PER_ACCOUNT,
   TURNSTILE_HOSTNAMES
@@ -260,12 +259,6 @@ export async function reserveStock(tx, items, ticketTypes, legacySnaps, chosen) 
   return Object.fromEntries(plans.map((plan) => [plan.item.id, plan.allocation]))
 }
 
-function assertAppCheck(context) {
-  if (ENFORCE_APP_CHECK.value() && !context.app) {
-    throw new HttpsError('failed-precondition', '請使用正式網站購票')
-  }
-}
-
 // Turnstile tokens are single-use, but orderService retries a checkout with
 // the same token and requestId when the server was busy or the response was
 // lost. The first pass is remembered per requestId, so such a retry gets
@@ -358,7 +351,6 @@ export const createOrder = functions
   .region(REGION)
   .runWith({ minInstances: CREATE_ORDER_MIN_INSTANCES, secrets: [TURNSTILE_SECRET] })
   .https.onCall(async (data, context) => {
-    assertAppCheck(context)
     const account = getBuyerAccount(context)
 
     const requestId = isValidRequestId(data?.requestId) ? data.requestId : null

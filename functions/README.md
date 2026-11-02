@@ -74,7 +74,6 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 
 | Name | Default | Meaning |
 |---|---|---|
-| `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances; set 2-3 around the sale opening, back to 0 afterwards |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Max orders per signed-in account per 10 minutes (0 = off). Per account because the client IP header can be forged by the caller |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, shared across every email source; BCC batches count the council To recipient too |

@@ -1,11 +1,6 @@
 // Production site; QR codes point here (keep in sync with functions/lib/constants.js)
 export const SITE_URL = 'https://tickets.cksc.tw'
 
-// reCAPTCHA Enterprise site key for Firebase App Check (PARTY-15). Empty =
-// App Check off. After filling it in and deploying the site, set
-// ENFORCE_APP_CHECK=true in functions/.env and redeploy the functions.
-export const APP_CHECK_SITE_KEY = '6LcPrdEtAAAAALTnztzn22Xswpru02nuB9HoySEl'
-
 // Cloudflare Turnstile sitekey for the checkout check on the product page.
 // Empty = no widget. After filling it in and deploying the site, set the
 // TURNSTILE_SECRET secret and ENFORCE_TURNSTILE=true in functions/.env and
