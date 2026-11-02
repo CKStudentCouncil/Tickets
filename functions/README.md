@@ -24,6 +24,8 @@ functions/
 │   ├── orderPurge.js            # purgeOrders (清除所有訂單)
 │   ├── salesArchive.js          # salesArchives summaries and sale rows, importSalesArchive
 │   ├── guests.js                # 公關票: officer quotas, invite links, direct sends
+│   ├── survey.js                # submitSurvey (購票系統問卷)
+│   ├── partySurvey.js           # submitPartySurvey (舞會滿意度調查)
 │   └── lineup.js                # uploadLineupImage, deleteLineupImage
 └── templates/
     ├── shared.js                # escapeHtml, colours, fonts
@@ -43,6 +45,8 @@ functions/
 | `updateOrderPayment` | callable | admin+ | Atomically changes payment state with an expected-state check and trusted audit metadata |
 | `sendOrderQRCode` | `orders/{id}` created | — | Enqueues one deterministic confirmation job; the QR links to `/admin/orders/{id}?c={ticketCode}` |
 | `resendOrderEmail` | callable | admin+ | Enqueues a deliberate resend. Reuse `requestId` when retrying the same staff action |
+| `submitSurvey` | callable | anyone | Checks the Turnstile token (action `survey`) when `ENFORCE_TURNSTILE` is on, validates the answers against the survey page's options and writes `surveyResponses` |
+| `submitPartySurvey` | callable | signed-in users | Checks the answers against that year's questions and the Turnstile token (action `party_survey`), then writes `partySurveys/{year}/responses` without the account |
 | `processMailQueue` | scheduled every minute | — | Shares one leased, paced worker across confirmations, resends and notification batches |
 | `prepareOrderNotification` | callable | manager+ | Validates a payment / pickup / custom notice and saves its recipients (buyers, optionally of one school; 公關票 guests only for pickup and custom notices) as `notificationJobs/{jobId}` without sending; returns the jobId and recipient count |
 | `sendOrderNotification` | callable | manager+ | Enqueues deterministic BCC batches for a prepared job. Repeating the same job ID resumes interrupted enqueue without resetting batches |
@@ -74,11 +78,10 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 
 | Name | Default | Meaning |
 |---|---|---|
-| `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances; set 2-3 around the sale opening, back to 0 afterwards |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Max orders per signed-in account per 10 minutes (0 = off). Per account because the client IP header can be forged by the caller |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, shared across every email source; BCC batches count the council To recipient too |
-| `ENFORCE_TURNSTILE` | `false` | Reject `createOrder` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
+| `ENFORCE_TURNSTILE` | `false` | Reject `createOrder`, `submitSurvey` and `submitPartySurvey` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Comma-separated site hostnames whose tokens are accepted. Never add `localhost` |
 
 Change a value and redeploy the functions.
@@ -95,7 +98,7 @@ firebase functions:secrets:set AWS_REGION
 
 The sender is `no-reply@tickets.cksc.tw`, which must be allowed by the SES IAM policy.
 
-`createOrder` also needs the Turnstile widget's secret key, even while `ENFORCE_TURNSTILE` is off (a deploy fails while it is missing):
+`createOrder`, `submitSurvey` and `submitPartySurvey` also need the Turnstile widget's secret key, even while `ENFORCE_TURNSTILE` is off (a deploy fails while it is missing):
 
 ```bash
 firebase functions:secrets:set TURNSTILE_SECRET

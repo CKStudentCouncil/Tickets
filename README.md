@@ -41,7 +41,7 @@ src/
 ├── stores/         # auth (user + role), shop (opening time), toast
 ├── data/           # schools, survey questions, ticket eligibility
 ├── utils/          # datetime, text, qrcode, pdf, analytics, redirect, debounce
-├── config/         # site URL, App Check key, default opening time, party date and venue
+├── config/         # site URL, Turnstile sitekey, default opening time, party date and venue
 └── router/         # routes and navigation guard
 
 functions/          # Cloud Functions, see functions/README.md
@@ -161,25 +161,17 @@ Staff still check student IDs at pickup and at the door. The sales policy (`Sale
 
 Buyers read their orders straight from Firestore: `orders/{id}.userId` is the buyer's uid, and the rules allow a signed-in user to read only orders with their own `userId` (lists must filter on it).
 
-## Bot Protection (App Check)
-
-`createOrder` can be called by scripts. To make the functions accept only requests from this site:
-
-1. Firebase console → App Check → register the web app with **reCAPTCHA Enterprise** and copy the site key. The key's allowed domains must include `tickets.cksc.tw`.
-2. Put the key in `APP_CHECK_SITE_KEY` in `src/config/app.js` and deploy the site.
-3. Watch App Check metrics for a day, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy the functions.
-4. Optionally enforce App Check for Cloud Firestore as well (Firebase console → App Check → APIs). Anyone can submit the survey without signing in, so this is what stops scripts from flooding `surveyResponses`.
-
-reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). Until its debug token is registered, every Firebase call fails, Google sign-in included, with `AppCheck: Fetch server returned an HTTP error status. HTTP status: 403 (appCheck/fetch-status-error)`.
-
-- Either register the token the browser console prints (`App Check debug token: …`) in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile, and each origin (`localhost` vs `127.0.0.1`, Docker), makes up its own.
-- Or add one token there once (e.g. a UUID from `uuidgen`) and start the dev server with it: `APP_CHECK_DEBUG_TOKEN=<token> yarn dev`, or `APP_CHECK_DEBUG_TOKEN=<token> docker compose up`. Production builds never include it.
-
-A debug token lets any request pass App Check, so keep it out of the repository.
-
 ## Bot Protection (Turnstile)
 
-App Check tells this site apart from scripts; Cloudflare Turnstile additionally asks the person checking out to pass a check. The product page shows the widget above 確認送出訂單 and sends its token with the order; `createOrder` checks it with Cloudflare's siteverify (action `checkout`, hostname in `TURNSTILE_HOSTNAMES`) before it looks at the order.
+Cloudflare Turnstile keeps scripts out of the three places that write on a visitor's behalf. Each page shows the widget above its submit button and sends its token with the call; the function checks it with Cloudflare's siteverify (hostname in `TURNSTILE_HOSTNAMES`) before it stores anything:
+
+| Page | Function | Action |
+| --- | --- | --- |
+| Product page, above 確認送出訂單 | `createOrder` | `checkout` |
+| `/survey` (購票系統問卷, no sign-in needed) | `submitSurvey` | `survey` |
+| Party survey (舞會滿意度調查) | `submitPartySurvey` | `party_survey` |
+
+Clients cannot write `surveyResponses` or the party survey's responses directly (`firestore.rules`), so the survey answers must go through these functions and their check. The site used to run Firebase App Check (reCAPTCHA Enterprise) as well; it was removed because reCAPTCHA bills past 10,000 assessments a month, while Turnstile is free and already guards every write above.
 
 1. Cloudflare dashboard → Turnstile → add a widget in **Managed** mode with the hostnames `tickets.cksc.tw`, `localhost` and `127.0.0.1`.
 2. Put its sitekey in `TURNSTILE_SITE_KEY` in `src/config/app.js` and deploy the site.

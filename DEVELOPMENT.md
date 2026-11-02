@@ -55,27 +55,15 @@ docker compose up --build -V
 
 The image installs the root dependencies and runs the frontend dev server. Backend tests still need the `functions/` dependencies; emulator tests also need Firebase CLI and Java in the environment running them.
 
-### Firebase connection and App Check
+### Firebase connection
 
 The frontend initializes Firebase in [src/boot/firebase.js](src/boot/firebase.js) and calls functions in `asia-east1`. It currently points to `cksc-ticket`. **Running the frontend locally still uses that project's live Firebase services.** There are no frontend emulator connection calls in the current boot file.
 
-For isolated browser testing, configure a development Firebase project in `src/boot/firebase.js`, set the CLI project in `.firebaserc`, and configure its Google sign-in, App Check, rules, functions, and test data. Changing `.firebaserc` alone does not change the browser's Firebase project. Keep App Check's site key in [src/config/app.js](src/config/app.js) aligned with the selected web app.
+For isolated browser testing, configure a development Firebase project in `src/boot/firebase.js`, set the CLI project in `.firebaserc`, and configure its Google sign-in, rules, functions, and test data. Changing `.firebaserc` alone does not change the browser's Firebase project.
 
 Email and QR destinations use the hardcoded `SITE_URL`, independently of the Firebase project. To test those links against a development frontend, update it in both `src/config/app.js` and `functions/lib/constants.js`.
 
-With the configured App Check key, `quasar dev` uses the debug provider. Register the token printed in the browser console under Firebase console → App Check → Apps → Manage debug tokens, then reload the page. Alternatively, register a fixed token and supply it when starting the server:
-
-```bash
-APP_CHECK_DEBUG_TOKEN=<registered-token> yarn dev
-```
-
-For Docker:
-
-```bash
-APP_CHECK_DEBUG_TOKEN=<registered-token> docker compose up --build
-```
-
-Treat debug tokens as credentials and keep them out of Git. [quasar.config.js](quasar.config.js) only exposes this variable in development builds. An unregistered token can cause `appCheck/fetch-status-error` with HTTP 403.
+The production functions only accept Turnstile tokens solved on `tickets.cksc.tw` (`TURNSTILE_HOSTNAMES`), so with `ENFORCE_TURNSTILE=true` orders and survey answers cannot be sent from `quasar dev` against the live project.
 
 ## Finding the right code
 
@@ -142,7 +130,7 @@ Campus-only tickets require both the school `建國中學` and an account at `@g
 | `orders/{id}/history/{eventId}` | Function-only append-only staff action history; staff may read it |
 | `users/{uid}`, `pendingUsers/{email}` | Active staff profiles and invitations |
 | `partyStories`, `partyLineup` | Scheduled public content |
-| `surveyResponses` | Public survey submissions, subject to rules validation |
+| `surveyResponses` | Public survey submissions, written only by `submitSurvey` after its Turnstile check |
 | `ticketSales/{typeId}/shards/{shardId}` | Backend stock counters, with caps on the parent ticket-sales document |
 | `settings/sellerProgram` | Public seller program settings: `enabled`, the ticket type sellers take from (`ticketTypeId`, the 二售 type) and the shared `goal`; written by super admins |
 | `sellers/{email}`, `sellerRegistrations/{id}`, `sellerStats/summary` | Seller list (super admins), registrations created by `registerSellerTickets` (admins flip `delivered` / `paid` or delete; deleting returns the tickets to stock), and the shared registered total |
@@ -194,11 +182,10 @@ The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-eas
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ENFORCE_APP_CHECK` | `false` | Require App Check for `createOrder` |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Keep checkout instances warm |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Limit orders per account per ten minutes; zero disables the limit |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Share pacing across confirmations, resends and notification recipients |
-| `ENFORCE_TURNSTILE` | `false` | Require a Cloudflare Turnstile token for `createOrder` |
+| `ENFORCE_TURNSTILE` | `false` | Require a Cloudflare Turnstile token for `createOrder`, `submitSurvey` and `submitPartySurvey` |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Site hostnames whose Turnstile tokens are accepted; never `localhost` |
 
 These are code defaults; the project's deployed values may differ. Changes require redeploying functions.
@@ -264,11 +251,10 @@ firebase deploy --project <project-id> --only firestore:indexes
 
 | Symptom | Checks |
 | --- | --- |
-| App Check HTTP 403 during local development | Register the browser's debug token in the selected Firebase project's App Check settings; reload or restart with a registered fixed token |
-| Google sign-in fails | Check the selected web app, Google provider, authorized domain, popup handling, and App Check; embedded app browsers may need Safari or Chrome |
+| Google sign-in fails | Check the selected web app, Google provider, authorized domain, and popup handling; embedded app browsers may need Safari or Chrome |
 | Redirect to `/comingsoon` | Check `settings/shop.openAt` and the fallback `SHOP_OPEN_AT`; ordinary buyers are gated before opening |
 | Empty ticket list | Check that `settings/ticketTypes` exists, contains valid types, and their sale windows have not ended |
-| Checkout fails | Confirm verified sign-in, deployed `createOrder` in `asia-east1`, shop/ticket sale windows, eligibility, allowance, stock, and App Check; inspect the returned callable error |
+| Checkout fails | Confirm verified sign-in, deployed `createOrder` in `asia-east1`, shop/ticket sale windows, eligibility, allowance, stock, and the Turnstile check; inspect the returned callable error |
 | Firestore `permission-denied` | Check the current staff role, buyer `userId` filter, permitted update fields, and public-content query filters against `firestore.rules` |
 | Missing-index error | Check `firestore.indexes.json` and deploy the required indexes to the selected project |
 | Missing confirmation email | Check the order's `emailStatus`, function logs, and SES/Secret Manager setup; an admin can resend the confirmation |

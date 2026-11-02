@@ -2,11 +2,6 @@
 // edit needed). See functions/README.md.
 import { defineBoolean, defineInt, defineString } from 'firebase-functions/params'
 
-// Reject callable requests without a valid App Check token. Turn on only after
-// App Check (reCAPTCHA Enterprise) is set up and APP_CHECK_SITE_KEY is filled
-// in src/config/app.js, otherwise every order is rejected.
-export const ENFORCE_APP_CHECK = defineBoolean('ENFORCE_APP_CHECK', { default: false })
-
 // Warm createOrder instances kept running; raise to 2-3 around the sale
 // opening to avoid cold starts, set back to 0 afterwards (it costs money).
 export const CREATE_ORDER_MIN_INSTANCES = defineInt('CREATE_ORDER_MIN_INSTANCES', { default: 0 })
@@ -19,10 +14,10 @@ export const ORDER_LIMIT_PER_ACCOUNT = defineInt('ORDER_LIMIT_PER_ACCOUNT', { de
 // SES sending rate of the AWS account, in recipients per second.
 export const SES_RECIPIENTS_PER_SECOND = defineInt('SES_RECIPIENTS_PER_SECOND', { default: 14 })
 
-// Require a Cloudflare Turnstile token on createOrder. Turn on only
-// after TURNSTILE_SITE_KEY is filled in src/config/app.js, the site is
-// deployed and the TURNSTILE_SECRET secret is set, otherwise every order is
-// rejected.
+// Require a Cloudflare Turnstile token on createOrder, submitSurvey and
+// submitPartySurvey. Turn on only after TURNSTILE_SITE_KEY is filled in
+// src/config/app.js, the site is deployed and the TURNSTILE_SECRET secret is
+// set, otherwise every order and survey answer is rejected.
 export const ENFORCE_TURNSTILE = defineBoolean('ENFORCE_TURNSTILE', { default: false })
 
 // Comma-separated hostnames of the site whose Turnstile tokens createOrder

@@ -1,10 +1,14 @@
-// Cloudflare Turnstile check for checkouts. The browser solves the widget on
-// the product page and sends its token with createOrder; the token is checked
-// here against Cloudflare's siteverify, never in the browser.
+// Cloudflare Turnstile check for checkouts and the surveys. The browser
+// solves the widget and sends its token as `turnstileToken` with the call;
+// the token is checked here against Cloudflare's siteverify, never in the
+// browser. Keep the actions in sync with the pages' <TurnstileWidget action>.
 import { HttpsError } from './common.js'
+import { ENFORCE_TURNSTILE, TURNSTILE_HOSTNAMES } from './params.js'
 
 export const TURNSTILE_SECRET = 'TURNSTILE_SECRET'
-export const CHECKOUT_ACTION = 'checkout' // data-action of the product page widget
+export const CHECKOUT_ACTION = 'checkout' // the product page (createOrder)
+export const SURVEY_ACTION = 'survey' // the system survey (submitSurvey)
+export const PARTY_SURVEY_ACTION = 'party_survey' // the party survey (submitPartySurvey)
 
 const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 const SITEVERIFY_TIMEOUT_MS = 10_000
@@ -55,4 +59,23 @@ export async function verifyTurnstile({ token, action, hostnames, secret, remote
     console.error('[turnstile] siteverify rejected TURNSTILE_SECRET')
   }
   throw failedError()
+}
+
+// The call's token checked for `action` while ENFORCE_TURNSTILE is on:
+// resolves undefined when the check is off, otherwise as verifyTurnstile.
+export function checkTurnstile(data, context, action) {
+  if (!ENFORCE_TURNSTILE.value()) return Promise.resolve(undefined)
+  return verifyTurnstile({
+    token: data?.turnstileToken,
+    action,
+    hostnames: parseHostnames(TURNSTILE_HOSTNAMES.value()),
+    secret: process.env[TURNSTILE_SECRET]?.trim(),
+    remoteip: context.rawRequest?.ip
+  })
+}
+
+// For a one-off submission, which is never retried with the same token: an
+// already redeemed token is refused like any other failed check.
+export async function requireTurnstile(data, context, action) {
+  if ((await checkTurnstile(data, context, action)) === false) throw failedError()
 }
