@@ -76,13 +76,14 @@ export function getTicketStatus(ticketType, now = new Date(), soldOut = {}) {
   return { state: 'selling', label: '販售中', className: 'selling' }
 }
 
-// Hidden from the storefront until sales open, unless the admin unticked
-// 開賣前隱藏 (hideUntilSale: false). A missing flag counts as hidden.
+// Hidden from the storefront until sales open, so the opening date isn't
+// out before the announcement, unless the admin unticked 開賣前隱藏
+// (hideUntilSale: false). A missing flag counts as hidden. Once sales have
+// opened the type stays listed, also after they end; it just can't be bought.
 export function isTicketTypeListed(ticketType, now = new Date()) {
   const { state } = getTicketStatus(ticketType, now)
 
-  if (state === 'ended') return false
-  if (state === 'selling') return true
+  if (state !== 'upcoming' && state !== 'unavailable') return true
 
   return ticketType.hideUntilSale === false
 }

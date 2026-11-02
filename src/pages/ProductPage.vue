@@ -281,15 +281,11 @@ const loadError = ref(false)
 // ticks every second so the buy button appears the moment sales open (PARTY-24)
 const now = useNow(1000)
 
-// a type hidden until sales open reads as 找不到 until then; ended types
-// stay reachable so old links explain that sales are over
+// a type hidden until sales open reads as 找不到 until then
 const ticketType = computed(() => {
   const type = ticketTypes.value.find((t) => t.id === route.params.id)
-  if (!type) return null
 
-  return isTicketTypeListed(type, now.value) || getTicketStatus(type, now.value).state === 'ended'
-    ? type
-    : null
+  return type && isTicketTypeListed(type, now.value) ? type : null
 })
 
 const status = computed(() =>
