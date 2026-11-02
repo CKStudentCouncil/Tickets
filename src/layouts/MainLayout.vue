@@ -147,7 +147,7 @@
     </header>
 
     <main class="page-container">
-      <router-view v-if="!auth.loading" :key="$route.fullPath" />
+      <router-view v-if="!auth.loading || route.meta.authOptional" :key="$route.fullPath" />
       <div v-else class="loading-screen" role="status">載入中…</div>
     </main>
 
@@ -349,6 +349,8 @@ watch(menuOpen, (open) => {
 watch(() => route.fullPath, () => closeMenu())
 
 onMounted(() => {
+  // the first page is ready: take away the loading screen of index.html
+  document.getElementById('app-splash')?.remove()
   document.addEventListener('click', handleClickOutside)
   document.addEventListener('keydown', handleKeydown)
 })

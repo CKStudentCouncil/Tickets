@@ -90,6 +90,7 @@
          has loaded, and don't block it (display=swap shows the fallback first) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
@@ -97,8 +98,45 @@
       onload="this.media='all'"
     />
     <title>建中舞會購票系統</title>
+    <style>
+      /* Shown from the first paint until the first page is ready
+         (MainLayout.vue removes it), instead of a blank screen */
+      html { background: #050608; }
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: 0 16px;
+        background: #050608;
+        color: rgba(242, 240, 233, 0.62);
+        font: 500 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 6px;
+      }
+      #app-splash img { width: min(78vw, 520px); height: auto; }
+      #app-splash .splash-line {
+        width: min(40vw, 200px);
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(242, 240, 233, 0.8), transparent);
+        animation: splash-pulse 1.6s ease-in-out infinite;
+      }
+      #app-splash p { margin: 0; }
+      #app-splash .splash-text { letter-spacing: 4px; font-size: 12px; color: rgba(242, 240, 233, 0.45); }
+      @keyframes splash-pulse { 50% { opacity: 0.2; transform: scaleX(0.6); } }
+      @media (prefers-reduced-motion: reduce) { #app-splash .splash-line { animation: none; } }
+    </style>
   </head>
   <body>
     <!-- quasar:entry-point -->
+    <div id="app-splash" role="status" aria-label="載入中">
+      <p>2026 · CK PARTY NIGHT</p>
+      <img src="/cosmos-wordmark.png" alt="COSMOS" width="818" height="80" />
+      <span class="splash-line"></span>
+      <p class="splash-text">載入中</p>
+    </div>
   </body>
 </html>

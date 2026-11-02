@@ -14,6 +14,13 @@ export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
 // do. Keep in sync with functions/lib/constants.js
 export const SHOP_OPEN_AT = new Date('2026-11-05T12:00:00+08:00')
 
+// true = the shop counts as open without reading settings/shop, so the shop
+// pages don't wait for Firestore before they show. Set it only once sales
+// have started: createOrder still checks settings/shop on its own, so orders
+// are refused until that opening time has passed. false = read
+// settings/shop as above.
+export const SHOP_ALWAYS_OPEN = true
+
 // Party date and venue shown on the home page and receipts.
 export const EVENT_DATE = '2026/12/13'
 export const EVENT_DATE_LONG = '2026 年 12 月 13 日'
