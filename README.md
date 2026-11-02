@@ -163,7 +163,15 @@ Buyers read their orders straight from Firestore: `orders/{id}.userId` is the bu
 
 ## Bot Protection (Turnstile)
 
-`createOrder` can be called by scripts, so Cloudflare Turnstile asks the person checking out to pass a check. The product page shows the widget above 確認送出訂單 and sends its token with the order; `createOrder` checks it with Cloudflare's siteverify (action `checkout`, hostname in `TURNSTILE_HOSTNAMES`) before it looks at the order.
+Cloudflare Turnstile keeps scripts out of the three places that write on a visitor's behalf. Each page shows the widget above its submit button and sends its token with the call; the function checks it with Cloudflare's siteverify (hostname in `TURNSTILE_HOSTNAMES`) before it stores anything:
+
+| Page | Function | Action |
+| --- | --- | --- |
+| Product page, above 確認送出訂單 | `createOrder` | `checkout` |
+| `/survey` (購票系統問卷, no sign-in needed) | `submitSurvey` | `survey` |
+| Party survey (舞會滿意度調查) | `submitPartySurvey` | `party_survey` |
+
+Clients cannot write `surveyResponses` or the party survey's responses directly (`firestore.rules`), so the survey answers must go through these functions and their check. The site used to run Firebase App Check (reCAPTCHA Enterprise) as well; it was removed because reCAPTCHA bills past 10,000 assessments a month, while Turnstile is free and already guards every write above.
 
 1. Cloudflare dashboard → Turnstile → add a widget in **Managed** mode with the hostnames `tickets.cksc.tw`, `localhost` and `127.0.0.1`.
 2. Put its sitekey in `TURNSTILE_SITE_KEY` in `src/config/app.js` and deploy the site.

@@ -94,6 +94,8 @@
             </div>
           </section>
 
+          <TurnstileWidget v-if="TURNSTILE_SITE_KEY" ref="turnstile" v-model="turnstileToken" action="party_survey" />
+
           <button type="submit" class="primary-button" :disabled="submitting">
             {{ submitting ? '正在送出…' : '送出問卷' }}
           </button>
@@ -117,12 +119,22 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useToastStore } from 'src/stores/toast'
+import TurnstileWidget from 'src/components/TurnstileWidget.vue'
+import { TURNSTILE_SITE_KEY } from 'src/config/app'
 import { PARTY_YEAR, fetchPartySurvey, submitPartySurveyAnswers } from 'src/services/partySurveyService'
 import { LIMITS } from 'src/data/partySurveyQuestions.js'
 import { firstMissing, questionsOf } from 'src/utils/partySurvey'
 
 // the 其他 choice; what was typed replaces it when sending
 const OTHER = '\u0000other'
+// errors whose message the function wrote for the person answering
+const KNOWN_ERRORS = [
+  'functions/invalid-argument',
+  'functions/failed-precondition',
+  'functions/unauthenticated',
+  'functions/permission-denied',
+  'functions/unavailable'
+]
 // set once this device has answered this year's survey
 const DONE_KEY = `cksc.partySurvey.${PARTY_YEAR}`
 
@@ -131,6 +143,8 @@ const toast = useToastStore()
 // loading → open | closed | error; open → submitted; done: answered before on this device
 const state = ref('loading')
 const submitting = ref(false)
+const turnstile = ref(null)
+const turnstileToken = ref('')
 const sections = ref([])
 const answers = reactive({})
 const others = reactive({})
@@ -205,10 +219,14 @@ async function handleSubmit() {
     show(missing.question)
     return
   }
+  if (TURNSTILE_SITE_KEY && !turnstileToken.value) {
+    toast.show('請先完成人機驗證，再送出問卷')
+    return
+  }
 
   submitting.value = true
   try {
-    await submitPartySurveyAnswers(PARTY_YEAR, result)
+    await submitPartySurveyAnswers(PARTY_YEAR, result, turnstileToken.value)
     try {
       localStorage.setItem(DONE_KEY, '1')
     } catch {
@@ -218,9 +236,10 @@ async function handleSubmit() {
     window.scrollTo({ top: 0 })
   } catch (error) {
     console.error('Party survey submit error:', error)
-    // the function names what it refused (e.g. 問卷目前沒有開放)
-    const known = ['functions/invalid-argument', 'functions/failed-precondition', 'functions/unauthenticated'].includes(error?.code)
-    toast.show(known ? error.message : '送出失敗，請再試一次')
+    // the function names what it refused (e.g. 問卷目前沒有開放, 人機驗證失敗)
+    toast.show(KNOWN_ERRORS.includes(error?.code) ? error.message : '送出失敗，請再試一次')
+    // a sent token is used up; solve a new one before trying again
+    turnstile.value?.reset()
   } finally {
     submitting.value = false
   }

@@ -15,3 +15,4 @@ export {
   sendOfficerTicket
 } from './lib/guests.js'
 export { submitPartySurvey } from './lib/partySurvey.js'
+export { submitSurvey } from './lib/survey.js'

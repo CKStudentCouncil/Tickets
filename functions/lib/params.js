@@ -14,10 +14,10 @@ export const ORDER_LIMIT_PER_ACCOUNT = defineInt('ORDER_LIMIT_PER_ACCOUNT', { de
 // SES sending rate of the AWS account, in recipients per second.
 export const SES_RECIPIENTS_PER_SECOND = defineInt('SES_RECIPIENTS_PER_SECOND', { default: 14 })
 
-// Require a Cloudflare Turnstile token on createOrder. Turn on only
-// after TURNSTILE_SITE_KEY is filled in src/config/app.js, the site is
-// deployed and the TURNSTILE_SECRET secret is set, otherwise every order is
-// rejected.
+// Require a Cloudflare Turnstile token on createOrder, submitSurvey and
+// submitPartySurvey. Turn on only after TURNSTILE_SITE_KEY is filled in
+// src/config/app.js, the site is deployed and the TURNSTILE_SECRET secret is
+// set, otherwise every order and survey answer is rejected.
 export const ENFORCE_TURNSTILE = defineBoolean('ENFORCE_TURNSTILE', { default: false })
 
 // Comma-separated hostnames of the site whose Turnstile tokens createOrder

@@ -25,13 +25,8 @@ import {
   planShards,
   sanitizeOrderInput
 } from './orderValidation.js'
-import {
-  CREATE_ORDER_MIN_INSTANCES,
-  ENFORCE_TURNSTILE,
-  ORDER_LIMIT_PER_ACCOUNT,
-  TURNSTILE_HOSTNAMES
-} from './params.js'
-import { CHECKOUT_ACTION, TURNSTILE_SECRET, parseHostnames, verifyTurnstile } from './turnstile.js'
+import { CREATE_ORDER_MIN_INSTANCES, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
+import { CHECKOUT_ACTION, TURNSTILE_SECRET, checkTurnstile } from './turnstile.js'
 import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
 
 const ORDER_ID_ATTEMPTS = 3
@@ -264,15 +259,9 @@ export async function reserveStock(tx, items, ticketTypes, legacySnaps, chosen) 
 // lost. The first pass is remembered per requestId, so such a retry gets
 // through while a token replayed on another checkout does not.
 async function assertTurnstile(data, context, account, requestId) {
-  if (!ENFORCE_TURNSTILE.value()) return
+  const passed = await checkTurnstile(data, context, CHECKOUT_ACTION)
+  if (passed === undefined) return
 
-  const passed = await verifyTurnstile({
-    token: data?.turnstileToken,
-    action: CHECKOUT_ACTION,
-    hostnames: parseHostnames(TURNSTILE_HOSTNAMES.value()),
-    secret: process.env[TURNSTILE_SECRET]?.trim(),
-    remoteip: context.rawRequest?.ip
-  })
   const passRef = requestId ? db.doc(`turnstilePasses/${requestId}`) : null
 
   if (passed) {

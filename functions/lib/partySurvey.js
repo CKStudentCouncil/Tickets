@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
 import { REGION } from './constants.js'
+import { PARTY_SURVEY_ACTION, TURNSTILE_SECRET, requireTurnstile } from './turnstile.js'
 
 // 舞會滿意度調查 (src/pages/PartySurveyPage.vue). Super admins keep each year's
 // questions in partySurveys/{year}.sections and change them as they like, so
@@ -83,6 +84,7 @@ export function cleanAnswers(sections, input) {
 
 export const submitPartySurvey = functions
   .region(REGION)
+  .runWith({ secrets: [TURNSTILE_SECRET] })
   .https.onCall(async (data, context) => {
     // only signed-in accounts may answer; the response still stores no uid
     if (!context.auth?.uid) throw new HttpsError('unauthenticated', '請先登入再填寫問卷')
@@ -95,6 +97,7 @@ export const submitPartySurvey = functions
     }
 
     const answers = cleanAnswers(survey.get('sections'), data?.answers)
+    await requireTurnstile(data, context, PARTY_SURVEY_ACTION)
     await db.collection(`partySurveys/${year}/responses`).add({ answers, createdAt: FieldValue.serverTimestamp() })
     return { ok: true }
   })

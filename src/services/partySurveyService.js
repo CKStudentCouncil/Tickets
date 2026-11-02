@@ -39,7 +39,8 @@ export async function fetchPartySurveyResponses(year) {
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
 }
 
-// answers: { [question id]: value } (see src/data/partySurveyQuestions.js)
-export function submitPartySurveyAnswers(year, answers) {
-  return submitCallable({ year, answers })
+// answers: { [question id]: value } (see src/data/partySurveyQuestions.js);
+// turnstileToken: the page's Turnstile token (action party_survey)
+export function submitPartySurveyAnswers(year, answers, turnstileToken = '') {
+  return submitCallable({ year, answers, turnstileToken })
 }

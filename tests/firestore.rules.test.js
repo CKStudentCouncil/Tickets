@@ -489,51 +489,9 @@ describe('surveyResponses (PARTY-23)', () => {
     ...extra
   })
 
-  test('anyone can submit a well-formed response', async () => {
-    await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', 'r1'), response()))
-  })
-
-  test('every option offered by the survey page is accepted by the rules', async () => {
-    let i = 0
-    for (const identity of SURVEY.IDENTITY_OPTIONS) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ identity })))
-    }
-    for (const device of SURVEY.DEVICE_OPTIONS) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ device })))
-    }
-    for (const issueCount of SURVEY.ISSUE_COUNT_OPTIONS) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ issueCount })))
-    }
-    await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({
-      channels: SURVEY.CHANNEL_OPTIONS,
-      issueTypes: SURVEY.ISSUE_TYPE_OPTIONS
-    })))
-    for (const value of [1, 2, 3, 4, 5]) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ scores: allScores(value) })))
-    }
-  })
-
-  test('out-of-range, non-integer or missing scores are rejected', async () => {
-    const bad = (scores) => setDoc(doc(anon(), 'surveyResponses', 'bad'), response({ scores }))
-    await assertFails(bad({ ...allScores(), q4: 1000000 }))
-    await assertFails(bad({ ...allScores(), q4: '5' }))
-    await assertFails(bad({ ...allScores(), q4: 0 }))
-    await assertFails(bad({ ...allScores(), q4: 4.5 }))
-    await assertFails(bad({ ...allScores(), q99: 5 }))
-    const missing = allScores()
-    delete missing.q25
-    await assertFails(bad(missing))
-  })
-
-  test('unknown options and malformed fields are rejected', async () => {
-    const bad = (extra) => setDoc(doc(anon(), 'surveyResponses', 'bad'), response(extra))
-    await assertFails(bad({ identity: 'hacker' }))
-    await assertFails(bad({ channels: ['<script>'] }))
-    await assertFails(bad({ channels: [] }))
-    await assertFails(bad({ issueTypes: ['whatever'] }))
-    await assertFails(bad({ admin: true }))
-    await assertFails(bad({ createdAt: 'yesterday' }))
-    await assertFails(bad({ suggestion: 'x'.repeat(2001) }))
+  test('no client writes responses; they go through submitSurvey', async () => {
+    await assertFails(setDoc(doc(anon(), 'surveyResponses', 'r1'), response()))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r2'), response()))
   })
 
   test('only staff can read responses, and only super admins delete them', async () => {
