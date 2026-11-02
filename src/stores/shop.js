@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { SHOP_OPEN_AT } from 'src/config/app'
+import { SHOP_ALWAYS_OPEN, SHOP_OPEN_AT } from 'src/config/app'
 import { watchShopSettings } from 'src/services/shopService'
 import { isPublished, parseDate } from 'src/utils/datetime'
 
@@ -23,7 +23,7 @@ export const useShopStore = defineStore('shop', () => {
   const isCustomised = computed(() => !!customOpenAt.value)
 
   function isOpen(at = new Date()) {
-    return isPublished(openAt.value, at)
+    return SHOP_ALWAYS_OPEN || isPublished(openAt.value, at)
   }
 
   // Follows the clock, so pages react when the shop opens or the opening
