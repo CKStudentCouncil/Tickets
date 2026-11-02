@@ -82,11 +82,20 @@
       name="twitter:image"
       content="https://tickets.cksc.tw/hero.jpg"
     />
-    <link rel="icon" type="image/png" sizes="128x128" href="cksclogo.png" />
-    <link rel="icon" type="image/png" sizes="96x96" href="cksclogo.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="cksclogo.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="cksclogo.png" />
-    <link rel="icon" type="image/png" href="cksclogo.png" />
+    <!-- small copies of cksclogo.png (970px, 760 KB) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/favicon-192.png" />
+    <!-- Fonts start loading with the page instead of after the first route
+         has loaded, and don't block it (display=swap shows the fallback first) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
     <title>建中舞會購票系統</title>
   </head>
   <body>

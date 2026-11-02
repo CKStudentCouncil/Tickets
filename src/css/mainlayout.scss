@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+// Manrope and Noto Sans TC are loaded in index.html
 
 .app-shell {
   --void: #050608;
@@ -334,6 +334,11 @@
       -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
       mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
       pointer-events: none;
+    }
+
+    /* MainLayout.vue sets .show-art on first opening */
+    &:not(.show-art)::before {
+      background: none;
     }
   }
 
