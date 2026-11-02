@@ -2,9 +2,10 @@
 export const SITE_URL = 'https://tickets.cksc.tw'
 
 // Cloudflare Turnstile sitekey for the bot check on the product page
-// (checkout) and both survey pages. Empty = no widget. After filling it in and deploying the site, set the
-// TURNSTILE_SECRET secret and ENFORCE_TURNSTILE=true in functions/.env and
-// redeploy the functions (see functions/README.md).
+// (checkout) and both survey pages. Empty = no widget. After filling it in
+// and deploying the site, set the TURNSTILE_SECRET secret and
+// ENFORCE_TURNSTILE=true in functions/.env and redeploy the functions (see
+// functions/README.md).
 export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
 
 // Before the shop opens visitors (except staff) are redirected to /comingsoon
