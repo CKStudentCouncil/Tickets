@@ -365,11 +365,13 @@ const studentConfirmed = ref(false)
 // student ID is checked at pickup). Not a replacement for the school account.
 const declarationOpen = ref(false)
 const studentDeclared = ref(false)
+const studentDeclaration = ref(null)
 const usesDeclaration = computed(
   () => studentDeclared.value && isStudentPhase.value && !isCampusTicket.value && !auth.isEduAccount
 )
 watch(() => [auth.user?.uid, ticketType.value?.id], () => {
   studentDeclared.value = false
+  studentDeclaration.value = null
 })
 
 const needsOtherAccount = computed(
@@ -378,7 +380,8 @@ const needsOtherAccount = computed(
     (!isCampusTicket.value && isStudentPhase.value && !auth.isEduAccount && !studentDeclared.value)
 )
 
-function agreeDeclaration() {
+function agreeDeclaration(declaration) {
+  studentDeclaration.value = declaration
   studentDeclared.value = true
   openOrderForm()
 }
@@ -470,7 +473,7 @@ async function submitDirectOrder() {
     number: needsClass.value ? buyer.value.number.trim() : '',
     office: school === '建中老師' ? buyer.value.office.trim() : '',
     ...(needsStudentConfirm.value ? { studentConfirmed: studentConfirmed.value } : {}),
-    ...(usesDeclaration.value ? { studentDeclared: true } : {}),
+    ...(usesDeclaration.value ? { studentDeclared: true, studentDeclaration: studentDeclaration.value } : {}),
     items: [{ id: ticketType.value.id, quantity: quantity.value }]
   })
 }
