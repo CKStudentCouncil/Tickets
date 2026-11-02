@@ -44,7 +44,7 @@
           <strong>取票與領票查驗：</strong>本人了解並同意於領票時，須主動出示本人有效之學生證正本或其他學校核發之合法學籍證明正本。若無法出示或身分不符，主辦單位得拒絕交付票券，相關款項依銷售條款辦理。
         </li>
         <li>
-          <strong>驗票與入場查驗：</strong>本人了解入場時工作人員得隨機抽驗身分，本人須出示前述學籍證明正本。若發現身分不符或轉售予非學生身分者，主辦單位得拒絕入場其入場；相關款項依銷售條款辦理。
+          <strong>驗票與入場查驗：</strong>本人了解入場時工作人員得隨機抽驗身分，本人須出示前述學籍證明正本。若發現身分不符或轉售予非學生身分者，主辦單位得拒絕其入場；相關款項依銷售條款辦理。
         </li>
         <li>
           <strong>法律責任：</strong>如本人有虛偽不實切結或變造身分證明之情事，願負擔相關法律責任（包含但不限於刑法偽造文書罪及詐欺罪）。
@@ -59,9 +59,9 @@
         <span>我已詳閱、充分理解並完全同意以上所有切結內容與相關責任條款。</span>
       </label>
 
-      <span class="time-stamp">
-        {{ new Date().toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}
-      </span>
+      <p class="time-stamp">
+        簽署時間：{{ new Date().toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}
+      </p>
 
       <div class="declaration-actions">
         <button type="button" class="secondary-button" @click="closeDialog">取消</button>
@@ -188,6 +188,7 @@ function agree() {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
   gap: 6px;
 }
 
@@ -198,6 +199,9 @@ function agree() {
 
 .form-group input,
 .form-group select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   height: 38px;
   padding: 0 10px;
   border: 1px solid var(--line);
@@ -248,9 +252,15 @@ function agree() {
   accent-color: var(--ember);
 }
 
+.time-stamp {
+  margin: 0 0 16px;
+  color: var(--lunar);
+  font-size: 12px;
+}
+
 .declaration-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
 }
 
@@ -283,5 +293,12 @@ function agree() {
 .primary-button:disabled {
   opacity: .4;
   cursor: not-allowed;
+}
+
+/* phones: school and student ID on their own lines */
+@media (max-width: 420px) {
+  .form-row {
+    flex-direction: column;
+  }
 }
 </style>
