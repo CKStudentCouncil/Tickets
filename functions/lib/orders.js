@@ -485,10 +485,14 @@ export const createOrder = functions
             // sold to students first
             const studentDeclared =
               order.studentDeclared === true && !isEduAccount(account.email) && items.some((item) => item.checkId)
+            const { studentDeclaration: declarationDetails, ...orderFields } = order
 
             tx.create(orderRef, {
-              ...order,
+              ...orderFields,
               studentDeclared,
+              ...(studentDeclared && declarationDetails
+                ? { studentDeclaration: { ...declarationDetails, signedAt: FieldValue.serverTimestamp() } }
+                : {}),
               buyerType: getBuyerType(account.email, studentDeclared), // 學生 / 社會人士, staff only
               items,
               originalTotal: finalTotal,
