@@ -9,6 +9,7 @@ import routes from './routes'
 import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { safeRedirect } from 'src/utils/redirect'
+import { prefetchStorefront } from 'src/services/ticketTypeService'
 
 export default defineRouter(function () {
   const createHistory = process.env.SERVER
@@ -26,6 +27,19 @@ export default defineRouter(function () {
   Router.beforeEach(async (to) => {
     const authStore = useAuthStore()
     const shopStore = useShopStore()
+
+    // Download the page (and ask for the home page's tickets) while the
+    // checks below wait on Firestore, not after them. A lazy route component
+    // is a function returning import(), and the router's own call later
+    // gets the module already downloaded.
+    for (const record of to.matched) {
+      const component = record.components?.default
+      if (typeof component === 'function') {
+        const loading = component()
+        if (typeof loading?.catch === 'function') loading.catch(() => {})
+      }
+    }
+    if (to.name === 'home') prefetchStorefront()
 
     // load the opening time while the sign-in state resolves, not after
     if (to.meta.shop) shopStore.init()
