@@ -8,6 +8,7 @@ This guide covers development of CK Party Night Tickets, the Quasar/Vue ticketin
 - **Yarn Classic 1.x**. Both the repository root and `functions/` have their own `package.json` and `yarn.lock`.
 - **Firebase CLI** for emulator tests and backend deployment.
 - **Java 21** for the Firestore emulator, matching CI.
+- **redis-server** for the stock gate's emulator tests (`apt install redis-server`, `brew install redis`); they run it themselves behind a local stand-in for Upstash's REST API.
 - **Docker and Docker Compose** if using the container-based frontend workflow.
 - Access to a suitable Firebase project for browser testing and staff administration.
 
@@ -189,10 +190,11 @@ The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-eas
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Share pacing across confirmations, resends and notification recipients |
 | `ENFORCE_TURNSTILE` | `false` | Require a Cloudflare Turnstile token for `createOrder`, `submitSurvey` and `submitPartySurvey` |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Site hostnames whose Turnstile tokens are accepted; never `localhost` |
+| `STOCK_GATE` | `false` | Let `createOrder` turn buyers away by a ticket count in Redis (Upstash) before reading the stock; see `functions/README.md` |
 
 These are code defaults; the project's deployed values may differ. Changes require redeploying functions.
 
-AWS SES email credentials use Secret Manager secrets named `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION`; the Turnstile secret key is `TURNSTILE_SECRET`. Keep credentials out of `functions/.env`. The sender is configured in [functions/lib/mailer.js](functions/lib/mailer.js). See [functions/README.md](functions/README.md) for secret setup and function-specific details.
+AWS SES email credentials use Secret Manager secrets named `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION`; the Turnstile secret key is `TURNSTILE_SECRET`; the stock gate's Upstash database is `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. Keep credentials out of `functions/.env`. The sender is configured in [functions/lib/mailer.js](functions/lib/mailer.js). See [functions/README.md](functions/README.md) for secret setup and function-specific details.
 
 Bulk notifications prepare a frozen audience, then enqueue deterministic batches. `getOrderNotificationStatus` polls progress while a scheduled shared worker sends independently of the browser. `accepted` means SES acceptance, not inbox delivery; `uncertain` stops automatic resend and requires outcome review. See `functions/README.md` for leases, pacing and rollout requirements. Use injected-transport emulator tests to verify delivery changes without sending live email.
 
@@ -204,7 +206,7 @@ Run the checks relevant to your change from the repository root:
 | --- | --- | --- |
 | `yarn test` | Browser checkout/campaign recovery and backend units, including validation, mailer, notifications and shared-value consistency | Root and functions dependencies; no emulator |
 | `yarn test:rules` | Firestore permissions, ownership, role boundaries, and survey validation | Root dependencies, Firebase CLI, Java |
-| `yarn --cwd functions test:emulator` | Checkout/recovery, concurrent stock limits, atomic staff actions and shared mail queue | Functions dependencies, Firebase CLI, Java |
+| `yarn --cwd functions test:emulator` | Checkout/recovery, concurrent stock limits, the Redis stock gate, atomic staff actions and shared mail queue | Functions dependencies, Firebase CLI, Java, redis-server |
 | `yarn --cwd functions test:load` | Concurrent checkout load scenarios; each gets a fresh emulator | Functions dependencies, Firebase CLI, Java; run when changing stock/concurrency behavior |
 | `yarn build` | Production frontend compilation into `dist/spa` | Root dependencies |
 

@@ -37,6 +37,9 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      # the stock gate's emulator tests run a local Redis
+      - run: sudo apt-get update && sudo apt-get install -y redis-server
+
       - run: yarn global add firebase-tools && echo "$(yarn global bin)" >> "$GITHUB_PATH"
 
       - run: yarn install --frozen-lockfile

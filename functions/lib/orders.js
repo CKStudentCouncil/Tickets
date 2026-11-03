@@ -29,6 +29,7 @@ import {
 import { CREATE_ORDER_MIN_INSTANCES, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
 import { CHECKOUT_ACTION, TURNSTILE_SECRET, checkTurnstile } from './turnstile.js'
 import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
+import { STOCK_GATE_SECRETS, admitToStock, giveBackToStock, resetStockGate, seedStockGate } from './stockGate.js'
 
 const ORDER_ID_ATTEMPTS = 3
 // Tries at the stock before giving up, each after a fresh look at the shards:
@@ -144,7 +145,12 @@ export function ticketTypeOf(ticketTypes, id) {
   return ticketType
 }
 
-const soldOutError = (ticketType) => new HttpsError('resource-exhausted', `${ticketType.name}剩餘票量不足`)
+// `soldOut` (not sent to the buyer) keeps the stock gate's tickets taken:
+// a checkout turned away for lack of stock does not give them back
+const soldOutError = (ticketType) =>
+  Object.assign(new HttpsError('resource-exhausted', `${ticketType.name}剩餘票量不足`), { soldOut: true })
+// the stock gate counted too few left; it knows no ticket type names
+const gateSoldOutError = () => Object.assign(new HttpsError('resource-exhausted', '所選票種剩餘票量不足'), { soldOut: true })
 
 // Records types ({ id, stock }) as sold out at their stock. Best effort: if it
 // fails, the storefront keeps saying 販售中 and createOrder still turns buyers away.
@@ -203,8 +209,9 @@ function planStaleCaps() {
 // types not on sale or not for this buyer, and sold-out types (marking those
 // with nothing left). Caps that are out of date are planned first: the
 // transaction would otherwise lock every shard to plan them, and every
-// checkout at once would fight over all of them.
-async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, planned = false }) {
+// checkout at once would fight over all of them. `seed` holds the types the
+// stock gate has no count for; their counts are set from this look (once).
+async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed, planned = false }) {
   const refs = [settingsRef, soldOutRef, ...ticketTypeIds.map(legacyRef), ...(requestRef ? [requestRef] : [])]
   const [settingsSnap, soldOutSnap, ...snaps] = await db.getAll(...refs)
   const legacySnaps = snaps.slice(0, ticketTypeIds.length)
@@ -229,7 +236,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
   if (limited.length === 0) return { chosen: {}, emptied: [] }
   if (!planned && limited.some(({ stock, legacySnap }) => !currentCapsOf(legacySnap, stock))) {
     await planStaleCaps()
-    return chooseShards({ ticketTypeIds, quantities, requestRef, order, account, planned: true })
+    return chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed, planned: true })
   }
 
   const shardSnaps = await db.getAll(...limited.flatMap(({ id }) => ALL_SHARDS.map((k) => shardRef(id, k))))
@@ -241,6 +248,12 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
     const shards = planShards({ caps, sold, quantity: quantities.get(id), random: randomInt })
     return { id, ticketType, stock, left, shards }
   })
+  const unseeded = looks.filter(({ id }) => seed?.has(id))
+  if (unseeded.length > 0) {
+    unseeded.forEach(({ id }) => seed.delete(id))
+    await seedStockGate(unseeded)
+  }
+
   const marked = soldOutSnap.data() || {}
   const unmarked = looks.filter(({ id, stock, left }) => left <= quantities.get(id) && marked[id] !== stock)
 
@@ -389,7 +402,7 @@ export const createOrder = onCall(
     cpu: 1,
     timeoutSeconds: 60,
     minInstances: CREATE_ORDER_MIN_INSTANCES,
-    secrets: [TURNSTILE_SECRET]
+    secrets: [TURNSTILE_SECRET, ...STOCK_GATE_SECRETS]
   },
   async (context) => {
     const { data } = context
@@ -427,17 +440,26 @@ export const createOrder = onCall(
 
     const buyerRef = db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`)
     const legacyRefs = ticketTypeIds.map(legacyRef)
-    const choose = () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account })
+    const seed = new Set()
+    const choose = () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed })
     let idAttempt = 1
     let stockAttempt = 1
+    let admission = null
 
     try {
-      // the stock look runs alongside the checks before it; their errors come
-      // first. Only checkouts that pass Turnstile count against the rate limit.
+      // the stock gate, then the stock look, run alongside the checks before
+      // them; their errors come first. Only checkouts that pass Turnstile
+      // count against the rate limit. Turned away by the gate, a checkout
+      // reads no stock at all.
       const [checks, look] = await Promise.allSettled([
         Promise.all([assertTurnstile(data, context, account, requestId), assertShopOpen(account)])
           .then(() => enforceAccountLimit(account)),
-        choose()
+        admitToStock(requestId, Object.fromEntries(quantities)).then((answer) => {
+          admission = answer
+          if (answer && !answer.admitted) throw gateSoldOutError()
+          answer?.missing.forEach((id) => seed.add(id))
+          return choose()
+        })
       ])
       if (checks.status === 'rejected') throw checks.reason
       if (look.status === 'rejected') throw look.reason
@@ -584,12 +606,25 @@ export const createOrder = onCall(
           console.error('[createOrder] could not resolve rejected checkout:', markerError)
         }
         if (outcome?.result) return outcome.result
-        if (outcome?.error) throw outcome.error
+        if (outcome?.error) {
+          // decided by what turned this checkout away, not by its marker
+          await giveBack(admission, error)
+          throw outcome.error
+        }
       }
+      await giveBack(admission, error)
       throw toHttpsError(error)
     }
   }
 )
+
+// A checkout the stock gate let through gives its tickets back when it will
+// not sell them: rejected for any reason but lack of stock. One that may still
+// sell them ("try again") keeps them for its retries.
+async function giveBack(admission, error) {
+  if (!admission?.admitted || !(error instanceof HttpsError) || error.soldOut) return
+  if (DEFINITE_ORDER_ERRORS.has(error.code)) await giveBackToStock(admission.holdId)
+}
 
 export const stockReleaseRef = (orderId) => db.doc(`stockReleases/${orderId}`)
 
@@ -680,10 +715,12 @@ export function applyStockReleases(tx, releases) {
 // When an admin deletes an order, give its tickets back to the stock and to
 // the buyer's per-person allowance. The marker document makes this safe if
 // the trigger is delivered more than once, and lets purgeOrders release the
-// orders it deletes itself.
+// orders it deletes itself. Either way the tickets are back, so the stock
+// gate counts them again from the shards.
 export const releaseOrderStock = functions
   .region(REGION)
-  .runWith({ failurePolicy: true }) // retried on failure; the marker keeps it idempotent
+  // retried on failure; the marker keeps it idempotent
+  .runWith({ failurePolicy: true, secrets: STOCK_GATE_SECRETS })
   .firestore.document('orders/{orderId}')
   .onDelete(async (snap, context) => {
     const release = stockReleaseOf(snap.data())
@@ -696,17 +733,22 @@ export const releaseOrderStock = functions
       applyStockReleases(tx, [release])
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
+    await resetStockGate([...release.quantities.keys()])
   })
 
 // Plans the shard caps of every limited type as soon as the ticket types are
 // saved, so the first checkouts after a stock change need not each lock all
 // shards to do it (createOrder plans them first too, if this has not run yet).
+// The stock may have changed, so the stock gate counts every type again.
 export const planStockShards = functions
   .region(REGION)
+  .runWith({ secrets: STOCK_GATE_SECRETS })
   .firestore.document('settings/ticketTypes')
-  .onWrite(async () => {
+  .onWrite(async (change) => {
     await planStaleCaps()
     await refreshSoldOut()
+    const typeIds = (snap) => (snap?.data()?.types || []).map((type) => String(type?.id || ''))
+    await resetStockGate([...typeIds(change.before), ...typeIds(change.after)])
   })
 
 // Marks every limited type with nothing left as sold out at its stock and
