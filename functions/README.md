@@ -85,7 +85,7 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 
 | Name | Default | Meaning |
 |---|---|---|
-| `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances, each serving up to 1000 checkouts at once; set 5-10 around the sale opening, back to 0 afterwards |
+| `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances, each serving up to 250 checkouts at once; set 5-10 around the sale opening, back to 0 afterwards |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Max orders per signed-in account per 10 minutes (0 = off). Per account because the client IP header can be forged by the caller |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, shared across every email source; BCC batches count the council To recipient too |
 | `ENFORCE_TURNSTILE` | `false` | Reject `createOrder`, `submitSurvey` and `submitPartySurvey` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
