@@ -210,11 +210,18 @@ describe('createOrder', () => {
     assert.equal((await db.doc(`orders/${adult.id}`).get()).data().buyerType, 'public')
 
     // 學生身分切結書: other accounts may buy during 學生優先購買 and count as 學生
-    const declared = (items) => ({ orderPayload: { ...buyer(), items, studentDeclared: true } })
+    const declaration = { name: '王小明', school: '北一女中', studentId: '112001', reason: 'freshman' }
+    const declared = (items) => ({ orderPayload: { ...buyer(), items, studentDeclared: true, studentDeclaration: declaration } })
+    // not without the 切結書's details
+    await assert.rejects(
+      callCreate({ orderPayload: { ...buyer(), items: students, studentDeclared: true } }, as('bare@gmail.com')),
+      { code: 'invalid-argument' }
+    )
     const signed = await callCreate(declared(students), as('signed@gmail.com'))
     const signedOrder = (await db.doc(`orders/${signed.id}`).get()).data()
     assert.equal(signedOrder.buyerType, 'student')
     assert.equal(signedOrder.studentDeclared, true)
+    assert.deepEqual({ ...signedOrder.studentDeclaration, signedAt: undefined }, { ...declaration, signedAt: undefined })
     // it means nothing on other types
     const ignored = await callCreate(declared([{ id: 'open', quantity: 1 }]), as('other@gmail.com'))
     const ignoredOrder = (await db.doc(`orders/${ignored.id}`).get()).data()

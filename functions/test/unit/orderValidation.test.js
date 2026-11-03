@@ -145,6 +145,26 @@ describe('sanitizeOrderInput', () => {
     assert.equal(order.class, '329')
   })
 
+  test('takes the 學生身分切結書 only with its details', () => {
+    const declaration = { name: '王小明', school: '北一女中', studentId: '112001', reason: 'freshman' }
+    const { order } = sanitize(withItems([{ id: 'a', quantity: 1 }], { studentDeclared: true, studentDeclaration: declaration }))
+    assert.equal(order.studentDeclared, true)
+    assert.deepEqual(order.studentDeclaration, declaration)
+
+    // a bare studentDeclared, or one with details missing or made up, is refused
+    for (const studentDeclaration of [undefined, null, {}, { ...declaration, studentId: ' ' }, { ...declaration, reason: 'because' }]) {
+      expectHttpsError(
+        () => sanitize(withItems([{ id: 'a', quantity: 1 }], { studentDeclared: true, studentDeclaration })),
+        'invalid-argument'
+      )
+    }
+
+    // details without studentDeclared are dropped
+    const { order: plain } = sanitize(withItems([{ id: 'a', quantity: 1 }], { studentDeclaration: declaration }))
+    assert.equal(plain.studentDeclared, false)
+    assert.equal(plain.studentDeclaration, undefined)
+  })
+
   test('truncates over-long strings', () => {
     const { order } = sanitize(withItems([{ id: 'a', quantity: 1 }], { customerName: 'x'.repeat(500) }))
     assert.equal(order.customerName.length, 50)

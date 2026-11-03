@@ -98,7 +98,9 @@ export function sanitizeOrderInput(payload, accountEmail) {
     studentDeclared: payload.studentDeclared === true
   }
 
-  if (order.studentDeclared && payload.studentDeclaration != null) {
+  // the 切結書 is only taken with its details: a bare studentDeclared would
+  // let any account through 學生優先購買 with nothing for staff to check
+  if (order.studentDeclared) {
     const declaration = payload.studentDeclaration
     const reasons = new Set(['school_no_edu', 'email_disabled', 'freshman', 'other'])
     const details = {

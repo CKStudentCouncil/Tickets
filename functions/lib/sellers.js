@@ -190,5 +190,7 @@ export const releaseSellerStock = functions
       )
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
-    await resetStockGate(Object.keys(registration.stockShards || {}))
+    // thrown when Redis cannot be reached, so the trigger is retried (the
+    // marker skips the release itself)
+    await resetStockGate(Object.keys(registration.stockShards || {}), { throwOnError: true })
   })

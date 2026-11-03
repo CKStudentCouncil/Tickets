@@ -210,8 +210,9 @@ function planStaleCaps() {
 // types not on sale or not for this buyer, and sold-out types (marking those
 // with nothing left). Caps that are out of date are planned first: the
 // transaction would otherwise lock every shard to plan them, and every
-// checkout at once would fight over all of them. `seed` holds the types the
-// stock gate has no count for; their counts are set from this look (once).
+// checkout at once would fight over all of them. `seed` maps the types the
+// stock gate has no count for to the generation it reported; their counts are
+// set from this look (once), unless the type was reset since.
 async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed, planned = false }) {
   const refs = [settingsRef, soldOutRef, ...ticketTypeIds.map(legacyRef), ...(requestRef ? [requestRef] : [])]
   const [settingsSnap, soldOutSnap, ...snaps] = await db.getAll(...refs)
@@ -249,7 +250,9 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
     const shards = planShards({ caps, sold, quantity: quantities.get(id), random: randomInt })
     return { id, ticketType, stock, left, shards }
   })
-  const unseeded = looks.filter(({ id }) => seed?.has(id))
+  const unseeded = looks
+    .filter(({ id }) => seed?.has(id))
+    .map(({ id, left }) => ({ id, left, generation: seed.get(id) }))
   if (unseeded.length > 0) {
     unseeded.forEach(({ id }) => seed.delete(id))
     await seedStockGate(unseeded)
@@ -443,7 +446,8 @@ export const createOrder = onCall(
 
     const buyerRef = db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`)
     const legacyRefs = ticketTypeIds.map(legacyRef)
-    const seed = new Set()
+    // types the gate has no count for -> its generation when this checkout was let through
+    const seed = new Map()
     const choose = () => log.time('lookMs', () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed }))
     let idAttempt = 1
     let stockAttempt = 1
@@ -462,7 +466,7 @@ export const createOrder = onCall(
           admission = answer
           log.set({ gate: gateOutcome(answer, STOCK_GATE.value()) })
           if (answer && !answer.admitted) throw gateSoldOutError()
-          answer?.missing.forEach((id) => seed.add(id))
+          answer?.missing.forEach((id) => seed.set(id, answer.generations?.[id]))
           return choose()
         })
       ])
@@ -627,12 +631,15 @@ export const createOrder = onCall(
   })
 )
 
-// A checkout the stock gate let through gives its tickets back when it will
-// not sell them: rejected for any reason but lack of stock. One that may still
-// sell them ("try again") keeps them for its retries.
+// A checkout the stock gate let through gives its tickets back whenever this
+// call ends without selling them, unless for lack of stock. That includes
+// "try again": its retry (same requestId) is let through again and takes them
+// anew, so nothing is counted twice, while a buyer who gives up instead takes
+// nothing with them. Should this call have sold them after all (an error
+// after the commit), the gate is that much too high, which is harmless.
 async function giveBack(admission, error) {
-  if (!admission?.admitted || !(error instanceof HttpsError) || error.soldOut) return
-  if (DEFINITE_ORDER_ERRORS.has(error.code)) await giveBackToStock(admission.holdId)
+  if (!admission?.admitted || error?.soldOut) return
+  await giveBackToStock(admission.holdId)
 }
 
 export const stockReleaseRef = (orderId) => db.doc(`stockReleases/${orderId}`)
@@ -742,7 +749,9 @@ export const releaseOrderStock = functions
       applyStockReleases(tx, [release])
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
-    await resetStockGate([...release.quantities.keys()])
+    // thrown when Redis cannot be reached, so the trigger is retried (the
+    // marker skips the release itself)
+    await resetStockGate([...release.quantities.keys()], { throwOnError: true })
   })
 
 // Plans the shard caps of every limited type as soon as the ticket types are
@@ -751,13 +760,14 @@ export const releaseOrderStock = functions
 // The stock may have changed, so the stock gate counts every type again.
 export const planStockShards = functions
   .region(REGION)
-  .runWith({ secrets: STOCK_GATE_SECRETS })
+  // retried on failure (a reset that did not reach Redis); every step can run again
+  .runWith({ failurePolicy: true, secrets: STOCK_GATE_SECRETS })
   .firestore.document('settings/ticketTypes')
   .onWrite(async (change) => {
     await planStaleCaps()
     await refreshSoldOut()
     const typeIds = (snap) => (snap?.data()?.types || []).map((type) => String(type?.id || ''))
-    await resetStockGate([...typeIds(change.before), ...typeIds(change.after)])
+    await resetStockGate([...typeIds(change.before), ...typeIds(change.after)], { throwOnError: true })
   })
 
 // Marks every limited type with nothing left as sold out at its stock and

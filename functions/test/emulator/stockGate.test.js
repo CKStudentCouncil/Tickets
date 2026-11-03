@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
 import { hasRedisServer, startUpstash } from '../redis/upstash.js'
 import {
-  admitToStock, gateKey, gateSlack, giveBackToStock, holdKey, resetStockGate, seedStockGate
+  COUNT_TTL_S, admitToStock, gateKey, gateSlack, giveBackToStock, holdKey, resetStockGate, seedStockGate
 } from '../../lib/stockGate.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
@@ -67,7 +67,9 @@ beforeEach(async () => {
 
 describe('stock gate', () => {
   test('lets checkouts through while it has no count, and says which types lack one', async () => {
-    assert.deepEqual(await admitToStock('req-a', { small: 1, open: 2 }), { admitted: true, holdId: 'req-a', missing: ['small', 'open'] })
+    assert.deepEqual(await admitToStock('req-a', { small: 1, open: 2 }), {
+      admitted: true, holdId: 'req-a', missing: ['small', 'open'], generations: { small: 0, open: 0 }
+    })
   })
 
   test('takes from the counts until they run out, then turns checkouts away without taking', async () => {
@@ -114,6 +116,34 @@ describe('stock gate', () => {
     await upstash.redis.call(['SET', gateKey('small'), 1])
     await seedStockGate([{ id: 'small', left: 100 }])
     assert.equal(await left('small'), 1)
+  })
+
+  test('sets a count that expires soon, so whatever it drifted by does not last', async () => {
+    await seedStockGate([{ id: 'small', left: 3 }])
+    const ttl = await upstash.redis.call(['TTL', gateKey('small')])
+    assert.ok(ttl > 0 && ttl <= COUNT_TTL_S, `TTL ${ttl}`)
+  })
+
+  test('does not set a count from a look taken before the type was reset', async () => {
+    const before = await admitToStock('req-a', { small: 1 })
+    // e.g. an order deleted while this checkout was reading the shards
+    await resetStockGate(['small'])
+    await seedStockGate([{ id: 'small', left: 0, generation: before.generations.small }])
+    assert.equal(await left('small'), null)
+
+    // a checkout let through after the reset sets it
+    const after = await admitToStock('req-b', { small: 1 })
+    assert.notEqual(after.generations.small, before.generations.small)
+    await seedStockGate([{ id: 'small', left: 1, generation: after.generations.small }])
+    assert.equal(await left('small'), 1 + gateSlack(1))
+  })
+
+  test('a reset that cannot reach Redis throws when asked to, but never while the gate is not set up', async () => {
+    setEnv({ UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:9' })
+    await assert.doesNotReject(resetStockGate(['small']))
+    await assert.rejects(resetStockGate(['small'], { throwOnError: true }), /reset failed/)
+    setEnv({ UPSTASH_REDIS_REST_URL: 'placeholder' })
+    await assert.doesNotReject(resetStockGate(['small'], { throwOnError: true }))
   })
 
   test('is skipped when off, not set up or unreachable, but still resets while off', async () => {
@@ -187,6 +217,43 @@ describe('createOrder with the stock gate', () => {
       { code: 'failed-precondition' }
     )
     assert.equal(await left('small'), 8)
+  })
+
+  test('a checkout let through that ends with "try again" gives its numbers back', async () => {
+    await upstash.redis.call(['SET', gateKey('small'), 10])
+    // siteverify cannot be reached: the checkout fails with unavailable
+    setEnv({ ENFORCE_TURNSTILE: 'true', TURNSTILE_SECRET: 'test-secret', TURNSTILE_HOSTNAMES: 'tickets.cksc.tw' })
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (url, options) =>
+      String(url).startsWith('https://challenges.cloudflare.com/')
+        ? Promise.reject(new Error('unreachable'))
+        : realFetch(url, options)
+    try {
+      const payload = { ...order([{ id: 'small', quantity: 2 }], 'req-busy-0123456789'), turnstileToken: 'token' }
+      await assert.rejects(callCreate(payload, as('h@example.com')), { code: 'unavailable' })
+    } finally {
+      globalThis.fetch = realFetch
+      setEnv({ ENFORCE_TURNSTILE: 'false' })
+    }
+    assert.equal(await left('small'), 10)
+    assert.equal(await upstash.redis.call(['EXISTS', holdKey('req-busy-0123456789')]), 0)
+  })
+
+  test('a release that cannot reach Redis fails, so the trigger is retried', async () => {
+    const { id } = await callCreate(order([{ id: 'small', quantity: 1 }], 'req-retry-0123456789'), as('i@example.com'))
+    const snap = await db.doc(`orders/${id}`).get()
+    await db.doc(`orders/${id}`).delete()
+
+    setEnv({ UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:9' })
+    await assert.rejects(callRelease(snap, { params: { orderId: id } }), /reset failed/)
+    assert.equal(await soldOf('small'), 0, 'the tickets are back even so')
+
+    // the retry finds the release done and only resets the gate
+    gateOn()
+    await upstash.redis.call(['SET', gateKey('small'), 0])
+    await callRelease(snap, { params: { orderId: id } })
+    assert.equal(await soldOf('small'), 0)
+    assert.equal(await left('small'), null)
   })
 
   test('deleting an order drops the count, so its tickets can be sold again', async () => {
