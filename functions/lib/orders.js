@@ -26,10 +26,11 @@ import {
   planShards,
   sanitizeOrderInput
 } from './orderValidation.js'
-import { CREATE_ORDER_MIN_INSTANCES, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
+import { CREATE_ORDER_MIN_INSTANCES, ORDER_LIMIT_PER_ACCOUNT, STOCK_GATE } from './params.js'
 import { CHECKOUT_ACTION, TURNSTILE_SECRET, checkTurnstile } from './turnstile.js'
 import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
 import { STOCK_GATE_SECRETS, admitToStock, giveBackToStock, resetStockGate, seedStockGate } from './stockGate.js'
+import { gateOutcome, withCheckoutLog } from './checkoutLog.js'
 
 const ORDER_ID_ATTEMPTS = 3
 // Tries at the stock before giving up, each after a fresh look at the shards:
@@ -395,6 +396,8 @@ function toHttpsError(error) {
 // 2nd gen, so one instance serves many checkouts at once: a 1st gen instance
 // takes one request at a time, and a sale opening would start one per buyer.
 // `context` is the callable request (auth and rawRequest as in 1st gen).
+// Every call writes one log line of how it ended and where the time went
+// (lib/checkoutLog.js), for the sale opening's dashboard.
 export const createOrder = onCall(
   {
     region: REGION,
@@ -404,7 +407,7 @@ export const createOrder = onCall(
     minInstances: CREATE_ORDER_MIN_INSTANCES,
     secrets: [TURNSTILE_SECRET, ...STOCK_GATE_SECRETS]
   },
-  async (context) => {
+  withCheckoutLog(async (context, log) => {
     const { data } = context
     const account = getBuyerAccount(context)
 
@@ -441,7 +444,7 @@ export const createOrder = onCall(
     const buyerRef = db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`)
     const legacyRefs = ticketTypeIds.map(legacyRef)
     const seed = new Set()
-    const choose = () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed })
+    const choose = () => log.time('lookMs', () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed }))
     let idAttempt = 1
     let stockAttempt = 1
     let admission = null
@@ -452,10 +455,12 @@ export const createOrder = onCall(
       // count against the rate limit. Turned away by the gate, a checkout
       // reads no stock at all.
       const [checks, look] = await Promise.allSettled([
-        Promise.all([assertTurnstile(data, context, account, requestId), assertShopOpen(account)])
-          .then(() => enforceAccountLimit(account)),
-        admitToStock(requestId, Object.fromEntries(quantities)).then((answer) => {
+        log.time('checksMs', () =>
+          Promise.all([assertTurnstile(data, context, account, requestId), assertShopOpen(account)])
+            .then(() => enforceAccountLimit(account))),
+        log.time('gateMs', () => admitToStock(requestId, Object.fromEntries(quantities))).then((answer) => {
           admission = answer
+          log.set({ gate: gateOutcome(answer, STOCK_GATE.value()) })
           if (answer && !answer.admitted) throw gateSoldOutError()
           answer?.missing.forEach((id) => seed.add(id))
           return choose()
@@ -471,7 +476,8 @@ export const createOrder = onCall(
 
         try {
           const maxAttempts = stockAttempt <= FAST_STOCK_ATTEMPTS ? 1 : LATE_TX_ATTEMPTS
-          const result = await db.runTransaction(async (tx) => {
+          log.count('txAttempts')
+          const result = await log.time('txMs', () => db.runTransaction(async (tx) => {
             const refs = [settingsRef, buyerRef, orderRef, ...(requestRef ? [requestRef] : []), ...legacyRefs]
             const snaps = await tx.getAll(...refs)
             const [settingsSnap, buyerSnap, orderSnap] = snaps
@@ -578,7 +584,7 @@ export const createOrder = onCall(
             }
 
             return { status: 201, id: orderRef.id }
-          }, { maxAttempts })
+          }, { maxAttempts }))
 
           if (result.status === 201) await markSoldOut(stockLook?.emptied || [])
           return result
@@ -593,11 +599,14 @@ export const createOrder = onCall(
           }
           // others took those shards: back off a random while that grows with
           // each loss, so the losers do not all come back at once, then look again
-          if (stockAttempt <= FAST_STOCK_ATTEMPTS) await sleep(randomInt(FAST_RETRY_MS * 2 ** stockAttempt))
+          if (stockAttempt <= FAST_STOCK_ATTEMPTS) {
+            await log.time('backoffMs', () => sleep(randomInt(FAST_RETRY_MS * 2 ** stockAttempt)))
+          }
           stockLook = await choose()
         }
       }
     } catch (error) {
+      log.fail(error)
       if (requestRef && error instanceof HttpsError && DEFINITE_ORDER_ERRORS.has(error.code)) {
         let outcome
         try {
@@ -615,7 +624,7 @@ export const createOrder = onCall(
       await giveBack(admission, error)
       throw toHttpsError(error)
     }
-  }
+  })
 )
 
 // A checkout the stock gate let through gives its tickets back when it will
