@@ -21,6 +21,12 @@ export const SES_RECIPIENTS_PER_SECOND = defineInt('SES_RECIPIENTS_PER_SECOND', 
 // set, otherwise every order and survey answer is rejected.
 export const ENFORCE_TURNSTILE = defineBoolean('ENFORCE_TURNSTILE', { default: false })
 
+// Let createOrder turn buyers away by a count of tickets left kept in Redis
+// (Upstash) before it reads the stock in Firestore (see lib/stockGate.js).
+// Needs the UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN secrets; off,
+// or when Redis cannot be reached, checkouts work as without it.
+export const STOCK_GATE = defineBoolean('STOCK_GATE', { default: false })
+
 // Comma-separated hostnames of the site whose Turnstile tokens createOrder
 // accepts. Never add localhost here: the production functions would then take
 // tokens solved on any developer's machine.

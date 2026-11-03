@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { db, HttpsError } from './common.js'
 import { MAX_SELLER_TICKETS, REGION } from './constants.js'
 import { TICKET_TYPE_ID_PATTERN, isValidRequestId } from './orderValidation.js'
+import { STOCK_GATE_SECRETS, resetStockGate } from './stockGate.js'
 import {
   clearSoldOut,
   getBuyerAccount,
@@ -155,10 +156,11 @@ export const registerSellerTickets = functions
 
 // When an admin deletes a registration, give its tickets back to the stock
 // and take them off the shared total. The marker document makes this safe if
-// the trigger is delivered more than once.
+// the trigger is delivered more than once. The stock gate then counts those
+// types again from the shards.
 export const releaseSellerStock = functions
   .region(REGION)
-  .runWith({ failurePolicy: true })
+  .runWith({ failurePolicy: true, secrets: STOCK_GATE_SECRETS })
   .firestore.document('sellerRegistrations/{registrationId}')
   .onDelete(async (snap, context) => {
     const registration = snap.data() || {}
@@ -188,4 +190,5 @@ export const releaseSellerStock = functions
       )
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
+    await resetStockGate(Object.keys(registration.stockShards || {}))
   })

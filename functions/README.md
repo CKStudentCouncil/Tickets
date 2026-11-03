@@ -77,6 +77,18 @@ Deleting a sharded order invalidates its type's stored caps in the same release 
 
 Moving `createOrder` to 2nd gen: Firebase cannot change a deployed function from 1st to 2nd gen in place, so delete the old one first, when no sale is open (checkouts fail until the deploy finishes): `firebase functions:delete createOrder --region asia-east1`, then `firebase deploy --only functions`. The site calls it by name, so the frontend needs no change.
 
+### Stock gate (Redis, optional)
+
+With `STOCK_GATE=true`, `createOrder` first takes the tickets from a count kept in Redis ([Upstash](https://upstash.com), through its REST API), in one atomic call, before it reads anything of the stock in Firestore. When far more buyers arrive than there are tickets, those the count turns away get 售完 at once, without each reading every shard and fighting over them; only about as many checkouts as there are tickets reach the shards. The code is [lib/stockGate.js](lib/stockGate.js).
+
+- The shards stay the only count that decides a sale: the gate can turn buyers away, never sell. So that it does not turn them away while tickets remain, its count is kept above what the shards show is left (5%, at least 10).
+- Each type's count is set from the shards by the first checkout that finds it missing, and dropped whenever tickets come back or the stock may have changed: an order or a 賣二 registration deleted (`releaseOrderStock`, `releaseSellerStock`) or the ticket types saved (`planStockShards`). Counts also expire after 6 hours.
+- A checkout's retries (same `requestId`) are let through again without taking more, for 15 minutes. A checkout rejected for any reason but lack of stock gives its tickets back; one turned away for lack of stock does not, so the extra numbers above what is left run out once the type is sold out.
+- When the gate is off, not set up, cannot be reached or takes over 0.8 s, checkouts go on to the shards as without it. Turning it on or off needs no data change; save the ticket types afterwards to start from fresh counts.
+- If the storefront says 售完 while the shards still have tickets (counts lost to checkouts that gave up), save the ticket types: the counts are set again from the shards.
+
+Setting it up: create a Redis database on Upstash in the region closest to `asia-east1` (Tokyo, `ap-northeast-1`), then set its REST URL and token as the secrets below and `STOCK_GATE=true` in `functions/.env`, and deploy.
+
 Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open. Until every instance runs the new code, old instances count only the legacy counter and new ones only the shards, so neither sees the other's sales. After deploying, save the ticket types once on the management page so `planStockShards` plans the caps before the sale opens. Do not roll back to a version without the shards once orders have `stockShards`: its `releaseOrderStock` would refund them to the legacy counter.
 
 ## Settings (`functions/.env`)
@@ -88,6 +100,7 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, shared across every email source; BCC batches count the council To recipient too |
 | `ENFORCE_TURNSTILE` | `false` | Reject `createOrder`, `submitSurvey` and `submitPartySurvey` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Comma-separated site hostnames whose tokens are accepted. Never add `localhost` |
+| `STOCK_GATE` | `false` | Let `createOrder` turn buyers away by a ticket count in Redis before reading the stock (see Stock gate above). Needs the Upstash secrets |
 
 Change a value and redeploy the functions.
 
@@ -107,6 +120,13 @@ The sender is `no-reply@tickets.cksc.tw`, which must be allowed by the SES IAM p
 
 ```bash
 firebase functions:secrets:set TURNSTILE_SECRET
+```
+
+`createOrder`, `releaseOrderStock`, `releaseSellerStock` and `planStockShards` need the Upstash database's REST URL and token for the stock gate, even while `STOCK_GATE` is off (a deploy fails while they are missing; any value that is not an `https://` URL, e.g. `none`, leaves the gate off):
+
+```bash
+firebase functions:secrets:set UPSTASH_REDIS_REST_URL
+firebase functions:secrets:set UPSTASH_REDIS_REST_TOKEN
 ```
 
 Turnstile tokens are single-use, but the site retries a busy checkout with the same token and `requestId` (see checkout recovery below). A passed check is therefore remembered in `turnstilePasses/{requestId}` for 10 minutes, so the retry is let through while the same token on another checkout is not.
