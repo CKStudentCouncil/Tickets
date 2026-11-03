@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https'
+import * as functions from 'firebase-functions/v1'
 import { Timestamp } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
@@ -102,13 +102,13 @@ function requireOverrideReason(data) {
   return data.overrideReason.trim()
 }
 
-export const updateOrderDelivery = onCall({ region: REGION }, ({ data, ...context }) =>
+export const updateOrderDelivery = functions.region(REGION).https.onCall((data, context) =>
   changeStatus(data, context, {
     field: 'delivered', expectedField: 'expectedDelivered', prefix: 'delivery', minRole: 'manager', verify: verifyDelivery
   })
 )
 
-export const updateOrderPayment = onCall({ region: REGION }, ({ data, ...context }) =>
+export const updateOrderPayment = functions.region(REGION).https.onCall((data, context) =>
   changeStatus(data, context, {
     field: 'paid', expectedField: 'expectedPaid', prefix: 'payment', minRole: 'admin'
   })

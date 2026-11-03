@@ -1,13 +1,13 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { PROJECT_ID, db, fft, isEmulator, wrapCallable } from './setup.js'
+import { PROJECT_ID, db, fft, isEmulator } from './setup.js'
 import { updateOrderDelivery, updateOrderPayment } from '../../lib/orderActions.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const deliver = wrapCallable(updateOrderDelivery)
-const pay = wrapCallable(updateOrderPayment)
+const deliver = fft.wrap(updateOrderDelivery)
+const pay = fft.wrap(updateOrderPayment)
 const ORDER_ID = 'CKS20261105ABC234'
 const TICKET_CODE = 'valid-code-12'
 const ref = () => db.doc(`orders/${ORDER_ID}`)

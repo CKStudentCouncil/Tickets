@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https'
+import * as functions from 'firebase-functions/v1'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
 
@@ -384,10 +384,10 @@ function failureMessage(state) {
 
 // Retry with the same purgeId (without orderIds) to resume an interrupted
 // run. Returns its progress; `running` when another call is still on it.
-export const purgeOrders = onCall(
-  // one purge at a time per instance, as in 1st gen: it holds many orders in memory
-  { region: REGION, timeoutSeconds: 540, memory: '1GiB', concurrency: 1 },
-  async ({ data, ...context }) => {
+export const purgeOrders = functions
+  .region(REGION)
+  .runWith({ timeoutSeconds: 540, memory: '1GB' })
+  .https.onCall(async (data, context) => {
     await assertRole(context, 'super_admin')
     const profile = (await db.doc(`users/${context.auth.uid}`).get()).data() || {}
     const actor = { uid: context.auth.uid, name: staffName(profile, context) }
@@ -419,5 +419,4 @@ export const purgeOrders = onCall(
       }).catch((updateError) => console.error('[purgeOrders] could not record the failure:', updateError))
       throw new HttpsError('aborted', state.error.message, progressOf(input.purgeId, state))
     }
-  }
-)
+  })

@@ -3,13 +3,13 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator, wrapCallable, wrapTrigger } from './setup.js'
+import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callRegister = wrapCallable(functions.registerStreetSale)
-const callRelease = wrapTrigger(functions.releaseOrderStock)
-const callConfirm = wrapTrigger(functions.sendOrderQRCode)
+const callRegister = fft.wrap(functions.registerStreetSale)
+const callRelease = fft.wrap(functions.releaseOrderStock)
+const callConfirm = fft.wrap(functions.sendOrderQRCode)
 
 const TICKET_TYPES = [
   // on sale later: 路宣 may sell before the online sale opens

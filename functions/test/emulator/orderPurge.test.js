@@ -4,16 +4,18 @@ import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Timestamp } from 'firebase-admin/firestore'
 
-import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator, wrapCallable, wrapTrigger } from './setup.js'
+import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
 import { getBuyerKey } from '../../lib/orderValidation.js'
 import { getTaiwanYear } from '../../lib/time.js'
 import { PURGE_CONFIRM_PHRASE } from '../../lib/orderPurge.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callPurge = wrapCallable(functions.purgeOrders)
-const callCreate = wrapCallable(functions.createOrder)
-const callRelease = wrapTrigger(functions.releaseOrderStock)
+const callPurge = fft.wrap(functions.purgeOrders)
+// createOrder is a 2nd gen callable: one request carries the data and the auth
+const wrappedCreate = fft.wrap(functions.createOrder)
+const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
+const callRelease = fft.wrap(functions.releaseOrderStock)
 
 const TICKET_TYPES = [
   { id: 'open', name: '一階票', price: 900, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 300, purchaseLimitPerPerson: 4 },
@@ -87,7 +89,7 @@ describe('purgeOrders', () => {
     // the buyer can buy the full allowance again
     await assert.doesNotReject(buy('a@example.com', [{ id: 'open', quantity: 4 }]))
     // the deletion trigger finds the release marker and gives nothing back twice
-    await callRelease(deletedA, { params: { orderId: a.id } })
+    await callRelease(deletedA, { params: { orderId: a.id }, eventId: 'purged-a' })
     assert.equal(await soldOf('open'), 6)
 
     const archived = await archivedOf(THIS_YEAR, a.id)
@@ -217,7 +219,7 @@ describe('purgeOrders', () => {
     // an admin deletes b on its own meanwhile
     const deletedB = await db.doc(`orders/${b.id}`).get()
     await db.doc(`orders/${b.id}`).delete()
-    await callRelease(deletedB, { params: { orderId: b.id } })
+    await callRelease(deletedB, { params: { orderId: b.id }, eventId: 'admin-deleted-b' })
 
     const result = await callPurge(resume(purgeId), as(SUPER))
 

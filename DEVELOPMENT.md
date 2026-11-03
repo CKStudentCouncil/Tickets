@@ -178,7 +178,7 @@ Update both sides of these shared values together:
 
 ## Backend settings and email
 
-The backend uses Cloud Functions 2nd gen (`firebase-functions/v2/*`), Node.js 22, and region `asia-east1`, so that one instance serves many checkouts at once. Moving a deployed project from 1st gen means deleting every function first; see the steps in `functions/README.md`.
+The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-east1`; `createOrder` is a 2nd gen function so that one instance serves many checkouts at once.
 
 `functions/.env` is intentionally tracked for non-secret deploy-time settings. Definitions and defaults are in [functions/lib/params.js](functions/lib/params.js):
 

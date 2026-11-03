@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https'
+import * as functions from 'firebase-functions/v1'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { db, HttpsError, assertRole } from './common.js'
 import { REGION, SCHOOL_CODES, STREET_SCHOOL } from './constants.js'
@@ -216,7 +216,7 @@ async function progressOf(ref) {
 
 // Preparation freezes recipients and message; the caller confirms this count
 // before sendOrderNotification puts its deterministic batches in the queue.
-export const prepareOrderNotification = onCall({ region: REGION }, async ({ data, ...context }) => {
+export const prepareOrderNotification = functions.region(REGION).https.onCall(async (data, context) => {
   await assertRole(context, 'manager')
   const type = NOTIFY_TYPES.includes(data?.type) ? data.type : 'payment'
   const filters = readRecipientFilters(data, type)
@@ -248,9 +248,8 @@ export const prepareOrderNotification = onCall({ region: REGION }, async ({ data
 // Retry this callable with the same jobId after an enqueue interruption.
 // Existing accepted, failed, or uncertain batches are never reset or resent.
 // No SES call occurs here; all mail shares one leased and paced worker.
-export const sendOrderNotification = onCall(
-  { region: REGION, timeoutSeconds: 120 },
-  async ({ data, ...context }) => {
+export const sendOrderNotification = functions.region(REGION).runWith({ timeoutSeconds: 120 })
+  .https.onCall(async (data, context) => {
     await assertRole(context, 'manager')
     const ref = notificationRef(data)
     const job = await db.runTransaction(async (tx) => {
@@ -294,10 +293,9 @@ export const sendOrderNotification = onCall(
       }
     }
     return progressOf(ref)
-  }
-)
+  })
 
-export const getOrderNotificationStatus = onCall({ region: REGION }, async ({ data, ...context }) => {
+export const getOrderNotificationStatus = functions.region(REGION).https.onCall(async (data, context) => {
   await assertRole(context, 'manager')
   return progressOf(notificationRef(data))
 })

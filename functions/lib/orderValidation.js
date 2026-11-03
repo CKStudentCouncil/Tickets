@@ -1,6 +1,6 @@
 // Pure order validation used by createOrder (unit-tested in test/).
 import { createHash, randomInt } from 'node:crypto'
-import { HttpsError } from 'firebase-functions/v2/https'
+import { https } from 'firebase-functions/v1'
 
 import {
   SCHOOL_CODES,
@@ -12,6 +12,7 @@ import {
 } from './constants.js'
 import { parseTaipeiDateTime } from './time.js'
 
+const { HttpsError } = https
 
 export const MAX_TICKETS_PER_ORDER = 20
 

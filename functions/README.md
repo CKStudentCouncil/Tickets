@@ -1,6 +1,6 @@
 # Cloud Functions
 
-Backend for the CK Party Night ticket system (Cloud Functions 2nd gen, imported from `firebase-functions/v2/*`, Node 22, region `asia-east1`, the same location as the Firestore database, which the Firestore triggers require). An instance serves up to 80 requests at once, so a sale opening needs a few instances rather than one per buyer; the functions that hold a whole image, file or batch of orders in memory (`uploadLineupImage`, `importSalesArchive`, `purgeOrders`) and the mail worker take one at a time. Callable handlers read `({ data, ...context })`: the request's `auth` and `rawRequest` are what the 1st gen `context` had.
+Backend for the CK Party Night ticket system (Firebase Functions v1 API, imported from `firebase-functions/v1`, Node 22, region `asia-east1`). `createOrder` alone is a 2nd gen function (`firebase-functions/v2/https`), so one instance serves many checkouts at once.
 
 ## Layout
 
@@ -75,14 +75,7 @@ Deleting a sharded order invalidates its type's stored caps in the same release 
 
 `SHARD_COUNT` (`lib/orderValidation.js`) may be raised but never lowered once tickets have been sold, even between sales: the dropped shards keep their sales but are no longer read, so those tickets would be sold again. Raise it only when no sale is open (instances on the old and new count would keep planning the caps over each other), then save the ticket types once on the management page so `planStockShards` plans the caps for the new count before the sale opens.
 
-Moving from 1st to 2nd gen (once): Firebase cannot change a deployed function's generation in place, so every function is deleted and deployed again. Do it when no sale is open and no staff are working: until the deploy finishes nothing can be ordered or managed, and an order deleted in between does not give its tickets back (its trigger is gone).
-
-1. `firebase functions:delete claimOfficerInvite createOfficerInvite createOrder deleteLineupImage getOrderNotificationStatus importSalesArchive planStockShards prepareOrderNotification processMailQueue purgeOrders registerSellerTickets registerStreetSale releaseOfficerQuota releaseOrderStock releaseSellerStock resendOrderEmail revokeOfficerInvite sendGuestInvitation sendOfficerTicket sendOrderNotification sendOrderQRCode submitPartySurvey submitSurvey updateOrderDelivery updateOrderPayment uploadLineupImage --region asia-east1 --force`
-2. `firebase deploy --only functions`. The first deploy of 2nd gen Firestore triggers can fail with an Eventarc permission error while Google sets up its service agent; wait a few minutes and deploy again.
-3. Save the ticket types once on the management page, so the caps are planned for the 50 shards.
-4. Check that `processMailQueue` shows a Cloud Scheduler job, and place a test order to see its email arrive.
-
-The site calls the functions by name, so the frontend needs no change.
+Moving `createOrder` to 2nd gen: Firebase cannot change a deployed function from 1st to 2nd gen in place, so delete the old one first, when no sale is open (checkouts fail until the deploy finishes): `firebase functions:delete createOrder --region asia-east1`, then `firebase deploy --only functions`. The site calls it by name, so the frontend needs no change.
 
 Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open. Until every instance runs the new code, old instances count only the legacy counter and new ones only the shards, so neither sees the other's sales. After deploying, save the ticket types once on the management page so `planStockShards` plans the caps before the sale opens. Do not roll back to a version without the shards once orders have `stockShards`: its `releaseOrderStock` would refund them to the legacy counter.
 

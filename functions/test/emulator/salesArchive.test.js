@@ -3,11 +3,11 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { PROJECT_ID, db, fft, functions, isEmulator, wrapCallable } from './setup.js'
+import { PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callImport = wrapCallable(functions.importSalesArchive)
+const callImport = fft.wrap(functions.importSalesArchive)
 
 const SUPER = { uid: 'super-uid', email: 'super@example.com' }
 const ADMIN = { uid: 'admin-uid', email: 'admin@example.com' }

@@ -1,5 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https'
-import { onDocumentDeleted } from 'firebase-functions/v2/firestore'
+import * as functions from 'firebase-functions/v1'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
 
@@ -217,9 +216,9 @@ const newTicketCode = () => randomBytes(9).toString('base64url')
 
 // Super admins send a ticket by name and email, outside any quota. A
 // retried call with the same requestId returns the same order.
-export const sendGuestInvitation = onCall(
-  { region: REGION },
-  async ({ data, ...context }) => {
+export const sendGuestInvitation = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
     await assertRole(context, 'super_admin')
     const { requestId, quantity, guest } = sanitizeGuestInput(data)
 
@@ -243,15 +242,14 @@ export const sendGuestInvitation = onCall(
       })
       return { id: orderRef.id }
     })
-  }
-)
+  })
 
 // An officer sends a ticket by name and email from their quota. Unless
 // `allowDuplicate`, an email that already has a 公關票 is refused with
 // already-exists and details { duplicate: true }, so the page can ask first.
-export const sendOfficerTicket = onCall(
-  { region: REGION },
-  async ({ data, ...context }) => {
+export const sendOfficerTicket = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
     const officer = await getOfficer(context)
     const { requestId, quantity, guest } = sanitizeGuestInput(data)
     const allowDuplicate = data?.allowDuplicate === true
@@ -289,16 +287,15 @@ export const sendOfficerTicket = onCall(
       tx.update(officerRef(officer.email), { used: FieldValue.increment(quantity) })
       return { id: orderRef.id }
     })
-  }
-)
+  })
 
 // An officer makes a one-time invite link for `quantity` tickets; they come
 // off the quota now and go back if the link is revoked before it is used.
 // With `council`, a super admin makes one in the council's name, outside any
 // quota. An optional `note` says who it is for.
-export const createOfficerInvite = onCall(
-  { region: REGION },
-  async ({ data, ...context }) => {
+export const createOfficerInvite = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
     const { requestId, quantity, note, council } = sanitizeInviteInput(data)
     let officer = null
     if (council) await assertRole(context, 'super_admin')
@@ -348,15 +345,14 @@ export const createOfficerInvite = onCall(
       console.error('[createOfficerInvite] unexpected error:', error)
       throw new HttpsError('internal', '產生連結失敗，請稍後再試')
     }
-  }
-)
+  })
 
 // The officer who made it, or a super admin, revokes an unclaimed link; its
 // tickets go back to the quota, and its note goes with it. Revoking one
 // already gone is a no-op.
-export const revokeOfficerInvite = onCall(
-  { region: REGION },
-  async ({ data, ...context }) => {
+export const revokeOfficerInvite = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
     const account = getBuyerAccount(context)
     const inviteId = sanitizeInviteId(data)
     const ref = inviteRef(inviteId)
@@ -386,15 +382,14 @@ export const revokeOfficerInvite = onCall(
       console.error('[revokeOfficerInvite] unexpected error:', error)
       throw new HttpsError('internal', '撤銷失敗，請稍後再試')
     }
-  }
-)
+  })
 
 // A guest opens the link, signs in and claims it: the ticket goes to their
 // account email and they own the order. Claiming again from the same
 // account returns the same ticket.
-export const claimOfficerInvite = onCall(
-  { region: REGION },
-  async ({ data, ...context }) => {
+export const claimOfficerInvite = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
     const account = getBuyerAccount(context)
     const { inviteId, name } = sanitizeClaimInput(data)
     const ref = inviteRef(inviteId)
@@ -431,19 +426,20 @@ export const claimOfficerInvite = onCall(
       })
       return { id: orderRef.id }
     })
-  }
-)
+  })
 
 // When an officer's ticket is deleted (by an admin or purgeOrders), its
 // tickets go back to that officer's quota, once (not to a later entry for
 // the same email).
-export const releaseOfficerQuota = onDocumentDeleted(
-  { document: 'orders/{orderId}', region: REGION, retry: true }, // retried on failure; its marker makes it a no-op once done
-  async ({ data: snap, params }) => {
+export const releaseOfficerQuota = functions
+  .region(REGION)
+  .runWith({ failurePolicy: true }) // retried on failure; its marker makes it a no-op once done
+  .firestore.document('orders/{orderId}')
+  .onDelete(async (snap, context) => {
     const order = snap.data()
     if (order.complimentary !== true || typeof order.officerEmail !== 'string' || !order.officerEmail) return
 
-    const marker = releaseRef(params.orderId)
+    const marker = releaseRef(context.params.orderId)
     const officer = officerRef(order.officerEmail)
     await db.runTransaction(async (tx) => {
       const [released, officerSnap] = await tx.getAll(marker, officer)
@@ -453,5 +449,4 @@ export const releaseOfficerQuota = onDocumentDeleted(
       }
       tx.create(marker, { officerEmail: order.officerEmail, createdAt: FieldValue.serverTimestamp() })
     })
-  }
-)
+  })

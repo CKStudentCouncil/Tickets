@@ -26,19 +26,6 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 })
 
 export const fft = functionsTest({ projectId: PROJECT_ID })
-
-// The functions are 2nd gen: a callable takes one request ({ data, auth })
-// and a Firestore trigger one event ({ data, params }). These keep the tests'
-// calls in the 1st gen shape: callable(data, { auth }) and
-// trigger(snapshotOrChange, { params }).
-export function wrapCallable(fn) {
-  const wrapped = fft.wrap(fn)
-  return (data, context = {}) => wrapped({ data, ...context })
-}
-export function wrapTrigger(fn) {
-  const wrapped = fft.wrap(fn)
-  return (data, { params = {} } = {}) => wrapped({ data, params })
-}
 export const functions = await import('../../index.js')
 export const { db } = await import('../../lib/common.js')
 

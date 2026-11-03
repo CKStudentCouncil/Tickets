@@ -3,14 +3,16 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator, wrapCallable, wrapTrigger } from './setup.js'
+import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
 import { getBuyerKey } from '../../lib/orderValidation.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callCreate = wrapCallable(functions.createOrder)
-const callRelease = wrapTrigger(functions.releaseOrderStock)
-const callPlan = wrapTrigger(functions.planStockShards)
+// createOrder is a 2nd gen callable: one request carries the data and the auth
+const wrappedCreate = fft.wrap(functions.createOrder)
+const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
+const callRelease = fft.wrap(functions.releaseOrderStock)
+const callPlan = fft.wrap(functions.planStockShards)
 
 const TICKET_TYPES = [
   { id: 'open', name: '一階票', price: 900, eligibleBuyerIdentity: 'all_users', salesStartTime: iso(-HOUR), salesEndTime: iso(HOUR), totalTicketQuantity: 100, purchaseLimitPerPerson: 4 },
@@ -400,7 +402,7 @@ describe('createOrder', () => {
     const first = await callCreate(payload, account)
     const snap = await db.doc(`orders/${first.id}`).get()
     await snap.ref.delete()
-    await callRelease(snap, { params: { orderId: first.id } })
+    await callRelease(snap, { params: { orderId: first.id }, eventId: 'cancelled-checkout' })
 
     await assert.rejects(callCreate(payload, account), (error) => {
       assert.equal(error.code, 'not-found')
@@ -500,7 +502,7 @@ describe('releaseOrderStock', () => {
 
     const snap = await ref.get()
     await ref.delete()
-    await callRelease(snap, { params: { orderId: ref.id } })
+    await callRelease(snap, { params: { orderId: ref.id }, eventId: 'lowered-delete' })
     assert.equal(await soldOf('open'), 59)
     assert.equal((await db.doc('ticketSales/open').get()).data().shardCaps, undefined)
     await assert.rejects(callCreate(order([{ id: 'open', quantity: 1 }]), as('after-cancel@example.com')), { code: 'resource-exhausted' })
@@ -517,7 +519,7 @@ describe('releaseOrderStock', () => {
     })
     const remaining = await remainingRef.get()
     await remainingRef.delete()
-    await callRelease(remaining, { params: { orderId: remainingRef.id } })
+    await callRelease(remaining, { params: { orderId: remainingRef.id }, eventId: 'lowered-delete2' })
     assert.equal(await soldOf('open'), 49)
     await assert.doesNotReject(callCreate(order([{ id: 'open', quantity: 1 }]), as('actual-room@example.com')))
     assert.equal(await soldOf('open'), 50)
@@ -529,8 +531,8 @@ describe('releaseOrderStock', () => {
     const snap = await db.doc(`orders/${id}`).get()
     await db.doc(`orders/${id}`).delete()
 
-    await callRelease(snap, { params: { orderId: id } })
-    await callRelease(snap, { params: { orderId: id } }) // duplicate delivery
+    await callRelease(snap, { params: { orderId: id }, eventId: 'e1' })
+    await callRelease(snap, { params: { orderId: id }, eventId: 'e2' }) // duplicate delivery
 
     assert.equal(await soldOf('open'), 0)
 
@@ -545,7 +547,7 @@ describe('releaseOrderStock', () => {
 
     const snap = await db.doc(`orders/${id}`).get()
     await db.doc(`orders/${id}`).delete()
-    await callRelease(snap, { params: { orderId: id } })
+    await callRelease(snap, { params: { orderId: id }, eventId: 'e-soldout' })
     assert.equal((await soldOutMarks()).open, undefined)
   })
 
@@ -554,7 +556,7 @@ describe('releaseOrderStock', () => {
     const legacy = { items: [{ id: 'open', quantity: 2 }], customerEmail: 'old@example.com' }
     await db.doc('orders/CKS202601010001').set(legacy)
     const snap = await db.doc('orders/CKS202601010001').get()
-    await callRelease(snap, { params: { orderId: 'CKS202601010001' } })
+    await callRelease(snap, { params: { orderId: 'CKS202601010001' }, eventId: 'e3' })
     assert.equal((await db.doc('ticketSales/open').get()).data().sold, 2)
   })
 
@@ -563,7 +565,7 @@ describe('releaseOrderStock', () => {
     const legacy = { items: [{ id: 'open', quantity: 2 }], customerEmail: 'old@example.com', stockCounted: true }
     await db.doc('orders/CKS202601010002').set(legacy)
     const snap = await db.doc('orders/CKS202601010002').get()
-    await callRelease(snap, { params: { orderId: 'CKS202601010002' } })
+    await callRelease(snap, { params: { orderId: 'CKS202601010002' }, eventId: 'e4' })
     assert.equal((await db.doc('ticketSales/open').get()).data().sold, 0)
   })
 })
