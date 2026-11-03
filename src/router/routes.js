@@ -176,7 +176,7 @@ const routes = [
           requiresAdmin: true
         }
       },
-      {
+      /*{
         // 路宣登記: tickets sold for cash on the street, handed over as paper
         // tickets at once; the totals are on /super_admin/street (路宣管理)
         path: 'street',
@@ -185,7 +185,7 @@ const routes = [
         meta: {
           requiresAdmin: true
         }
-      },
+      },*/
       {
         path: 'survey',
         name: 'admin-survey',
@@ -227,13 +227,13 @@ const routes = [
         name: 'super-admin-guests',
         component: () => import('pages/GuestAdminPage.vue')
       },
-      {
+      /*{
         // 路宣管理: every street sale and its totals, each seller's cash, and
         // opening it
         path: 'street',
         name: 'super-admin-street',
         component: () => import('pages/StreetSaleAdminPage.vue')
-      }
+      }*/
     ]
   },
 
