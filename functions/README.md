@@ -17,6 +17,7 @@ functions/
 │   ├── mailer.js                # AWS SES transporter (loaded only when sending)
 │   ├── turnstile.js             # Cloudflare Turnstile siteverify check
 │   ├── orders.js                # checkout, stock release and confirmation enqueue
+│   ├── checkoutLog.js           # one structured log line per createOrder call (monitoring/)
 │   ├── orderActions.js          # atomic collection/payment updates and audit history
 │   ├── mailQueue.js             # message rendering and scheduled shared worker
 │   ├── mailQueueCore.js         # durable claims, rate reservation and outcomes
@@ -76,6 +77,8 @@ Stock is counted in 50 shard documents per ticket type, `ticketSales/{ticketType
 Deleting a sharded order invalidates its type's stored caps in the same release transaction. The next checkout recalculates them under locks, so lowering stock below existing sales cannot create room for new sales merely by deleting an order.
 
 `SHARD_COUNT` (`lib/orderValidation.js`) may be raised but never lowered once tickets have been sold, even between sales: the dropped shards keep their sales but are no longer read, so those tickets would be sold again. Raise it only when no sale is open (instances on the old and new count would keep planning the caps over each other), then save the ticket types once on the management page so `planStockShards` plans the caps for the new count before the sale opens.
+
+Every `createOrder` call writes one structured log line (`lib/checkoutLog.js`): its outcome, the code the buyer got, the stock gate's answer and how long each phase took. `monitoring/` turns these into log-based metrics, a Cloud Monitoring dashboard and alerts for watching a sale opening; see `monitoring/README.md`.
 
 Moving `createOrder` to 2nd gen: Firebase cannot change a deployed function from 1st to 2nd gen in place, so delete the old one first, when no sale is open (checkouts fail until the deploy finishes): `firebase functions:delete createOrder --region asia-east1`, then `firebase deploy --only functions`. The site calls it by name, so the frontend needs no change.
 
