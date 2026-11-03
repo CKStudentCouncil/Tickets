@@ -458,5 +458,24 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "orderRequests",
+      "fieldPath": "createdAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "buyerPurchases",
+      "fieldPath": "updatedAt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "turnstilePasses",
+      "fieldPath": "expiresAt",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
 }

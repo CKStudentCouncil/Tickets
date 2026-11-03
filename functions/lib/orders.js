@@ -398,7 +398,7 @@ function toHttpsError(error) {
 export const createOrder = onCall(
   {
     region: REGION,
-    concurrency: 80,
+    concurrency: 250,
     cpu: 1,
     timeoutSeconds: 60,
     minInstances: CREATE_ORDER_MIN_INSTANCES,
