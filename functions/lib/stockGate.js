@@ -48,6 +48,9 @@ export const COUNT_TTL_S = 60
 const GEN_TTL_S = 7 * 24 * 60 * 60
 // Past this the gate is skipped for this call: a checkout should not wait on it
 const TIMEOUT_MS = 800
+// Triggers are not waited on by buyers: their resets get longer (a cold start
+// can make the first call slow) before they fail and are retried
+const TRIGGER_TIMEOUT_MS = 5000
 
 // How far the gate stays above what is left. It covers tickets taken by
 // checkouts that were let through and then gave up without giving them back
@@ -137,7 +140,7 @@ async function command(args, label, { throwOnError = false, ...options } = {}) {
       method: 'POST',
       headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(args),
-      signal: AbortSignal.timeout(TIMEOUT_MS)
+      signal: AbortSignal.timeout(throwOnError ? TRIGGER_TIMEOUT_MS : TIMEOUT_MS)
     })
     const body = await response.json().catch(() => ({}))
     if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`)
