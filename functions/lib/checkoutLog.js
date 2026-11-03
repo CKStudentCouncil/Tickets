@@ -19,8 +19,7 @@
 //   coldStart      the first checkout this instance served
 //   inflight       checkouts this instance was serving when this one started
 //
-// No email, uid or order details: only the requestId, which the buyer's
-// browser also has, ties a line to a checkout.
+// No email, uid, requestId or order details: a line cannot be tied to a buyer.
 import { performance } from 'node:perf_hooks'
 import * as logger from 'firebase-functions/logger'
 
