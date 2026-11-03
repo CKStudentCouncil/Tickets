@@ -42,7 +42,7 @@
         </p>
 
         <p v-if="isCampusTicket" class="ticket-limit">
-          限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，入場時須出示學生證，資格不符者不得入場
+          限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，入場時須出示學生證，非建國中學在學學生不得使用該票券入場
         </p>
 
         <template v-if="studentOnlyUntil">
