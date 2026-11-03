@@ -27,17 +27,20 @@ export function createCheckoutRecovery({ storage, createId, now = () => new Date
 
   function get(uid) {
     const key = keyFor(uid)
+    let raw
     try {
-      const raw = storage.getItem(key)
-      if (!raw) return null
-      const pending = JSON.parse(raw)
-      if (!pending?.requestId || !pending?.payload || typeof pending.payload !== 'object') {
-        throw new Error('Invalid pending checkout')
-      }
-      return pending
+      raw = storage.getItem(key)
     } catch {
       throw recoveryError('checkout/storage-unavailable', '無法讀取待確認的訂單，請允許網站儲存資料後再試。')
     }
+    if (!raw) return null
+    let pending
+    try { pending = JSON.parse(raw) } catch { /* corrupt entry, discarded below */ }
+    if (pending?.requestId && pending?.payload && typeof pending.payload === 'object') return pending
+    // A corrupt or old-format entry has no request that could be replayed, so
+    // keeping it would only block every later checkout on this account.
+    try { storage.removeItem(key) } catch { /* nothing left to recover */ }
+    return null
   }
 
   function save(uid, pending) {

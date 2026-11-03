@@ -103,6 +103,8 @@
             </div>
           </section>
 
+          <TurnstileWidget v-if="TURNSTILE_SITE_KEY" ref="turnstile" v-model="turnstileToken" action="survey" />
+
           <button type="submit" class="primary-button" :disabled="submitting">
             {{ submitting ? '正在送出…' : '送出問卷' }}
           </button>
@@ -122,9 +124,10 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
-import { db } from 'src/boot/firebase'
 import { useToastStore } from 'src/stores/toast'
+import TurnstileWidget from 'src/components/TurnstileWidget.vue'
+import { TURNSTILE_SITE_KEY } from 'src/config/app'
+import { submitSurveyResponse } from 'src/services/surveyService'
 import {
   IDENTITY_OPTIONS,
   CHANNEL_OPTIONS,
@@ -145,6 +148,11 @@ const scaleSections = SCALE_SECTIONS
 
 const submitting = ref(false)
 const submitted = ref(false)
+const turnstile = ref(null)
+const turnstileToken = ref('')
+
+// errors whose message submitSurvey wrote for the person answering
+const KNOWN_ERRORS = ['functions/invalid-argument', 'functions/permission-denied', 'functions/unavailable']
 
 const form = reactive({
   identity: '',
@@ -182,23 +190,32 @@ async function handleSubmit() {
     toast.show(error)
     return
   }
+  if (TURNSTILE_SITE_KEY && !turnstileToken.value) {
+    toast.show('請先完成人機驗證，再送出問卷')
+    return
+  }
 
   submitting.value = true
   try {
-    await addDoc(collection(db, 'surveyResponses'), {
-      identity: form.identity,
-      channels: form.channels,
-      device: form.device,
-      scores: form.scores,
-      issueCount: form.issueCount,
-      issueTypes: hasIssue.value ? form.issueTypes : [],
-      improvement: form.improvement.trim(),
-      suggestion: form.suggestion.trim(),
-      createdAt: serverTimestamp()
-    })
+    await submitSurveyResponse(
+      {
+        identity: form.identity,
+        channels: form.channels,
+        device: form.device,
+        scores: form.scores,
+        issueCount: form.issueCount,
+        issueTypes: hasIssue.value ? form.issueTypes : [],
+        improvement: form.improvement.trim(),
+        suggestion: form.suggestion.trim()
+      },
+      turnstileToken.value
+    )
     submitted.value = true
-  } catch {
-    toast.show('送出失敗，請再試一次。')
+  } catch (error) {
+    console.error('Survey submit error:', error)
+    toast.show(KNOWN_ERRORS.includes(error?.code) ? error.message : '送出失敗，請再試一次。')
+    // a sent token is used up; solve a new one before trying again
+    turnstile.value?.reset()
   } finally {
     submitting.value = false
   }

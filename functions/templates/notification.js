@@ -13,6 +13,7 @@ import {
   cardFooter,
   actions
 } from './shared.js';
+import { generatePartySurveyInvitationHTML } from './partySurvey.js';
 import { SITE_URL } from '../lib/constants.js';
 
 const TYPE_LABELS = {
@@ -36,6 +37,8 @@ export function generateOrderNotificationHTML({
   location,
   message
 }) {
+  if (type === 'survey') return generatePartySurveyInvitationHTML();
+
   const knownType = TYPE_LABELS[type] ? type : 'payment';
   const label = TYPE_LABELS[knownType];
   const isCustom = knownType === 'custom';

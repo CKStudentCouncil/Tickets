@@ -9,6 +9,8 @@ import routes from './routes'
 import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { safeRedirect } from 'src/utils/redirect'
+import { prefetchStorefront } from 'src/services/ticketTypeService'
+import { SHOP_ALWAYS_OPEN } from 'src/config/app'
 
 export default defineRouter(function () {
   const createHistory = process.env.SERVER
@@ -27,9 +29,28 @@ export default defineRouter(function () {
     const authStore = useAuthStore()
     const shopStore = useShopStore()
 
+    // Download the page (and ask for the home page's tickets) while the
+    // checks below wait on Firestore, not after them. A lazy route component
+    // is a function returning import(), and the router's own call later
+    // gets the module already downloaded.
+    for (const record of to.matched) {
+      const component = record.components?.default
+      if (typeof component === 'function') {
+        const loading = component()
+        if (typeof loading?.catch === 'function') loading.catch(() => {})
+      }
+    }
+    if (to.name === 'home') prefetchStorefront()
+
+    // The sign-in state loads in the background. The home page needs it only
+    // to let staff past a closed shop, so while the shop is open for sure it
+    // shows at once (MainLayout.vue doesn't wait for it either).
+    const authReady = authStore.init()
+    if (to.meta.authOptional && SHOP_ALWAYS_OPEN) return true
+
     // load the opening time while the sign-in state resolves, not after
-    if (to.meta.shop) shopStore.init()
-    await authStore.init()
+    if (to.meta.shop && !SHOP_ALWAYS_OPEN) shopStore.init()
+    await authReady
 
     if (to.meta.isAdminSection) {
       if (!authStore.isLoggedIn) {
@@ -53,7 +74,7 @@ export default defineRouter(function () {
       return safeRedirect(to.query.redirect, authStore.isManager ? '/admin' : '/')
     }
 
-    if (to.meta.shop && !authStore.isManager) {
+    if (to.meta.shop && !SHOP_ALWAYS_OPEN && !authStore.isManager) {
       await shopStore.init()
 
       if (!shopStore.isOpen()) {

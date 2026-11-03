@@ -82,3 +82,14 @@ test('server terminal rejection resolves an uncertain checkout and permits chang
   const next = recovery.begin('buyer', { ...payload, customerName: '改正後姓名' })
   assert.notEqual(next.requestId, pending.requestId)
 })
+
+test('a corrupt or old-format pending entry is discarded instead of blocking checkout', () => {
+  for (const raw of ['{not json', JSON.stringify({ payload })]) {
+    const { make, storage } = fixture()
+    storage.setItem('cksc_pending_checkout_buyer', raw)
+    const recovery = make()
+    assert.equal(recovery.get('buyer'), null)
+    assert.equal(storage.getItem('cksc_pending_checkout_buyer'), null)
+    assert.equal(recovery.begin('buyer', payload).requestId, 'request-1')
+  }
+})

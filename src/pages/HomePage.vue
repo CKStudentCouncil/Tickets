@@ -2,27 +2,24 @@
   <div class="storefront">
     <section class="hero" aria-label="COSMOS 建中舞會">
       <div class="hero-art" aria-hidden="true">
-        <img src="/homepageposter.png" alt="" width="1076" height="1522" fetchpriority="high" />
+        <!-- resized copies of public/homepageposter.png (5008px, 7.7 MB), the
+             source kept for the email artwork -->
+        <picture>
+          <source
+            type="image/webp"
+            srcset="/hero-poster-720.webp 720w, /hero-poster-1080.webp 1080w, /hero-poster-1440.webp 1440w, /hero-poster-2000.webp 2000w"
+            sizes="100vw"
+          />
+          <img src="/hero-poster-1440.jpg" alt="" width="1076" height="1522" fetchpriority="high" />
+        </picture>
       </div>
       <div class="hero-content">
         <p class="hero-eyebrow" style="letter-spacing: 6px;">2026 · CK PARTY NIGHT</p><div style="margin-bottom: 2.5ch; " />
         <h1 id="cosmos-title" class="hero-title" aria-label="COSMOS" style="margin-bottom: 0ch;">
+          <!-- the poster's (public/poster.jpg) cream lettering, cut out beforehand
+               so the page doesn't load the whole poster for it -->
           <svg class="hero-wordmark" viewBox="124 1232 818 80" aria-hidden="true" focusable="false">
-            <defs>
-              <!-- Isolate the original cream lettering from the dark poster artwork. -->
-              <filter id="cosmos-lettering" color-interpolation-filters="sRGB">
-                <feColorMatrix type="matrix" values="
-                  1 0 0 0 0
-                  0 1 0 0 0
-                  0 0 1 0 0
-                  .2126 .7152 .0722 0 0
-                " />
-                <feComponentTransfer>
-                  <feFuncA type="linear" slope="8" intercept="-5.6" />
-                </feComponentTransfer>
-              </filter>
-            </defs>
-            <image href="/poster.jpg" width="1076" height="1522" filter="url(#cosmos-lettering)" />
+            <image href="/cosmos-wordmark.png" x="124" y="1232" width="818" height="80" />
           </svg>
         </h1>
         <div class="hero-actions">
@@ -107,7 +104,7 @@
 
           <div v-else class="ticket-state">
             <h3>目前尚無開放購買的票種</h3>
-            <p>票券資訊將於開放販售後顯示。</p>
+            <p>票券資訊將於開放販售後顯示</p>
           </div>
         </div>
       </div>
@@ -117,11 +114,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { fetchTicketTypes, getTicketStatus } from 'src/services/ticketTypeService'
+import { getTicketStatus, isTicketTypeListed, loadStorefront } from 'src/services/ticketTypeService'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
 import { useNow } from 'src/composables/useNow'
 
 const ticketTypes = ref([])
+const soldOut = ref({})
 const loadingTicketTypes = ref(true)
 const ticketTypesError = ref(false)
 const collectionSection = ref(null)
@@ -130,11 +128,11 @@ const collectionSection = ref(null)
 const now = useNow(10000)
 
 function statusOf(ticketType) {
-  return getTicketStatus(ticketType, now.value)
+  return getTicketStatus(ticketType, now.value, soldOut.value)
 }
 
 const availableTicketTypes = computed(() =>
-  ticketTypes.value.filter((ticketType) => statusOf(ticketType).state !== 'ended')
+  ticketTypes.value.filter((ticketType) => isTicketTypeListed(ticketType, now.value))
 )
 
 function scrollToCollection() {
@@ -147,11 +145,12 @@ async function loadTicketTypes() {
   ticketTypesError.value = false
 
   try {
-    ticketTypes.value = await fetchTicketTypes()
+    ;[ticketTypes.value, soldOut.value] = await loadStorefront()
   } catch (error) {
     console.error('Load ticket types error:', error)
     ticketTypesError.value = true
     ticketTypes.value = []
+    soldOut.value = {}
   } finally {
     loadingTicketTypes.value = false
   }

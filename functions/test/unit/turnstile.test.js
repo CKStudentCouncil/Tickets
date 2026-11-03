@@ -80,3 +80,16 @@ test('refuses every order when the secret or hostnames are not set', async () =>
   await assert.rejects(verify(fetchImpl, { secret: undefined }), { code: 'failed-precondition' })
   await assert.rejects(verify(fetchImpl, { hostnames: new Set() }), { code: 'failed-precondition' })
 })
+
+test('checkTurnstile skips the check while ENFORCE_TURNSTILE is off', async () => {
+  const { checkTurnstile, requireTurnstile, SURVEY_ACTION } = await import('../../lib/turnstile.js')
+  const previous = process.env.ENFORCE_TURNSTILE
+  process.env.ENFORCE_TURNSTILE = 'false'
+  try {
+    assert.equal(await checkTurnstile({}, {}, SURVEY_ACTION), undefined)
+    await requireTurnstile({}, {}, SURVEY_ACTION)
+  } finally {
+    if (previous === undefined) delete process.env.ENFORCE_TURNSTILE
+    else process.env.ENFORCE_TURNSTILE = previous
+  }
+})

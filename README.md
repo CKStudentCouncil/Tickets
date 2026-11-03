@@ -7,6 +7,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 ## Highlights
 
 - Ticket types (price, sale window, eligibility, stock, per-person limit) configured in the admin UI
+- 學生優先購買 on a ticket type: until a set time only school accounts (`edu.tw`) may buy it, then everyone, from the same stock; school-account buyers tick a box confirming they are students. Orders are marked 學生 or 社會人士 from the account email for staff only, and the check-in desk asks 學生 buyers of such tickets for a student ID before they are collected
 - Server-side order validation in a Cloud Function transaction, so tickets cannot be oversold
 - Confirmation email with a QR code that door staff scan into the admin order view, with the phone's camera app or the in-page scanner on `/admin/scan`
 - A 購票教學 (buying guide) that opens on a visitor's first visit and from the ? in the header afterwards (steps in `src/data/buyGuide.js`)
@@ -16,6 +17,10 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - Live, paginated admin orders with separate order-value and collected-payment totals
 - Search all admin orders by name, phone, email, order ID, school/class details, office, or ticket name
 - Party introduction, lineup pages and a user survey managed from the admin UI
+- 銷售報表 for super admins: live sales against an earlier year (全期 / 同期, by day of the sale), recent windows against the window before, identities, order values, ticket types and marketing charts, with PDF export and 匯入往年資料
+- 清除所有訂單 for super admins: Excel backup, then a Firestore archive (`salesArchives`), then deletion with stock release and an audit log; nothing is deleted unless the backup and archive succeed
+- 路宣登記 for admins: tickets sold for cash on the street and handed over as paper tickets at once, registered on `/admin/street` with a price board and a change calculator. Each is a paid, collected order from stock under the identity 路宣, with nothing about the buyer and no email; only super admins see the totals (`/super_admin/street`, and 路宣 in the 銷售報表)
+- 公關票 by officer quota: super admins give each officer (幹部) a quota; officers send free tickets on `/officer`, by name and email or as one-time invite links that guests claim on `/invite/:id`, and super admins may send one directly or make a link outside any quota. Links can carry a note only the officer and super admins see. Each has the same QR code and check-in as an order
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 
 ## Tech Stack
@@ -37,7 +42,7 @@ src/
 ├── stores/         # auth (user + role), shop (opening time), toast
 ├── data/           # schools, survey questions, ticket eligibility
 ├── utils/          # datetime, text, qrcode, pdf, analytics, redirect, debounce
-├── config/         # site URL, App Check key, default opening time, party date and venue
+├── config/         # site URL, Turnstile sitekey, default opening time, party date and venue
 └── router/         # routes and navigation guard
 
 functions/          # Cloud Functions, see functions/README.md
@@ -157,25 +162,17 @@ Staff still check student IDs at pickup and at the door. The sales policy (`Sale
 
 Buyers read their orders straight from Firestore: `orders/{id}.userId` is the buyer's uid, and the rules allow a signed-in user to read only orders with their own `userId` (lists must filter on it).
 
-## Bot Protection (App Check)
-
-`createOrder` can be called by scripts. To make the functions accept only requests from this site:
-
-1. Firebase console → App Check → register the web app with **reCAPTCHA Enterprise** and copy the site key. The key's allowed domains must include `tickets.cksc.tw`.
-2. Put the key in `APP_CHECK_SITE_KEY` in `src/config/app.js` and deploy the site.
-3. Watch App Check metrics for a day, then set `ENFORCE_APP_CHECK=true` in `functions/.env` and redeploy the functions.
-4. Optionally enforce App Check for Cloud Firestore as well (Firebase console → App Check → APIs). Anyone can submit the survey without signing in, so this is what stops scripts from flooding `surveyResponses`.
-
-reCAPTCHA does not work on `localhost`, so `quasar dev` uses the App Check debug provider instead (`src/boot/firebase.js`). Until its debug token is registered, every Firebase call fails, Google sign-in included, with `AppCheck: Fetch server returned an HTTP error status. HTTP status: 403 (appCheck/fetch-status-error)`.
-
-- Either register the token the browser console prints (`App Check debug token: …`) in Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Each browser profile, and each origin (`localhost` vs `127.0.0.1`, Docker), makes up its own.
-- Or add one token there once (e.g. a UUID from `uuidgen`) and start the dev server with it: `APP_CHECK_DEBUG_TOKEN=<token> yarn dev`, or `APP_CHECK_DEBUG_TOKEN=<token> docker compose up`. Production builds never include it.
-
-A debug token lets any request pass App Check, so keep it out of the repository.
-
 ## Bot Protection (Turnstile)
 
-App Check tells this site apart from scripts; Cloudflare Turnstile additionally asks the person checking out to pass a check. The product page shows the widget above 確認送出訂單 and sends its token with the order; `createOrder` checks it with Cloudflare's siteverify (action `checkout`, hostname in `TURNSTILE_HOSTNAMES`) before it looks at the order.
+Cloudflare Turnstile keeps scripts out of the three places that write on a visitor's behalf. Each page shows the widget above its submit button and sends its token with the call; the function checks it with Cloudflare's siteverify (hostname in `TURNSTILE_HOSTNAMES`) before it stores anything:
+
+| Page | Function | Action |
+| --- | --- | --- |
+| Product page, above 確認送出訂單 | `createOrder` | `checkout` |
+| `/survey` (購票系統問卷, no sign-in needed) | `submitSurvey` | `survey` |
+| Party survey (舞會滿意度調查) | `submitPartySurvey` | `party_survey` |
+
+Clients cannot write `surveyResponses` or the party survey's responses directly (`firestore.rules`), so the survey answers must go through these functions and their check. The site used to run Firebase App Check (reCAPTCHA Enterprise) as well; it was removed because reCAPTCHA bills past 10,000 assessments a month, while Turnstile is free and already guards every write above.
 
 1. Cloudflare dashboard → Turnstile → add a widget in **Managed** mode with the hostnames `tickets.cksc.tw`, `localhost` and `127.0.0.1`.
 2. Put its sitekey in `TURNSTILE_SITE_KEY` in `src/config/app.js` and deploy the site.
@@ -231,6 +228,10 @@ firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,function
 | `/admin/orders/:id` | Staff order view (ticket QR codes link here) |
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |
+| `/super_admin/analytics` | 銷售報表 (super admins) |
+| `/super_admin/guests` | 公關票: officers and their quotas, direct sends, council invite links and every ticket (super admins) |
+| `/officer` | 公關票 for officers: send tickets and make invite links within their quota |
+| `/invite/:id` | 公關票 invite link: the guest signs in and claims the ticket (not in the menu) |
 | `/comingsoon` | Pre-launch landing page |
 
 ## Application Notes

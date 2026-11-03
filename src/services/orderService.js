@@ -30,16 +30,16 @@ const paymentCallable = httpsCallable(functions, 'updateOrderPayment')
 // Errors where the order may or may not have been saved, or the server was
 // just too busy; retrying with the same requestId is safe (the server returns
 // the order that was already created instead of creating a second one).
-const RETRYABLE = ['functions/aborted', 'functions/unavailable', 'functions/deadline-exceeded', 'functions/internal']
+export const RETRYABLE = ['functions/aborted', 'functions/unavailable', 'functions/deadline-exceeded', 'functions/internal']
 
-function createRequestId() {
+export function createRequestId() {
   return crypto.randomUUID?.() ??
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-function byCreatedAtDesc(a, b) {
+export function byCreatedAtDesc(a, b) {
   return (parseDate(b.createdAt)?.getTime() || 0) - (parseDate(a.createdAt)?.getTime() || 0)
 }
 
@@ -157,6 +157,38 @@ export async function fetchAllOrders(filters = {}) {
     if (snapshot.docs.length < 250) return orders
     cursor = snapshot.docs.at(-1)
   }
+}
+
+// The backup taken before 清除所有訂單: every order straight from the server,
+// in document id order, so orders without createdAt (left out of the pages
+// above) are in it too.
+export async function fetchEveryOrder({ onProgress } = {}) {
+  const orders = []
+  let cursor = null
+  for (;;) {
+    const snapshot = await getDocsFromServer(query(collection(db, 'orders'),
+      orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(500)))
+    orders.push(...snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
+    onProgress?.(orders.length)
+    if (snapshot.docs.length < 500) return orders
+    cursor = snapshot.docs.at(-1)
+  }
+}
+
+export async function countAllOrders() {
+  const snapshot = await getAggregateFromServer(collection(db, 'orders'), { orderCount: count() })
+  return snapshot.data().orderCount
+}
+
+// Every order, live, for /super_admin/analytics: one read per order when the
+// page opens, then one per change. The admin list stays on bounded pages.
+export function subscribeAllOrders({ onData, onError }) {
+  return onSnapshot(collection(db, 'orders'), { includeMetadataChanges: true }, (snapshot) => {
+    onData({
+      orders: snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
+      fromCache: snapshot.metadata.fromCache
+    })
+  }, onError)
 }
 
 export async function fetchOrderSummary(filters = {}) {

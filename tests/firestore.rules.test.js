@@ -23,6 +23,7 @@ import {
   writeBatch
 } from 'firebase/firestore'
 import * as SURVEY from '../src/data/surveyQuestions.js'
+import * as PARTY_SURVEY from '../src/data/partySurveyQuestions.js'
 
 let env
 
@@ -488,51 +489,9 @@ describe('surveyResponses (PARTY-23)', () => {
     ...extra
   })
 
-  test('anyone can submit a well-formed response', async () => {
-    await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', 'r1'), response()))
-  })
-
-  test('every option offered by the survey page is accepted by the rules', async () => {
-    let i = 0
-    for (const identity of SURVEY.IDENTITY_OPTIONS) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ identity })))
-    }
-    for (const device of SURVEY.DEVICE_OPTIONS) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ device })))
-    }
-    for (const issueCount of SURVEY.ISSUE_COUNT_OPTIONS) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ issueCount })))
-    }
-    await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({
-      channels: SURVEY.CHANNEL_OPTIONS,
-      issueTypes: SURVEY.ISSUE_TYPE_OPTIONS
-    })))
-    for (const value of [1, 2, 3, 4, 5]) {
-      await assertSucceeds(setDoc(doc(anon(), 'surveyResponses', `i${i++}`), response({ scores: allScores(value) })))
-    }
-  })
-
-  test('out-of-range, non-integer or missing scores are rejected', async () => {
-    const bad = (scores) => setDoc(doc(anon(), 'surveyResponses', 'bad'), response({ scores }))
-    await assertFails(bad({ ...allScores(), q4: 1000000 }))
-    await assertFails(bad({ ...allScores(), q4: '5' }))
-    await assertFails(bad({ ...allScores(), q4: 0 }))
-    await assertFails(bad({ ...allScores(), q4: 4.5 }))
-    await assertFails(bad({ ...allScores(), q99: 5 }))
-    const missing = allScores()
-    delete missing.q25
-    await assertFails(bad(missing))
-  })
-
-  test('unknown options and malformed fields are rejected', async () => {
-    const bad = (extra) => setDoc(doc(anon(), 'surveyResponses', 'bad'), response(extra))
-    await assertFails(bad({ identity: 'hacker' }))
-    await assertFails(bad({ channels: ['<script>'] }))
-    await assertFails(bad({ channels: [] }))
-    await assertFails(bad({ issueTypes: ['whatever'] }))
-    await assertFails(bad({ admin: true }))
-    await assertFails(bad({ createdAt: 'yesterday' }))
-    await assertFails(bad({ suggestion: 'x'.repeat(2001) }))
+  test('no client writes responses; they go through submitSurvey', async () => {
+    await assertFails(setDoc(doc(anon(), 'surveyResponses', 'r1'), response()))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r2'), response()))
   })
 
   test('only staff can read responses, and only super admins delete them', async () => {
@@ -546,5 +505,396 @@ describe('surveyResponses (PARTY-23)', () => {
       await assertFails(deleteDoc(doc(as(who), 'surveyResponses', 'r1')))
     }
     await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r1')))
+  })
+})
+
+describe('舞會滿意度調查', () => {
+  const sections = PARTY_SURVEY.defaultSections()
+  const survey = (who, year, extra = {}) => ({ year, open: false, sections, updatedAt: serverTimestamp(), updatedByUid: who.uid, ...extra })
+  const save = (who, id, data) => setDoc(doc(as(who), 'partySurveys', id), data)
+
+  test('only super admins save a year\'s questions and open it; anyone can read them', async () => {
+    await assertSucceeds(save(staff.superAdmin, '2026', survey(staff.superAdmin, 2026)))
+    await assertSucceeds(save(staff.superAdmin, '2026', survey(staff.superAdmin, 2026, { open: true })))
+    await assertSucceeds(getDoc(doc(anon(), 'partySurveys', '2026')))
+
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(save(who, '2026', survey(who, 2026)))
+    }
+    await assertFails(setDoc(doc(anon(), 'partySurveys', '2026'), { year: 2026, open: true, sections }))
+    await assertFails(deleteDoc(doc(as(staff.superAdmin), 'partySurveys', '2026')))
+  })
+
+  test('a year document is checked: its year, its fields, and questions before it opens', async () => {
+    const boss = staff.superAdmin
+    await assertFails(save(boss, '2026', survey(boss, 2025)))
+    await assertFails(save(boss, 'latest', survey(boss, 2026)))
+    await assertFails(save(boss, '2026', { ...survey(boss, 2026), note: 'x' }))
+    await assertFails(save(boss, '2026', survey(staff.admin, 2026)))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { open: 'yes' })))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { sections: 'all of them' })))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { sections: Array(21).fill(sections[0]) })))
+    await assertFails(save(boss, '2026', survey(boss, 2026, { open: true, sections: [] })))
+    // a year may be saved without questions while it is closed
+    await assertSucceeds(save(boss, '2026', survey(boss, 2026, { sections: [] })))
+  })
+
+  test('no client writes answers; only super admins read and delete them', async () => {
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'partySurveys', '2026'), { year: 2026, open: true, sections }))
+    const answer = { answers: { identity: PARTY_SURVEY.defaultSections()[0].questions[0].options[0] }, createdAt: serverTimestamp() }
+    for (const who of [anon(), as(staff.superAdmin)]) {
+      await assertFails(setDoc(doc(who, 'partySurveys', '2026', 'responses', 'r1'), answer))
+    }
+
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'partySurveys', '2026', 'responses', 'r1'), { answers: {} }))
+    for (const who of [anon(), as(staff.manager), as(staff.admin)]) {
+      await assertFails(getDocs(collection(who, 'partySurveys', '2026', 'responses')))
+    }
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'partySurveys', '2026', 'responses')))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'partySurveys', '2026', 'responses', 'r1'), { answers: { x: 1 } }))
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(deleteDoc(doc(as(who), 'partySurveys', '2026', 'responses', 'r1')))
+    }
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'partySurveys', '2026', 'responses', 'r1')))
+  })
+})
+
+describe('學弟登記賣票', () => {
+  const seller = { uid: 'seller-uid', email: 's1001@gl.ck.tp.edu.tw' }
+  const other = { uid: 'other-uid', email: 's1002@gl.ck.tp.edu.tw' }
+  const registration = (who, extra = {}) => ({
+    sellerUid: who.uid,
+    sellerEmail: who.email,
+    sellerName: '王小明',
+    ticketTypeId: 'second',
+    quantity: 5,
+    delivered: false,
+    paid: false,
+    ...extra
+  })
+  const program = (who, fields = {}) => ({
+    enabled: true,
+    ticketTypeId: 'second',
+    goal: 750,
+    updatedAt: serverTimestamp(),
+    updatedByUid: who.uid,
+    ...fields
+  })
+  const flags = (who, fields = {}) => ({ delivered: true, paid: false, updatedAt: serverTimestamp(), updatedByUid: who.uid, ...fields })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'sellers', seller.email), { email: seller.email, name: '王小明' })
+      await setDoc(doc(db, 'sellerRegistrations', 'r1'), registration(seller))
+      await setDoc(doc(db, 'sellerRegistrations', 'r2'), registration(other))
+      await setDoc(doc(db, 'sellerStats', 'summary'), { total: 10 })
+    })
+  })
+
+  test('only super admins save the program settings, the way the seller page does', async () => {
+    const programDoc = (who) => doc(as(who), 'settings', 'sellerProgram')
+    await assertSucceeds(getDoc(doc(anon(), 'settings', 'sellerProgram')))
+    for (const who of [seller, staff.manager, staff.admin]) {
+      await assertFails(setDoc(programDoc(who), program(who)))
+    }
+    await assertSucceeds(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin)))
+    for (const fields of [{ goal: -1 }, { goal: 7.5 }, { goal: '750' }, { enabled: 'yes' }, { ticketTypeId: 3 }, { updatedByUid: staff.admin.uid }, { note: 'x' }]) {
+      await assertFails(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin, fields)))
+    }
+  })
+
+  test('a seller reads only their own list entry; admins list it; super admins edit it', async () => {
+    await assertSucceeds(getDoc(doc(as(seller), 'sellers', seller.email)))
+    await assertFails(getDoc(doc(as(seller, false), 'sellers', seller.email)))
+    await assertFails(getDoc(doc(as(other), 'sellers', seller.email)))
+    await assertFails(getDocs(collection(as(seller), 'sellers')))
+    await assertFails(getDocs(collection(as(staff.manager), 'sellers')))
+    await assertSucceeds(getDocs(collection(as(staff.admin), 'sellers')))
+
+    // nobody puts themselves on the list
+    await assertFails(setDoc(doc(as(other), 'sellers', other.email), { email: other.email }))
+    await assertFails(setDoc(doc(as(staff.admin), 'sellers', other.email), { email: other.email }))
+    await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'sellers', other.email), { email: other.email, name: '李同學', createdAt: serverTimestamp() }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellers', 'Upper@example.com'), { email: 'Upper@example.com' }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellers', 'x@example.com'), { email: 'y@example.com' }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellers', 'x@example.com'), { email: 'x@example.com', role: 'admin' }))
+    await assertFails(deleteDoc(doc(as(staff.admin), 'sellers', seller.email)))
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'sellers', seller.email)))
+  })
+
+  test('sellers read their own registrations, with a sellerUid filter; nobody creates them', async () => {
+    await assertSucceeds(getDoc(doc(as(seller), 'sellerRegistrations', 'r1')))
+    await assertFails(getDoc(doc(as(seller), 'sellerRegistrations', 'r2')))
+    await assertSucceeds(getDocs(query(collection(as(seller), 'sellerRegistrations'), where('sellerUid', '==', seller.uid))))
+    await assertFails(getDocs(collection(as(seller), 'sellerRegistrations')))
+    await assertFails(getDocs(collection(as(staff.manager), 'sellerRegistrations')))
+    await assertSucceeds(getDocs(collection(as(staff.admin), 'sellerRegistrations')))
+
+    for (const who of [seller, staff.admin, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'sellerRegistrations', 'new'), registration(seller)))
+    }
+  })
+
+  test('sellers cannot change or return a registration; admins record pickup and payment only', async () => {
+    await assertFails(updateDoc(doc(as(seller), 'sellerRegistrations', 'r1'), { quantity: 1 }))
+    await assertFails(updateDoc(doc(as(seller), 'sellerRegistrations', 'r1'), flags(seller)))
+    await assertFails(deleteDoc(doc(as(seller), 'sellerRegistrations', 'r1')))
+    await assertFails(updateDoc(doc(as(staff.manager), 'sellerRegistrations', 'r1'), flags(staff.manager)))
+
+    await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin)))
+    await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { paid: true })))
+    // the seller page writes only the box that was ticked
+    await assertSucceeds(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), { paid: false, updatedAt: serverTimestamp(), updatedByUid: staff.admin.uid }))
+    await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), { ...flags(staff.admin), quantity: 1 }))
+    await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { paid: 'yes' })))
+    await assertFails(updateDoc(doc(as(staff.admin), 'sellerRegistrations', 'r1'), flags(staff.admin, { updatedByUid: 'someone' })))
+    await assertSucceeds(deleteDoc(doc(as(staff.admin), 'sellerRegistrations', 'r2')))
+  })
+
+  test('the shared total is for sellers and admins; release markers for nobody', async () => {
+    await assertSucceeds(getDoc(doc(as(seller), 'sellerStats', 'summary')))
+    await assertSucceeds(getDoc(doc(as(staff.admin), 'sellerStats', 'summary')))
+    await assertFails(getDoc(doc(as(other), 'sellerStats', 'summary')))
+    await assertFails(getDoc(doc(as(staff.manager), 'sellerStats', 'summary')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'sellerStats', 'summary'), { total: 750 }))
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'sellerReleases', 'r1')))
+  })
+})
+
+describe('清除所有訂單 (salesArchives, orderPurges, systemLogs)', () => {
+  const paths = [
+    ['salesArchives', '2026'],
+    ['salesArchives', '2026', 'archivedOrders', ORDER_ID],
+    ['salesArchives', '2026', 'rows', '000'],
+    ['orderPurges', 'purge-1'],
+    ['systemLogs', 'purge_purge-1']
+  ]
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'salesArchives', '2026'), { year: 2026, orderCount: 1, revenue: 700 })
+      await setDoc(doc(db, 'salesArchives', '2026', 'archivedOrders', ORDER_ID), { ...ORDER, archive: { purgeId: 'purge-1' } })
+      await setDoc(doc(db, 'salesArchives', '2026', 'rows', '000'), { rows: [{ t: 1, v: 700, p: false, d: false, s: '建國中學', g: 0, i: [] }] })
+      await setDoc(doc(db, 'orderPurges', 'purge-1'), { stage: 'done', total: 1 })
+      await setDoc(doc(db, 'systemLogs', 'purge_purge-1'), { type: 'orders.purge', actorUid: staff.superAdmin.uid })
+    })
+  })
+
+  test('only super admins read the archives, purge progress and log', async () => {
+    for (const path of paths) {
+      await assertSucceeds(getDoc(doc(as(staff.superAdmin), ...path)))
+      for (const who of [staff.admin, staff.manager, buyer]) {
+        await assertFails(getDoc(doc(as(who), ...path)))
+      }
+      await assertFails(getDoc(doc(anon(), ...path)))
+    }
+    // the analytics page lists the summaries; the admin page looks for an unfinished purge
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'salesArchives')))
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'orderPurges'), where('stage', 'in', ['archive', 'delete']))))
+    await assertFails(getDocs(collection(as(staff.admin), 'salesArchives')))
+    await assertFails(getDocs(collection(as(staff.admin), 'systemLogs')))
+  })
+
+  test('nobody can write them, not even super admins', async () => {
+    for (const path of paths) {
+      await assertFails(setDoc(doc(as(staff.superAdmin), ...path), { forged: true }))
+      await assertFails(updateDoc(doc(as(staff.superAdmin), ...path), { forged: true }))
+      await assertFails(deleteDoc(doc(as(staff.superAdmin), ...path)))
+    }
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'systemLogs', 'forged'), { type: 'orders.purge' }))
+  })
+})
+
+describe('公關票 (officers, officerInvites)', () => {
+  const officer = { uid: 'officer-uid', email: 'Officer@Example.com' }
+  const other = { uid: 'other-uid', email: 'other@example.com' }
+  const OFFICER_EMAIL = 'officer@example.com'
+  const INVITE_ID = 'AbCdEfGhIjKlMnOpQrStUvWx'
+  // what GuestAdminPage.vue saves (addOfficer)
+  const entry = (fields = {}) => ({ email: OFFICER_EMAIL, name: '林幹部', quota: 10, used: 0, createdAt: serverTimestamp(), ...fields })
+  const officerDoc = (who) => doc(as(who), 'officers', OFFICER_EMAIL)
+  const seed = (fn) => env.withSecurityRulesDisabled((context) => fn(context.firestore()))
+  const seedOfficer = (fields = {}) => seed((db) => setDoc(doc(db, 'officers', OFFICER_EMAIL), entry({ createdAt: Timestamp.now(), ...fields })))
+
+  test('super admins add officers with a quota and nothing used', async () => {
+    for (const who of [staff.manager, staff.admin, officer]) {
+      await assertFails(setDoc(officerDoc(who), entry()))
+    }
+    const bad = [
+      { used: 3 },
+      { quota: -1 },
+      { quota: 501 },
+      { quota: 1.5 },
+      { quota: '10' },
+      { name: 'x'.repeat(51) },
+      { name: '  ' },
+      { email: 'someone@example.com' },
+      { createdAt: Timestamp.fromMillis(0) },
+      { note: 'x' }
+    ]
+    for (const fields of bad) {
+      await assertFails(setDoc(officerDoc(staff.superAdmin), entry(fields)))
+    }
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'officers', 'Officer@Example.com'), entry({ email: 'Officer@Example.com' })))
+    await assertSucceeds(setDoc(officerDoc(staff.superAdmin), entry()))
+  })
+
+  test('super admins change the name and quota, never below what is used, and never `used`', async () => {
+    await seedOfficer({ used: 4 })
+    await assertSucceeds(updateDoc(officerDoc(staff.superAdmin), { name: '林大幹部', quota: 4 }))
+    await assertFails(updateDoc(officerDoc(staff.superAdmin), { quota: 3 }))
+    await assertFails(updateDoc(officerDoc(staff.superAdmin), { used: 0 }))
+    await assertFails(updateDoc(officerDoc(staff.superAdmin), { quota: 501 }))
+    await assertFails(updateDoc(officerDoc(staff.superAdmin), { name: '' }))
+    // setDoc over an existing officer resets used and createdAt: refused
+    await assertFails(setDoc(officerDoc(staff.superAdmin), entry()))
+    await assertFails(updateDoc(officerDoc(officer), { quota: 100 }))
+    await assertFails(updateDoc(officerDoc(staff.admin), { quota: 100 }))
+    await assertFails(deleteDoc(officerDoc(staff.admin)))
+    await assertFails(deleteDoc(officerDoc(officer)))
+    await assertSucceeds(deleteDoc(officerDoc(staff.superAdmin)))
+  })
+
+  test('an officer reads only their own entry; super admins list them all', async () => {
+    await seedOfficer()
+    await assertSucceeds(getDoc(officerDoc(officer)))
+    await assertFails(getDoc(doc(as(officer, false), 'officers', OFFICER_EMAIL)))
+    await assertFails(getDoc(officerDoc(other)))
+    await assertFails(getDocs(collection(as(officer), 'officers')))
+    await assertFails(getDocs(collection(as(staff.admin), 'officers')))
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'officers')))
+  })
+
+  test('an invite link is read by whoever holds it; listing is for its officer and super admins', async () => {
+    await seedOfficer()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'officerInvites', INVITE_ID), { officerEmail: OFFICER_EMAIL, officerName: '林幹部', quantity: 2, status: 'open', createdAt: Timestamp.now() })
+      await setDoc(doc(db, 'officerInvites', 'ZyXwVuTsRqPoNmLkJiHgFeDc'), { officerEmail: 'someone@example.com', quantity: 1, status: 'open', createdAt: Timestamp.now() })
+    })
+
+    await assertFails(getDoc(doc(anon(), 'officerInvites', INVITE_ID)))
+    await assertSucceeds(getDoc(doc(as(other), 'officerInvites', INVITE_ID)))
+    await assertFails(getDocs(collection(as(other), 'officerInvites')))
+
+    await assertSucceeds(getDocs(query(collection(as(officer), 'officerInvites'), where('officerEmail', '==', OFFICER_EMAIL))))
+    await assertFails(getDocs(collection(as(officer), 'officerInvites')))
+    await assertFails(getDocs(query(collection(as(other), 'officerInvites'), where('officerEmail', '==', other.email))))
+    await assertFails(getDocs(collection(as(staff.admin), 'officerInvites')))
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'officerInvites')))
+
+    // only the functions make, claim and revoke them
+    for (const who of [officer, other, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'officerInvites', 'NewNewNewNewNewNewNewNewN'), { officerEmail: OFFICER_EMAIL, quantity: 1, status: 'open' }))
+      await assertFails(updateDoc(doc(as(who), 'officerInvites', INVITE_ID), { status: 'claimed' }))
+      await assertFails(deleteDoc(doc(as(who), 'officerInvites', INVITE_ID)))
+    }
+  })
+
+  test('a link\'s note is for its officer and super admins only', async () => {
+    await seedOfficer()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'officerInviteNotes', INVITE_ID), { note: '給學長', officerEmail: OFFICER_EMAIL, createdAt: Timestamp.now() })
+      await setDoc(doc(db, 'officerInviteNotes', 'ZyXwVuTsRqPoNmLkJiHgFeDc'), { note: '校友會', officerEmail: null, createdAt: Timestamp.now() })
+    })
+    const mine = (who) => doc(as(who), 'officerInviteNotes', INVITE_ID)
+
+    await assertSucceeds(getDoc(mine(officer)))
+    await assertSucceeds(getDocs(query(collection(as(officer), 'officerInviteNotes'), where('officerEmail', '==', OFFICER_EMAIL))))
+    await assertFails(getDocs(collection(as(officer), 'officerInviteNotes')))
+    await assertFails(getDoc(doc(as(officer), 'officerInviteNotes', 'ZyXwVuTsRqPoNmLkJiHgFeDc')))
+    // the guest holding the link, and staff below super admin
+    for (const who of [other, staff.manager, staff.admin]) {
+      await assertFails(getDoc(mine(who)))
+    }
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'officerInviteNotes')))
+
+    // only createOfficerInvite writes them
+    for (const who of [officer, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'officerInviteNotes', 'NewNewNewNewNewNewNewNewN'), { note: 'x', officerEmail: OFFICER_EMAIL }))
+      await assertFails(updateDoc(mine(who), { note: '改' }))
+      await assertFails(deleteDoc(mine(who)))
+    }
+
+    await seed((db) => deleteDoc(doc(db, 'officers', OFFICER_EMAIL)))
+    await assertFails(getDoc(mine(officer)))
+  })
+
+  test('officers read the tickets they sent, and no others, while on the list', async () => {
+    await seedOfficer()
+    await seed(async (db) => {
+      await setDoc(doc(db, 'orders', 'PR20261026K7Q2MX'), { complimentary: true, officerEmail: OFFICER_EMAIL, customerEmail: 'guest@example.com', userId: null })
+      await setDoc(doc(db, 'orders', 'PR20261026AAAAAA'), { complimentary: true, officerEmail: 'someone@example.com', customerEmail: 'b@example.com', userId: null })
+    })
+    await assertSucceeds(getDoc(doc(as(officer), 'orders', 'PR20261026K7Q2MX')))
+    await assertFails(getDoc(doc(as(officer, false), 'orders', 'PR20261026K7Q2MX')))
+    await assertFails(getDoc(doc(as(officer), 'orders', 'PR20261026AAAAAA')))
+    await assertFails(getDoc(doc(as(officer), 'orders', ORDER_ID)))
+    await assertSucceeds(getDocs(query(collection(as(officer), 'orders'), where('officerEmail', '==', OFFICER_EMAIL))))
+    await assertFails(getDocs(query(collection(as(officer), 'orders'), where('complimentary', '==', true))))
+    await assertFails(deleteDoc(doc(as(officer), 'orders', 'PR20261026K7Q2MX')))
+
+    // taken off the list: no longer
+    await seed((db) => deleteDoc(doc(db, 'officers', OFFICER_EMAIL)))
+    await assertFails(getDoc(doc(as(officer), 'orders', 'PR20261026K7Q2MX')))
+    await assertFails(getDocs(query(collection(as(officer), 'orders'), where('officerEmail', '==', OFFICER_EMAIL))))
+  })
+
+  test('super admins list the 公關票 orders; the functions\' markers are for nobody', async () => {
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'orders'), where('complimentary', '==', true))))
+    for (const name of ['invitationRequests', 'officerReleases']) {
+      await assertFails(getDoc(doc(as(staff.superAdmin), name, 'guest-request-00000001')))
+      await assertFails(setDoc(doc(as(staff.superAdmin), name, 'guest-request-00000001'), { orderId: ORDER_ID }))
+    }
+    // the old /guest registrations are gone
+    await assertFails(setDoc(doc(as(other), 'guestRegistrations', other.uid), { name: '陳小華', email: other.email }))
+    await assertFails(getDocs(collection(as(staff.superAdmin), 'guestRegistrations')))
+  })
+})
+
+describe('路宣登記 (settings/streetSale, street sale orders)', () => {
+  const seed = (fn) => env.withSecurityRulesDisabled((context) => fn(context.firestore()))
+  // what StreetSaleAdminPage.vue saves (saveStreetProgram)
+  const program = (who, fields = {}) => ({ enabled: true, ticketTypeId: 'open', updatedAt: serverTimestamp(), updatedByUid: who.uid, ...fields })
+  const sale = { streetSale: true, school: '路宣', promoterEmail: staff.admin.email, promoterName: '林管理', customerEmail: '', userId: null, paid: true, delivered: true }
+
+  test('only super admins open it and choose the ticket type, the way the stats page does', async () => {
+    const programDoc = (who) => doc(as(who), 'settings', 'streetSale')
+    await assertSucceeds(getDoc(doc(anon(), 'settings', 'streetSale')))
+    for (const who of [buyer, staff.manager, staff.admin]) {
+      await assertFails(setDoc(programDoc(who), program(who)))
+    }
+    await assertSucceeds(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin)))
+    for (const fields of [{ enabled: 'yes' }, { ticketTypeId: 3 }, { ticketTypeId: 'x'.repeat(101) }, { updatedByUid: staff.admin.uid }, { goal: 10 }]) {
+      await assertFails(setDoc(programDoc(staff.superAdmin), program(staff.superAdmin, fields)))
+    }
+    await assertFails(deleteDoc(programDoc(staff.admin)))
+    await assertSucceeds(deleteDoc(programDoc(staff.superAdmin)))
+  })
+
+  test('admins list the sales they registered and every sale; nobody writes one directly', async () => {
+    await seed((db) => setDoc(doc(db, 'orders', 'ST20261106K7Q2MX'), sale))
+    await assertSucceeds(getDocs(query(collection(as(staff.admin), 'orders'), where('promoterEmail', '==', staff.admin.email))))
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'orders'), where('streetSale', '==', true))))
+    // door staff open single orders only
+    await assertSucceeds(getDoc(doc(as(staff.manager), 'orders', 'ST20261106K7Q2MX')))
+    await assertFails(getDocs(query(collection(as(staff.manager), 'orders'), where('streetSale', '==', true))))
+    // no account owns a street sale
+    await assertFails(getDoc(doc(as(buyer), 'orders', 'ST20261106K7Q2MX')))
+
+    for (const who of [staff.admin, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'orders', 'ST20261106BBBBBB'), sale))
+      await assertFails(updateDoc(doc(as(who), 'orders', 'ST20261106K7Q2MX'), { customerName: '改名' }))
+    }
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'orders', 'ST20261106K7Q2MX')))
+  })
+
+  test('the request markers and the old promoter list are for nobody', async () => {
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'streetSaleRequests', 'street-request-0001')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'streetSaleRequests', 'street-request-0001'), { orderId: ORDER_ID }))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'streetPromoters', 'x@example.com'), { email: 'x@example.com' }))
   })
 })

@@ -7,7 +7,8 @@ export const BUY_GUIDE_STEPS = [
     title: '登入 Google 帳號',
     lines: [
       '購票前請先從右上角選單登入 Google 帳號，訂單會綁定這個帳號',
-      `限建中學生的票種，須使用建中帳號（@${SCHOOL_ACCOUNT_DOMAIN}）登入才能購買`
+      `限建中學生的票種，須使用建中帳號（@${SCHOOL_ACCOUNT_DOMAIN}）登入才能購買`,
+      '學生優先購買期間須使用學校帳號（Email 結尾為 edu.tw）登入才能購買'
     ]
   },
   {

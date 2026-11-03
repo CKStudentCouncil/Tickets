@@ -45,6 +45,16 @@
           限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，入場時須出示學生證，資格不符者不得入場
         </p>
 
+        <template v-if="studentOnlyUntil">
+          <p v-if="isStudentPhase" class="ticket-limit">
+            目前僅開放學生以學校帳號（Email 結尾為 edu.tw）登入購買，{{ formatDateTime(studentOnlyUntil) }} 起開放所有人
+          </p>
+
+          <p class="ticket-limit">
+            以學校帳號（Email 結尾為 edu.tw）購買或填寫學生切結者，須確認為在學學生，領票時須出示學生證，資格不符者不得領票；其他以一般帳號（如 Gmail）購買者不需要
+          </p>
+        </template>
+
         <div class="divider" />
 
         <aside v-if="pendingCheckout" class="checkout-recovery" role="status">
@@ -68,6 +78,7 @@
         </p>
         <p v-else-if="status.state === 'unavailable'" class="ticket-limit">開賣時間尚未公布</p>
         <p v-else-if="status.state === 'ended'" class="ticket-limit">此票種已結束販售</p>
+        <p v-else-if="status.state === 'soldOut'" class="ticket-limit">此票種已售罄</p>
 
         <template v-if="status.state === 'selling' && !showOrderForm">
           <button
@@ -80,12 +91,20 @@
           </button>
 
           <template v-else-if="needsOtherAccount">
-            <p class="account-warning">
+            <p v-if="!isCampusTicket" class="account-warning">
+              目前僅開放學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
+              <span class="account-email">{{ auth.email }}</span>，
+              {{ formatDateTime(studentOnlyUntil) }} 起開放所有人（倒數 {{ formatCountdown(studentOnlyUntil, now) }}）。
+            </p>
+            <p v-else class="account-warning">
               此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
               <span class="account-email">{{ auth.email }}</span>。
             </p>
             <button type="button" class="primary-button" @click="switchAccount">
-              改用建中帳號登入
+              {{ isCampusTicket ? '改用建中帳號登入' : '改用學校帳號登入' }}
+            </button>
+            <button v-if="!isCampusTicket" type="button" class="declaration-link" @click="declarationOpen = true">
+              無法使用學校帳號？填寫學生切結後購買
             </button>
           </template>
 
@@ -177,6 +196,16 @@
           </label>
           <p id="terms-error" v-if="validationAttempted && fieldErrors.terms" class="field-error">{{ fieldErrors.terms }}</p>
 
+          <template v-if="needsStudentConfirm">
+            <label class="terms-consent">
+              <input v-model="studentConfirmed" type="checkbox" :aria-invalid="validationAttempted && !!fieldErrors.student" aria-describedby="student-error" required>
+              <span>我確認我是在學學生，並了解領票時須攜帶學生證，資格不符者不得領票</span>
+            </label>
+            <p id="student-error" v-if="validationAttempted && fieldErrors.student" class="field-error">{{ fieldErrors.student }}</p>
+          </template>
+
+          <p v-if="usesDeclaration" class="declaration-note">你已切結為在學學生，領票時須出示學生證</p>
+
           <TurnstileWidget
             v-if="TURNSTILE_SITE_KEY"
             ref="turnstile"
@@ -211,6 +240,8 @@
         </form>
       </section>
     </div>
+
+    <StudentDeclarationDialog v-model="declarationOpen" @agree="agreeDeclaration" />
   </div>
 </template>
 
@@ -220,17 +251,20 @@ import { useRoute, useRouter } from 'vue-router'
 import { useToastStore } from 'src/stores/toast'
 import { getPendingCheckout, submitOrder } from 'src/services/orderService'
 import TurnstileWidget from 'src/components/TurnstileWidget.vue'
+import StudentDeclarationDialog from 'src/components/StudentDeclarationDialog.vue'
 import { TURNSTILE_SITE_KEY } from 'src/config/app'
 import {
   ELIGIBLE_IDENTITIES,
+  fetchSoldOut,
   fetchTicketTypes,
   getPurchaseLimit,
-  getTicketStatus
+  getTicketStatus,
+  isTicketTypeListed
 } from 'src/services/ticketTypeService'
 import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useNow } from 'src/composables/useNow'
-import { formatCountdown, formatDateTime } from 'src/utils/datetime'
+import { formatCountdown, formatDateTime, parseDate } from 'src/utils/datetime'
 
 const MAX_TICKETS_PER_ORDER = 20 // same cap as functions/lib/orderValidation.js
 
@@ -240,18 +274,22 @@ const auth = useAuthStore()
 const toast = useToastStore()
 
 const ticketTypes = ref([])
+const soldOut = ref({})
 const loading = ref(true)
 const loadError = ref(false)
-
-const ticketType = computed(() =>
-  ticketTypes.value.find((type) => type.id === route.params.id) || null
-)
 
 // ticks every second so the buy button appears the moment sales open (PARTY-24)
 const now = useNow(1000)
 
+// a type hidden until sales open reads as 找不到 until then
+const ticketType = computed(() => {
+  const type = ticketTypes.value.find((t) => t.id === route.params.id)
+
+  return type && isTicketTypeListed(type, now.value) ? type : null
+})
+
 const status = computed(() =>
-  ticketType.value ? getTicketStatus(ticketType.value, now.value) : null
+  ticketType.value ? getTicketStatus(ticketType.value, now.value, soldOut.value) : null
 )
 
 const purchaseLimit = computed(() =>
@@ -263,11 +301,12 @@ async function loadTicketTypes() {
   loadError.value = false
 
   try {
-    ticketTypes.value = await fetchTicketTypes()
+    ;[ticketTypes.value, soldOut.value] = await Promise.all([fetchTicketTypes(), fetchSoldOut()])
   } catch (error) {
     console.error('Load ticket types error:', error)
     loadError.value = true
     ticketTypes.value = []
+    soldOut.value = {}
   } finally {
     loading.value = false
   }
@@ -306,14 +345,50 @@ const isCampusTicket = computed(() =>
   ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
 )
 
-const needsOtherAccount = computed(() => isCampusTicket.value && !auth.isSchoolAccount)
+// 學生優先購買: until studentOnlyUntil only school accounts (edu.tw) may buy,
+// then everyone (checked again by createOrder)
+const studentOnlyUntil = computed(() => ticketType.value?.studentOnlyUntil || '')
+const isStudentPhase = computed(
+  () => !!studentOnlyUntil.value && now.value < parseDate(studentOnlyUntil.value)
+)
+// school accounts buying such a type confirm they are students (createOrder
+// checks this too); their student ID is checked at pickup
+const needsStudentConfirm = computed(() => !!studentOnlyUntil.value && auth.isEduAccount)
+const studentConfirmed = ref(false)
+
+// 學生身分切結書: a buyer without a usable school account may sign it to buy
+// during 學生優先購買 instead (createOrder takes it as studentDeclared; the
+// student ID is checked at pickup). Not a replacement for the school account.
+const declarationOpen = ref(false)
+const studentDeclared = ref(false)
+const studentDeclaration = ref(null)
+const usesDeclaration = computed(
+  () => studentDeclared.value && isStudentPhase.value && !isCampusTicket.value && !auth.isEduAccount
+)
+watch(() => [auth.user?.uid, ticketType.value?.id], () => {
+  studentDeclared.value = false
+  studentDeclaration.value = null
+})
+
+const needsOtherAccount = computed(
+  () =>
+    (isCampusTicket.value && !auth.isSchoolAccount) ||
+    (!isCampusTicket.value && isStudentPhase.value && !auth.isEduAccount && !studentDeclared.value)
+)
+
+function agreeDeclaration(declaration) {
+  studentDeclaration.value = declaration
+  studentDeclared.value = true
+  openOrderForm()
+}
 
 const schoolOptions = computed(() => (isCampusTicket.value ? [HOME_SCHOOL] : SCHOOLS))
 
 function goToLogin() {
+  const account = isCampusTicket.value ? 'school' : isStudentPhase.value ? 'edu' : null
   router.push({
     name: 'login',
-    query: { redirect: route.fullPath, ...(isCampusTicket.value ? { account: 'school' } : {}) }
+    query: { redirect: route.fullPath, ...(account ? { account } : {}) }
   })
 }
 
@@ -339,6 +414,7 @@ const fieldErrors = computed(() => {
   if (!buyer.value.customerName.trim()) errors.customerName = '請填寫購票人姓名'
   if (!buyer.value.customerPhone.trim()) errors.customerPhone = '請填寫聯絡電話'
   if (!acceptedTerms.value) errors.terms = '請閱讀並同意銷售與使用者條款'
+  if (needsStudentConfirm.value && !studentConfirmed.value) errors.student = '請確認你是在學學生'
   return errors
 })
 
@@ -392,6 +468,8 @@ async function submitDirectOrder() {
     class: needsClass.value ? buyer.value.class.trim() : '',
     number: needsClass.value ? buyer.value.number.trim() : '',
     office: school === '建中老師' ? buyer.value.office.trim() : '',
+    ...(needsStudentConfirm.value ? { studentConfirmed: studentConfirmed.value } : {}),
+    ...(usesDeclaration.value ? { studentDeclared: true, studentDeclaration: studentDeclaration.value } : {}),
     items: [{ id: ticketType.value.id, quantity: quantity.value }]
   })
 }

@@ -6,6 +6,7 @@ import { MAIL_SECRETS, SENDER } from './mailSender.js'
 import { SES_RECIPIENTS_PER_SECOND } from './params.js'
 import { createMailQueue } from './mailQueueCore.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
+import { generateGuestInvitationHTML } from '../templates/guestInvitation.js'
 import { generateOrderNotificationHTML } from '../templates/notification.js'
 import { heroAttachment } from '../templates/shared.js'
 
@@ -28,10 +29,14 @@ async function buildMessage(job) {
     width: 300, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' },
     errorCorrectionLevel: 'H', type: 'png'
   })
+  // 公關票 (guests.js) get an invitation, on resends too
+  const content = order.complimentary
+    ? { subject: `建中舞會公關票邀請 - 票券編號：${job.orderId}`,
+        html: generateGuestInvitationHTML(job.orderId, order) }
+    : { subject: `建中舞會購票系統購票成功 - 票券編號：${job.orderId}`,
+        html: generateEmailHTML(job.orderId, order, getBuyerOrderUrl(job.orderId)) }
   return {
-    from: SENDER, to: order.customerEmail,
-    subject: `建中舞會購票系統購票成功 - 票券編號：${job.orderId}`,
-    html: generateEmailHTML(job.orderId, order, getBuyerOrderUrl(job.orderId)),
+    from: SENDER, to: order.customerEmail, ...content,
     attachments: [{ filename: 'ticket-qrcode.png', content: qr, contentType: 'image/png',
       cid: 'qrcode', contentDisposition: 'inline' }, heroAttachment()]
   }
@@ -47,6 +52,10 @@ const queue = createMailQueue({ db, buildMessage,
   recipientsPerSecond: () => SES_RECIPIENTS_PER_SECOND.value() })
 
 export function enqueueOrderConfirmation(orderId, order) {
+  // 路宣 (streetSales.js): paper tickets were handed over at the sale
+  if (order.streetSale === true) {
+    return Promise.resolve({ jobId: null, status: 'skipped', emailStatus: 'skipped' })
+  }
   // Trigger retries use the same ID. Preserve legacy sent confirmations.
   if (order.emailStatus === 'sent' || order.emailStatus === 'accepted' || !order.customerEmail) {
     return Promise.resolve({ jobId: null, status: order.emailStatus || 'skipped', emailStatus: order.emailStatus || 'skipped' })
@@ -58,6 +67,9 @@ export function enqueueOrderConfirmation(orderId, order) {
 }
 
 export function enqueueManualOrderResend(orderId, order, actorUid, { requestId } = {}) {
+  if (order.streetSale === true) {
+    throw new functions.https.HttpsError('failed-precondition', '路宣紙本票不寄送 Email')
+  }
   if (requestId != null && !/^[A-Za-z0-9_-]{8,80}$/.test(String(requestId))) {
     throw new functions.https.HttpsError('invalid-argument', '重寄請求編號無效')
   }

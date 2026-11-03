@@ -132,19 +132,28 @@ service cloud.firestore {
     // Orders
     // =========================
 
-    // Created only by the createOrder Cloud Function (Admin SDK bypasses
-    // rules), which sets userId to the signed-in buyer. A buyer can read only
-    // their own orders: lists must filter on where('userId', '==', uid), and
-    // an order id that does not exist or is someone else's is denied.
+    // Created only by Cloud Functions (Admin SDK bypasses rules): createOrder
+    // sets userId to the signed-in buyer. A buyer can read only their own
+    // orders: lists must filter on where('userId', '==', uid), and an order
+    // id that does not exist or is someone else's is denied.
     function isOrderOwner() {
       return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // 公關票 an officer still on the list sent (functions/lib/guests.js);
+    // their lists must filter on officerEmail
+    function isOrderOfficer() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && resource.data.get('officerEmail', null) == signedInEmail()
+        && isOfficer();
     }
 
     match /orders/{orderId} {
       // Managers (door staff) open single orders from ticket QR codes; only
       // admins may list every buyer's details.
-      allow get: if isManager() || isOrderOwner();
-      allow list: if isAdmin() || isOrderOwner();
+      allow get: if isManager() || isOrderOwner() || isOrderOfficer();
+      allow list: if isAdmin() || isOrderOwner() || isOrderOfficer();
       allow create: if false;
 
       // Status transitions and attribution require the atomic callables. Even
@@ -160,8 +169,40 @@ service cloud.firestore {
     }
 
     // Buyers never update or delete orders. ticketSales, buyerPurchases,
-    // orderRequests, rateLimits, stockReleases and notificationJobs are only
-    // touched by Cloud Functions and fall through to the deny-all rule below.
+    // orderRequests, rateLimits, stockReleases, notificationJobs,
+    // sellerReleases, invitationRequests, officerReleases and
+    // streetSaleRequests are only touched by Cloud Functions and fall
+    // through to the deny-all rule below.
+
+    // =========================
+    // 清除所有訂單 (functions/lib/orderPurge.js)
+    // =========================
+
+    // Written only by purgeOrders. Super admins read the yearly summaries and
+    // archived orders (/super_admin/analytics), a purge's progress, and the
+    // log of who purged. Nobody can write them, so an archive cannot be
+    // altered or a purge hidden from the log.
+    match /salesArchives/{year} {
+      allow read: if isSuperAdmin();
+
+      match /archivedOrders/{orderId} {
+        allow read: if isSuperAdmin();
+      }
+
+      // sale rows without the buyers' details (functions/lib/salesArchive.js),
+      // also written by importSalesArchive
+      match /rows/{chunk} {
+        allow read: if isSuperAdmin();
+      }
+    }
+
+    match /orderPurges/{purgeId} {
+      allow read: if isSuperAdmin();
+    }
+
+    match /systemLogs/{logId} {
+      allow read: if isSuperAdmin();
+    }
 
     // =========================
     // Ticket types & public content
@@ -215,135 +256,216 @@ service cloud.firestore {
     }
 
     // =========================
+    // 學弟登記賣票 (functions/lib/sellers.js)
+    // =========================
+
+    function sellerPath(email) {
+      return /databases/$(database)/documents/sellers/$(email);
+    }
+
+    // on the seller list kept by super admins, signed in with that email
+    function isSeller() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && exists(sellerPath(signedInEmail()));
+    }
+
+    // Which ticket type sellers take from and the shared goal; public like
+    // every settings document, also read by registerSellerTickets.
+    match /settings/sellerProgram {
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['enabled', 'ticketTypeId', 'goal', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.enabled is bool
+        && isShortString(request.resource.data.ticketTypeId, 100)
+        && request.resource.data.goal is int
+        && request.resource.data.goal >= 0
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if isSuperAdmin();
+    }
+
+    // The seller list, keyed by lower-case email. A seller can read only
+    // their own entry (to see the registration page).
+    match /sellers/{email} {
+      allow get: if isAdmin() || (
+        signedIn()
+        && request.auth.token.email_verified == true
+        && signedInEmail() == email
+      );
+      allow list: if isAdmin();
+
+      allow create, update: if isSuperAdmin()
+        && email == email.lower()
+        && request.resource.data.email == email
+        && request.resource.data.keys().hasOnly(['email', 'name', 'createdAt'])
+        && isShortString(request.resource.data.get('name', ''), 50);
+      allow delete: if isSuperAdmin();
+    }
+
+    // Created only by registerSellerTickets, which takes the tickets from
+    // stock. Sellers read their own (lists must filter on sellerUid); admins
+    // record ticket pickup and payment, and may delete a mistaken one
+    // (releaseSellerStock gives the tickets back).
+    match /sellerRegistrations/{registrationId} {
+      allow get, list: if isAdmin() || (signedIn() && resource.data.sellerUid == request.auth.uid);
+      allow create: if false;
+      allow update: if isAdmin()
+        && onlyChanges(['delivered', 'paid', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.delivered is bool
+        && request.resource.data.paid is bool
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Tickets registered by everyone, for the goal progress
+    match /sellerStats/summary {
+      allow get: if isAdmin() || isSeller();
+    }
+
+    // =========================
+    // 公關票 (functions/lib/guests.js)
+    // =========================
+
+    // The tickets themselves are orders with complimentary: true, created
+    // only by the guests.js callables; their invitationRequests and
+    // officerReleases markers fall through to the deny-all rule below.
+
+    function officerPath(email) {
+      return /databases/$(database)/documents/officers/$(email);
+    }
+
+    // on the officer list kept by super admins, signed in with that email
+    function isOfficer() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && exists(officerPath(signedInEmail()));
+    }
+
+    // Keep 500 in sync with MAX_OFFICER_QUOTA in src/data/guests.js
+    function isValidQuota(quota) {
+      return quota is int && quota >= 0 && quota <= 500;
+    }
+
+    function isValidOfficerName(name) {
+      return isShortString(name, 50) && name.trim().size() >= 1;
+    }
+
+    // The officer list, keyed by lower-case email: super admins set each
+    // one's name and quota; `used` (tickets sent plus those held by open
+    // invite links) is kept by the functions, and a quota cannot go below
+    // it. An officer reads only their own entry.
+    match /officers/{email} {
+      allow get: if isSuperAdmin() || (
+        signedIn()
+        && request.auth.token.email_verified == true
+        && signedInEmail() == email
+      );
+      allow list: if isSuperAdmin();
+
+      allow create: if isSuperAdmin()
+        && email == email.lower()
+        && request.resource.data.keys().hasOnly(['email', 'name', 'quota', 'used', 'createdAt'])
+        && request.resource.data.email == email
+        && isValidOfficerName(request.resource.data.name)
+        && isValidQuota(request.resource.data.quota)
+        && request.resource.data.used == 0
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isSuperAdmin()
+        && onlyChanges(['name', 'quota'])
+        && isValidOfficerName(request.resource.data.name)
+        && isValidQuota(request.resource.data.quota)
+        && request.resource.data.quota >= resource.data.get('used', 0);
+
+      // the tickets they sent stay valid; their open links stop working
+      allow delete: if isSuperAdmin();
+    }
+
+    // Invite links, written only by the functions. The random id is the
+    // secret in the link, so any signed-in account holding it may read it
+    // (to see what it is before claiming); officers list their own (lists
+    // must filter on officerEmail), super admins all of them, including
+    // their own council links (no officer).
+    match /officerInvites/{inviteId} {
+      allow get: if signedIn();
+      allow list: if isSuperAdmin() || (
+        isOfficer() && resource.data.officerEmail == signedInEmail()
+      );
+    }
+
+    // What a link is for, written only by createOfficerInvite (at most 100
+    // characters, MAX_INVITE_NOTE in src/data/guests.js). Kept apart from
+    // the link, which its guest reads: only its officer and super admins.
+    match /officerInviteNotes/{inviteId} {
+      allow get, list: if isSuperAdmin() || (
+        isOfficer() && resource.data.officerEmail == signedInEmail()
+      );
+    }
+
+    // =========================
+    // 路宣登記 (functions/lib/streetSales.js)
+    // =========================
+
+    // The sales themselves are paid, collected orders with streetSale: true
+    // that admins register through registerStreetSale (admins list orders
+    // already); its streetSaleRequests markers fall through to the deny-all
+    // rule below.
+
+    // Whether admins may register sales and of which ticket type; public
+    // like every settings document, also read by registerStreetSale.
+    match /settings/streetSale {
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['enabled', 'ticketTypeId', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.enabled is bool
+        && isShortString(request.resource.data.ticketTypeId, 100)
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if isSuperAdmin();
+    }
+
+    // =========================
     // Survey
     // =========================
 
-    // Keep these lists in sync with src/data/surveyQuestions.js
-    // (tests/firestore.rules.test.js submits every option to check).
-    function identityOptions() {
-      return [
-        '建國中學學生',
-        '建國中學家長',
-        '建國中學教師',
-        '北一女中學生',
-        '中山女高學生',
-        '景美女中學生',
-        '成功高中學生',
-        '師大附中學生',
-        '其他學校學生',
-        '社會人士',
-        '其他'
-      ];
-    }
-
-    function channelOptions() {
-      return [
-        '班聯會官方 Instagram',
-        'CK APP',
-        '班代或班級轉知',
-        '同學或朋友分享',
-        '建中相關社群',
-        '搜尋引擎',
-        '其他'
-      ];
-    }
-
-    function deviceOptions() {
-      return [
-        '手機',
-        '平板',
-        '筆記型電腦',
-        '桌上型電腦',
-        '其他'
-      ];
-    }
-
-    function issueCountOptions() {
-      return [
-        '沒有遇到問題',
-        '遇到過一次',
-        '遇到過 2～3 次',
-        '遇到過 4 次以上'
-      ];
-    }
-
-    function issueTypeOptions() {
-      return [
-        '找不到購票入口',
-        '票種資訊不清楚',
-        '活動資訊不清楚',
-        '購票資格確認',
-        '選擇票種',
-        '填寫購票資料',
-        '付款或付款資訊',
-        '訂單送出',
-        '訂單確認',
-        '電子票券或入場資訊',
-        '網頁載入速度',
-        '手機版介面',
-        '登入或帳號',
-        '其他'
-      ];
-    }
-
-    function isScore(scores, key) {
-      return scores[key] is int && scores[key] >= 1 && scores[key] <= 5;
-    }
-
-    // every rating question q4..q29 answered with an integer 1-5
-    function isValidScores(scores) {
-      return scores is map
-        && scores.keys().hasOnly(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25', 'q26', 'q27', 'q28', 'q29'])
-        && scores.keys().hasAll(['q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'q12', 'q13', 'q14', 'q15', 'q16', 'q17', 'q18', 'q19', 'q20', 'q21', 'q22', 'q23', 'q24', 'q25', 'q26', 'q27', 'q28', 'q29'])
-        && isScore(scores, 'q4')
-        && isScore(scores, 'q5')
-        && isScore(scores, 'q6')
-        && isScore(scores, 'q7')
-        && isScore(scores, 'q8')
-        && isScore(scores, 'q9')
-        && isScore(scores, 'q10')
-        && isScore(scores, 'q11')
-        && isScore(scores, 'q12')
-        && isScore(scores, 'q13')
-        && isScore(scores, 'q14')
-        && isScore(scores, 'q15')
-        && isScore(scores, 'q16')
-        && isScore(scores, 'q17')
-        && isScore(scores, 'q18')
-        && isScore(scores, 'q19')
-        && isScore(scores, 'q20')
-        && isScore(scores, 'q21')
-        && isScore(scores, 'q22')
-        && isScore(scores, 'q23')
-        && isScore(scores, 'q24')
-        && isScore(scores, 'q25')
-        && isScore(scores, 'q26')
-        && isScore(scores, 'q27')
-        && isScore(scores, 'q28')
-        && isScore(scores, 'q29');
-    }
-
+    // Anyone may answer without signing in, so answers go through
+    // submitSurvey (functions), which checks them and a Turnstile token
+    // before writing here; no client writes.
     match /surveyResponses/{responseId} {
-      allow create: if request.resource.data.keys().hasOnly([
-          'identity', 'channels', 'device', 'scores', 'issueCount',
-          'issueTypes', 'improvement', 'suggestion', 'createdAt'
-        ])
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.identity in identityOptions()
-        && request.resource.data.device in deviceOptions()
-        && request.resource.data.issueCount in issueCountOptions()
-        && request.resource.data.channels is list
-        && request.resource.data.channels.size() >= 1
-        && request.resource.data.channels.hasOnly(channelOptions())
-        && request.resource.data.issueTypes is list
-        && request.resource.data.issueTypes.hasOnly(issueTypeOptions())
-        && isValidScores(request.resource.data.scores)
-        && isShortString(request.resource.data.improvement, 2000)
-        && isShortString(request.resource.data.suggestion, 2000);
+      allow create: if false;
 
       allow read: if isManager();
       allow delete: if isSuperAdmin();
       allow update: if false;
+    }
+
+    // =========================
+    // 舞會滿意度調查
+    // =========================
+
+    // One document per party year (src/services/partySurveyService.js): its
+    // questions and whether it takes answers. Public, so the survey page can
+    // show them; super admins edit both on /admin/party-survey, and a survey opens
+    // only with questions. Questions change from year to year, so answers are
+    // checked against them by submitPartySurvey (functions), which writes
+    // partySurveys/{year}/responses; no client writes there.
+    match /partySurveys/{year} {
+      allow read: if true;
+      allow create, update: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['year', 'open', 'sections', 'updatedAt', 'updatedByUid'])
+        && request.resource.data.year == int(year)
+        && request.resource.data.open is bool
+        && request.resource.data.get('sections', []) is list
+        // keep in sync with LIMITS in src/data/partySurveyQuestions.js
+        && request.resource.data.get('sections', []).size() <= 20
+        && (request.resource.data.open == false || request.resource.data.get('sections', []).size() > 0)
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedByUid == request.auth.uid;
+      allow delete: if false;
+
+      match /responses/{responseId} {
+        allow read, delete: if isSuperAdmin();
+      }
     }
 
     // =========================

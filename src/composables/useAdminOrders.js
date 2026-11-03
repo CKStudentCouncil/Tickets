@@ -1,6 +1,7 @@
 import { ref, computed, watch, onScopeDispose } from 'vue'
-import { SCHOOLS } from 'src/data/schools'
+import { SCHOOLS, STREET_SCHOOL } from 'src/data/schools'
 import { formatDateTime } from 'src/utils/datetime'
+import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import {
   fetchAllOrders,
   fetchOrderSearchPage,
@@ -85,6 +86,7 @@ function buildOrderRows(exportOrders) {
       客戶姓名: order.customerName || '',
       電話: order.customerPhone || '',
       Email: order.customerEmail || '',
+      購票身分: getBuyerTypeLabel(order),
       學校: order.school || '',
       班級: order.class || '',
       座號: order.number || '',
@@ -408,7 +410,8 @@ export function useAdminOrders({ showToast }) {
   }
 
   return {
-    schools: SCHOOLS, orders, loading, loadError, fromCache, activeTab,
+    // 路宣 sales sit under STREET_SCHOOL, for the list filter and notices alike
+    schools: [...SCHOOLS, STREET_SCHOOL], orders, loading, loadError, fromCache, activeTab,
     selectedSchool, customerSearchInput, searchQuery: debouncedCustomerSearch,
     isSearching, emailFilter, patchOrder, currentOrders,
     currentStats, summary, summaryError, summaryLoading, summaryUpdatedAt, pageNumber, hasNext,

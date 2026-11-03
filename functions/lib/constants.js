@@ -23,6 +23,11 @@ export const SCHOOL_CODES = {
   其他學校或社會人士: 'O'
 }
 
+// 路宣登記 (streetSales.js): the school of every street sale, so the admin
+// order list, notices and the sales report tell them apart as an identity
+// of their own. Keep in sync with src/data/schools.js
+export const STREET_SCHOOL = '路宣'
+
 // 本校: tickets marked 本校學生 (campus_students) are for its students only,
 // bought while signed in with a school Google account (verified email)
 export const HOME_SCHOOL = '建國中學'
@@ -43,7 +48,34 @@ export const ELIGIBLE_IDENTITIES = {
   ALL_USERS: 'all_users'
 }
 
+// orders.buyerType, set by createOrder from the account email and shown to
+// staff only: a school account (edu.tw) is 學生, anything else 社會人士.
+// Keep in sync with src/data/ticketTypes.js
+export const BUYER_TYPES = { STUDENT: 'student', PUBLIC: 'public' }
+
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
+
+// 學弟登記賣票: tickets one registration may take (a seller sold 120 last
+// year). Keep in sync with src/data/sellerGuide.js
+export const MAX_SELLER_TICKETS = 200
+
+// 公關票: tickets one send or invite link may carry, and the largest quota
+// an officer (幹部) may be given. Keep in sync with src/data/guests.js and
+// firestore.rules
+export const MAX_GUEST_TICKETS = 10
+export const MAX_OFFICER_QUOTA = 500
+// characters in an invite link's note (officerInviteNotes)
+export const MAX_INVITE_NOTE = 100
+
+// How a guest invited before the officer quotas knew the council, kept on
+// their order: "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友".
+// Keep in sync with src/data/guests.js
+export function guestRelationText(guest) {
+  const detail = String(guest?.relationDetail || '').trim()
+  if (guest?.relation === 'alumni') return detail ? `建班大學長・${detail}` : '建班大學長'
+  if (guest?.relation === 'friend') return detail ? `親友・${detail}` : '親友'
+  return ''
+}
 
 // The buyer's order page; they sign in with the account they ordered with
 export function getBuyerOrderUrl(orderId) {

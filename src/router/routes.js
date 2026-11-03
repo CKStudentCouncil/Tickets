@@ -8,12 +8,21 @@ const routes = [
         path: '',
         name: 'home',
         component: () => import('pages/HomePage.vue'),
-        meta: { shop: true }
+        // shows before the sign-in state has loaded (router/index.js)
+        meta: { shop: true, authOptional: true }
       },
       {
         path: 'survey',
         name: 'survey',
         component: () => import('pages/SurveyPage.vue')
+      },
+      // 舞會滿意度調查: answers only while super admins have this year's open, from
+      // signed-in accounts (submitPartySurvey checks too)
+      {
+        path: 'party-survey',
+        name: 'party-survey',
+        component: () => import('pages/PartySurveyPage.vue'),
+        meta: { requiresAuth: true }
       },
       {
         path: 'policy',
@@ -70,6 +79,29 @@ const routes = [
         path: 'about',
         name: 'about',
         component: () => import('pages/AboutPage.vue')
+      },
+      {
+        // 學弟登記賣票; the page itself tells those not on the list
+        path: 'sell',
+        name: 'sell',
+        component: () => import('pages/SellerPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        // 公關票: officers (幹部) give out tickets from their quota; the page
+        // itself tells those not on the list
+        path: 'officer',
+        name: 'officer',
+        component: () => import('pages/OfficerPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
+        // 公關票: a guest claims an officer's one-time invite link. Open
+        // before the shop is.
+        path: 'invite/:id',
+        name: 'invite',
+        component: () => import('pages/InvitePage.vue'),
+        meta: { requiresAuth: true }
       },
       {
         path: 'comingsoon',
@@ -137,9 +169,70 @@ const routes = [
         }
       },
       {
+        path: 'sellers',
+        name: 'admin-sellers',
+        component: () => import('pages/SellerAdminPage.vue'),
+        meta: {
+          requiresAdmin: true
+        }
+      },
+      {
+        // 路宣登記: tickets sold for cash on the street, handed over as paper
+        // tickets at once; the totals are on /super_admin/street (路宣管理)
+        path: 'street',
+        name: 'admin-street',
+        component: () => import('pages/StreetSalePage.vue'),
+        meta: {
+          requiresAdmin: true
+        }
+      },
+      {
         path: 'survey',
         name: 'admin-survey',
         component: () => import('pages/SurveyAdminPage.vue')
+      },
+      {
+        path: 'party-survey',
+        name: 'admin-party-survey',
+        component: () => import('pages/PartySurveyAdminPage.vue'),
+        meta: {
+          requiresSuperAdmin: true
+        }
+      }
+    ]
+  },
+
+  {
+    path: '/super_admin',
+    component: () => import('layouts/MainLayout.vue'),
+    // the router guard requires a super admin; firestore.rules guard the data
+    meta: {
+      isAdminSection: true,
+      requiresSuperAdmin: true
+    },
+    children: [
+      {
+        path: '',
+        redirect: { name: 'super-admin-analytics' }
+      },
+      {
+        // live sales dashboard and the archived years (salesArchives)
+        path: 'analytics',
+        name: 'super-admin-analytics',
+        component: () => import('pages/AnalyticsPage.vue')
+      },
+      {
+        // 公關票: the officers and their quotas, and sends by name and email
+        path: 'guests',
+        name: 'super-admin-guests',
+        component: () => import('pages/GuestAdminPage.vue')
+      },
+      {
+        // 路宣管理: every street sale and its totals, each seller's cash, and
+        // opening it
+        path: 'street',
+        name: 'super-admin-street',
+        component: () => import('pages/StreetSaleAdminPage.vue')
       }
     ]
   },

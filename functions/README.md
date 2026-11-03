@@ -21,10 +21,18 @@ functions/
 │   ├── mailQueue.js             # message rendering and scheduled shared worker
 │   ├── mailQueueCore.js         # durable claims, rate reservation and outcomes
 │   ├── notifications.js         # prepareOrderNotification, sendOrderNotification
+│   ├── sellers.js               # registerSellerTickets, releaseSellerStock (學弟登記賣票)
+│   ├── streetSales.js           # registerStreetSale (路宣登記, paper tickets sold for cash)
+│   ├── orderPurge.js            # purgeOrders (清除所有訂單)
+│   ├── salesArchive.js          # salesArchives summaries and sale rows, importSalesArchive
+│   ├── guests.js                # 公關票: officer quotas, invite links, direct sends
+│   ├── survey.js                # submitSurvey (購票系統問卷)
+│   ├── partySurvey.js           # submitPartySurvey (舞會滿意度調查)
 │   └── lineup.js                # uploadLineupImage, deleteLineupImage
 └── templates/
     ├── shared.js                # escapeHtml, colours, fonts
     ├── orderConfirmation.js     # purchase confirmation email
+    ├── guestInvitation.js       # 公關票 invitation email (sent instead of the confirmation)
     └── notification.js          # payment / pickup / custom notification email
 ```
 
@@ -39,16 +47,29 @@ functions/
 | `updateOrderPayment` | callable | admin+ | Atomically changes payment state with an expected-state check and trusted audit metadata |
 | `sendOrderQRCode` | `orders/{id}` created | — | Enqueues one deterministic confirmation job; the QR links to `/admin/orders/{id}?c={ticketCode}` |
 | `resendOrderEmail` | callable | admin+ | Enqueues a deliberate resend. Reuse `requestId` when retrying the same staff action |
+| `submitSurvey` | callable | anyone | Checks the Turnstile token (action `survey`) when `ENFORCE_TURNSTILE` is on, validates the answers against the survey page's options and writes `surveyResponses` |
+| `submitPartySurvey` | callable | signed-in users | Checks the answers against that year's questions and the Turnstile token (action `party_survey`), then writes `partySurveys/{year}/responses` without the account |
 | `processMailQueue` | scheduled every minute | — | Shares one leased, paced worker across confirmations, resends and notification batches |
-| `prepareOrderNotification` | callable | manager+ | Validates a payment / pickup / custom notice and saves its recipients (buyers, optionally of one school) as `notificationJobs/{jobId}` without sending; returns the jobId and recipient count |
+| `prepareOrderNotification` | callable | manager+ | Validates a payment / pickup / custom notice and saves its recipients (buyers, optionally of one school; 公關票 guests only for pickup and custom notices) as `notificationJobs/{jobId}` without sending; returns the jobId and recipient count |
 | `sendOrderNotification` | callable | manager+ | Enqueues deterministic BCC batches for a prepared job. Repeating the same job ID resumes interrupted enqueue without resetting batches |
 | `getOrderNotificationStatus` | callable | manager+ | Returns queued, accepted, failed and uncertain progress; the frontend polls this separately from enqueue |
+| `registerSellerTickets` | callable | signed-in accounts on `sellers/{email}` | 學弟登記賣票: takes 1–200 tickets of the type in `settings/sellerProgram` (while `enabled`) from its stock shards, locking every shard, and saves `sellerRegistrations/{requestId}`. Ignores the sale window and per-person limit, never the stock. A retried call with the same `requestId` returns the same registration |
+| `registerStreetSale` | callable | admin+ | 路宣登記: sells 1–20 tickets of the type in `settings/streetSale` (while `enabled`; never a 本校學生 type), handed over as paper tickets for cash. Creates a paid, collected order with `streetSale: true` (id `ST…`, school `路宣`, no buyer details, `promoterEmail` / `promoterName` of the admin) and its payment and delivery history entries, locking every stock shard. Ignores the sale window and the per-person limit, never the stock. Nothing is emailed: the mail queue skips street sales. A retried call with the same `requestId` returns the same order (`streetSaleRequests/{requestId}`) |
+| `releaseSellerStock` | `sellerRegistrations/{id}` deleted | — | Returns a deleted registration's tickets to stock and the shared total (once, via `sellerReleases/{id}`) |
+| `purgeOrders` | callable | super admin | 清除所有訂單 for exactly the order ids of the browser's Excel backup, with the typed `confirm` phrase. Archives every order to `salesArchives/{year}/archivedOrders` and writes the yearly summary and sale rows before deleting any; then deletes each order with its archived copy, its `stockReleases` marker and its stock / allowance release in one transaction (planned under 450 writes). Writes `systemLogs/purge_{purgeId}`. Progress is in `orderPurges/{purgeId}` (ids in its `orderIds` subcollection); one run at a time, held by a lease; call again with the same `purgeId` to resume |
+| `importSalesArchive` | callable | super admin | 匯入往年資料: stores an earlier year's sale rows (read in the browser from an Excel export, without names, phones, emails, classes or seats) as `salesArchives/{year}`. Replaces an earlier import, never a purged year; logs to `systemLogs` |
+| `sendGuestInvitation` | callable | super admin | 公關票 outside any quota: creates an NT$0, paid order with `complimentary: true` (id `PR…`, school `公關票`, no officer) for a guest given by name and email. Takes no stock and releases none when deleted. `sendOrderQRCode` then queues it, and the mail worker sends the invitation template instead of the confirmation, on resends too. A retried call with the same `requestId` returns the same order (`invitationRequests/{requestId}`) |
+| `sendOfficerTicket` | callable | signed-in accounts on `officers/{email}` | 公關票 from the officer's quota, by name and email: the same order with `officerEmail` / `officerName`, adding its tickets to the officer's `used` in one transaction. An email that already has a 公關票 is refused with `already-exists` and details `{ duplicate: true }` unless `allowDuplicate`. Retries with the same `requestId` return the same order |
+| `createOfficerInvite` | callable | signed-in accounts on `officers/{email}`; super admins with `council: true` | Makes a one-time invite link `officerInvites/{id}` (random 24-character id) for 1–10 tickets, holding them from the officer's quota at once; a super admin's council link has no officer and takes no quota. An optional `note` (up to 100 characters) goes to `officerInviteNotes/{id}`, which only that officer and super admins read. Retries by the same caller with the same `requestId` return the same link |
+| `revokeOfficerInvite` | callable | the link's officer, or a super admin (council links: super admins only) | Deletes an unclaimed link and its note and gives its tickets back to the quota; a claimed one cannot be revoked |
+| `claimOfficerInvite` | callable | signed-in, verified accounts | Claims an open link: creates the order for the caller's name and account email (`userId` the caller, `inviteId` the link) and marks the link claimed. The same account claiming again gets the same order; links of an officer since removed no longer work |
+| `releaseOfficerQuota` | `orders/{id}` deleted | — | Gives a deleted officer ticket's tickets back to that officer's quota (once, via `officerReleases/{orderId}`) |
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
 
 Avoid saving the ticket types on the management page during a sale opening: every checkout reads `settings/ticketTypes` in its transaction, so a save then makes them wait.
 
-Stock is counted in 50 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-49}`, so simultaneous checkouts do not all lock one counter. Each shard may sell up to its cap, stored in `ticketSales/{ticketTypeId}.shardCaps` together with the stock it was planned for. The caps add up to the stock and none is below what its shard has already sold, so lowering the stock or limiting a type that sold unlimited never oversells. When the stock changes (a save on the management page, or a deleted order placed before the shards), `planStockShards` plans the caps again from what each shard has sold; a checkout that finds them out of date plans them first, in a transaction of its own (and its order transaction would still do it, locking every shard, if they went out of date meanwhile). Before its transaction an order reads the shards and caps without locking them, turns the buyer away if the type is sold out, and otherwise locks one random shard that still has room. If that shard filled up meanwhile or another checkout won the lock, it looks again and picks a fresh random shard: the first tries are one transaction attempt each after a short random wait, the later ones let Firestore retry, which waits longer but keeps the checkout's place in the lock queue. It never locks every shard with room, which would collide with every other checkout. Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}.sold` only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}`, `notificationJobs/{jobId}` and `turnstilePasses/{requestId}`, are only written by the functions (the Firestore rules deny clients).
+Stock is counted in 50 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-49}`, so simultaneous checkouts do not all lock one counter. Each shard may sell up to its cap, stored in `ticketSales/{ticketTypeId}.shardCaps` together with the stock it was planned for. The caps add up to the stock and none is below what its shard has already sold, so lowering the stock or limiting a type that sold unlimited never oversells. When the stock changes (a save on the management page, or a deleted order placed before the shards), `planStockShards` plans the caps again from what each shard has sold; a checkout that finds them out of date plans them first, in a transaction of its own (and its order transaction would still do it, locking every shard, if they went out of date meanwhile). Before its transaction an order reads the shards and caps without locking them, turns the buyer away if the type is sold out, and otherwise locks one random shard that still has room. If that shard filled up meanwhile or another checkout won the lock, it looks again and picks a fresh random shard: the first tries are one transaction attempt each after a short random wait, the later ones let Firestore retry, which waits longer but keeps the checkout's place in the lock queue. It never locks every shard with room, which would collide with every other checkout. Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}.sold` only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}`, `notificationJobs/{jobId}`, `turnstilePasses/{requestId}`, `invitationRequests/{requestId}`, `officerInvites/{id}`, `officerInviteNotes/{id}` and `officerReleases/{orderId}`, are only written by the functions (the Firestore rules deny clients).
 
 Deleting a sharded order invalidates its type's stored caps in the same release transaction. The next checkout recalculates them under locks, so lowering stock below existing sales cannot create room for new sales merely by deleting an order.
 
@@ -62,11 +83,10 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 
 | Name | Default | Meaning |
 |---|---|---|
-| `ENFORCE_APP_CHECK` | `false` | Reject `createOrder` calls without a valid App Check token. Turn on only after App Check is set up (see the root README) |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Warm `createOrder` instances, each serving up to 80 checkouts at once; set 5-10 around the sale opening, back to 0 afterwards |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Max orders per signed-in account per 10 minutes (0 = off). Per account because the client IP header can be forged by the caller |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Your SES account's sending rate, shared across every email source; BCC batches count the council To recipient too |
-| `ENFORCE_TURNSTILE` | `false` | Reject `createOrder` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
+| `ENFORCE_TURNSTILE` | `false` | Reject `createOrder`, `submitSurvey` and `submitPartySurvey` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Comma-separated site hostnames whose tokens are accepted. Never add `localhost` |
 
 Change a value and redeploy the functions.
@@ -83,7 +103,7 @@ firebase functions:secrets:set AWS_REGION
 
 The sender is `no-reply@tickets.cksc.tw`, which must be allowed by the SES IAM policy.
 
-`createOrder` also needs the Turnstile widget's secret key, even while `ENFORCE_TURNSTILE` is off (a deploy fails while it is missing):
+`createOrder`, `submitSurvey` and `submitPartySurvey` also need the Turnstile widget's secret key, even while `ENFORCE_TURNSTILE` is off (a deploy fails while it is missing):
 
 ```bash
 firebase functions:secrets:set TURNSTILE_SECRET

@@ -29,6 +29,7 @@
       <p class="eyebrow">後台管理</p>
       <h1>{{ canManageOrders ? '後台管理' : '通知管理' }}</h1>
       <router-link :to="{ name: 'admin-scan' }" class="btn scan-link">掃描票券 QR Code</router-link>
+      <router-link v-if="canPurge" :to="{ name: 'super-admin-analytics' }" class="btn-outline scan-link analytics-link">銷售報表</router-link>
     </div>
 
     <div
@@ -155,19 +156,64 @@
           </div>
         </div>
 
-        <div class="filter-block">
-          <label for="notify-school" class="field-label">通知對象</label>
-          <select id="notify-school" v-model="notifyForm.school">
-            <option value="all">全部學校</option>
-            <option
-              v-for="school in schools"
-              :key="school"
-              :value="school"
-            >
-              {{ school }}
-            </option>
-          </select>
-        </div>
+        <fieldset class="recipient-filters">
+          <legend class="field-label">收件人篩選</legend>
+
+          <div v-if="notifyFilters.complimentary !== 'only'" class="filter-group">
+            <span class="field-label">學校（都不勾即全部學校）</span>
+            <div class="check-grid">
+              <label v-for="school in notifySchools" :key="school" class="check-option">
+                <input v-model="notifyFilters.schools" type="checkbox" :value="school">
+                <span>{{ school }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <span class="field-label">票種（都不勾即全部票種，勾選後買過其中一種就會收到）</span>
+            <p v-if="ticketTypesError" class="filter-note" role="alert">{{ ticketTypesError }}</p>
+            <div v-else class="check-grid">
+              <label v-for="ticketType in notifyTicketTypes" :key="ticketType.id" class="check-option">
+                <input v-model="notifyFilters.ticketTypeIds" type="checkbox" :value="ticketType.id">
+                <span>{{ ticketType.name }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="filter-row">
+            <label v-if="choosesStatus(notifyForm.type)" class="field">
+              <span>繳費狀態</span>
+              <select v-model="notifyFilters.paid">
+                <option v-for="option in PAID_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label v-if="choosesStatus(notifyForm.type)" class="field">
+              <span>領票狀態</span>
+              <select v-model="notifyFilters.delivered">
+                <option v-for="option in DELIVERED_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label v-if="choosesComplimentary(notifyForm.type)" class="field">
+              <span>公關票</span>
+              <select v-model="notifyFilters.complimentary">
+                <option v-for="option in COMPLIMENTARY_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="filter-row">
+            <label class="field">
+              <span>訂購日期起（選填）</span>
+              <input v-model="notifyFilters.createdFrom" type="date">
+            </label>
+            <label class="field">
+              <span>訂購日期迄（選填，含當天）</span>
+              <input v-model="notifyFilters.createdTo" type="date">
+            </label>
+          </div>
+          <p v-if="!choosesStatus(notifyForm.type)" class="filter-note">{{ notifyTypeLabel }}只會寄給{{ NOTIFY_AUDIENCE[notifyForm.type] }}的訂購者。</p>
+          <p v-if="notifyFilterError" class="filter-note" role="alert">{{ notifyFilterError }}</p>
+        </fieldset>
 
         <label v-if="notifyForm.type === 'custom'" class="field">
           <span>主旨</span>
@@ -226,7 +272,7 @@
             <p>地點：<strong>{{ notifyForm.location || '（尚未填寫）' }}</strong></p>
             <p v-if="notifyForm.message">補充說明：{{ notifyForm.message }}</p>
           </template>
-          <p class="preview-count">將發送給{{ notifyTargetSchoolLabel }}的訂購者（確認前會顯示完整人數）</p>
+          <p class="preview-count">將發送給符合條件的訂購者：{{ notifyRecipientLabel }}（確認前會顯示完整人數）</p>
         </div>
 
         <div class="notify-actions">
@@ -363,7 +409,7 @@
         <p><strong>最後領票更新者：</strong>{{ order.deliveryUpdatedByName || '—' }}</p>
         <p><strong>最後領票更新時間：</strong>{{ order.deliveryUpdatedAt ? formatDate(order.deliveryUpdatedAt) : '—' }}</p>
         <div
-          v-if="order.customerName || order.customerEmail"
+          v-if="order.customerName || order.customerEmail || order.streetSale"
           class="customer-box"
         >
           <strong>客戶資料：</strong>
@@ -371,7 +417,9 @@
             <li v-if="order.customerName">姓名：{{ order.customerName }}</li>
             <li v-if="order.customerPhone">電話：<span class="mono">{{ order.customerPhone }}</span></li>
             <li v-if="order.customerEmail">Email：<span class="mono">{{ order.customerEmail }}</span></li>
+            <li v-if="getBuyerTypeLabel(order)">購票身分：{{ getBuyerTypeLabel(order) }}</li>
             <li v-if="order.school">學校：{{ order.school }}</li>
+            <li v-if="order.streetSale">路宣登記人：{{ order.promoterName || order.promoterEmail }}</li>
             <li v-if="order.class">班級：{{ order.class }}</li>
             <li v-if="order.number">座號：{{ order.number }}</li>
             <li v-if="order.office">辦公室：{{ order.office }}</li>
@@ -423,34 +471,210 @@
       </div>
       <p v-if="!loading && !loadError && !fromCache && currentOrders.length === 0" class="empty">尚無符合條件的訂單</p>
     </div>
+
+    <section
+      v-if="canPurge"
+      class="panel danger-zone"
+      aria-labelledby="purge-title"
+    >
+      <div class="notify-header">
+        <div>
+          <p class="danger-eyebrow">Danger zone</p>
+          <h2 id="purge-title">清除所有訂單</h2>
+          <p class="panel-copy">
+            活動結束、準備新一年度時使用；系統會先下載 Excel 完整備份，再把訂單封存到 Firestore 的 salesArchives（銷售報表的歷年比較），兩者都成功後才刪除訂單、退回庫存與購買額度，並寫入系統紀錄
+          </p>
+        </div>
+        <button type="button" class="btn-outline danger" @click="openPurge">清除所有訂單…</button>
+      </div>
+      <p v-if="unfinishedPurge" class="purge-unfinished" role="status">
+        有一次清除尚未完成：已刪除 <span class="num">{{ unfinishedPurge.deletedCount || 0 }} / {{ unfinishedPurge.total }}</span> 筆
+        <button type="button" class="btn-sm" @click="openResume">查看並繼續</button>
+      </p>
+    </section>
+
+    <q-dialog
+      v-if="canPurge"
+      v-model="purgeOpen"
+      :persistent="purgeBusy"
+      aria-labelledby="purge-dialog-title"
+      @hide="closePurge"
+    >
+      <div class="modal notify-modal purge-modal">
+        <p class="danger-eyebrow">Danger zone</p>
+        <h2 id="purge-dialog-title">{{ purgeResuming ? '繼續清除訂單' : '清除所有訂單' }}</h2>
+
+        <template v-if="purgePhase === 'confirm'">
+          <p v-if="purgeResuming" class="purge-warning">
+            這次清除已封存 <strong class="num">{{ purgeRun?.archivedCount || 0 }}</strong> 筆、刪除 <strong class="num">{{ purgeRun?.deletedCount || 0 }} / {{ purgeRun?.total }}</strong> 筆；繼續後會刪除其餘已備份的訂單
+          </p>
+          <p v-else class="purge-warning">
+            將刪除目前全部
+            <strong class="num">{{ orderCount ?? '…' }}</strong>
+            筆訂單與購買者資料，刪除後無法在後台復原
+          </p>
+          <p v-if="!purgeResuming && orderCountError" class="purge-error" role="alert">{{ orderCountError }}</p>
+          <ol class="purge-steps">
+            <li>下載 Excel 完整備份（含所有欄位）</li>
+            <li>封存到 Firestore 的 salesArchives，保留年度摘要與原始訂單</li>
+            <li>以上都成功後才刪除訂單，並退回庫存與每人購買額度</li>
+            <li>把這次清除寫入 systemLogs</li>
+          </ol>
+          <p class="panel-copy">只會刪除備份中的訂單；開始後才送出的新訂單會保留</p>
+          <label class="field purge-confirm">
+            <span>請輸入 <code>{{ PURGE_CONFIRM_PHRASE }}</code> 確認</span>
+            <input
+              v-model="purgeTyped"
+              type="text"
+              autocomplete="off"
+              autocapitalize="characters"
+              autocorrect="off"
+              spellcheck="false"
+              @keydown.enter="startPurge"
+            >
+          </label>
+          <p v-if="purgeError" class="purge-error" role="alert">{{ purgeError }}</p>
+          <div class="notify-actions">
+            <button
+              type="button"
+              class="btn danger-btn"
+              :disabled="!purgePhraseMatches"
+              @click="startPurge"
+            >
+              {{ purgeResuming ? '繼續清除' : '備份並清除' }}
+            </button>
+            <button type="button" class="btn-outline" @click="closePurge">取消</button>
+          </div>
+        </template>
+
+        <template v-else>
+          <ol class="purge-progress">
+            <li
+              v-for="stage in purgeStages"
+              :key="stage.key"
+              class="purge-stage"
+              :class="stage.status"
+            >
+              <span class="stage-icon" aria-hidden="true">
+                <CircleCheck v-if="stage.status === 'done'" :size="18" :stroke-width="1.75" />
+                <CircleX v-else-if="stage.status === 'failed'" :size="18" :stroke-width="1.75" />
+                <LoaderCircle v-else-if="stage.status === 'running'" class="spin" :size="18" :stroke-width="1.75" />
+                <Circle v-else :size="18" :stroke-width="1.75" />
+              </span>
+              <div class="stage-body">
+                <p class="stage-label">
+                  {{ stage.label }}
+                  <span class="sr-only">（{{ STAGE_STATUS[stage.status] }}）</span>
+                </p>
+                <p v-if="stage.detail" class="stage-detail num">{{ stage.detail }}</p>
+                <div
+                  v-if="stage.progress !== null"
+                  class="stage-track"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-valuenow="Math.round(stage.progress * 100)"
+                  :aria-label="stage.label"
+                >
+                  <div class="stage-fill" :style="{ width: `${stage.progress * 100}%` }" />
+                </div>
+              </div>
+            </li>
+          </ol>
+
+          <div v-if="purgePhase === 'done'" class="purge-result" role="status">
+            <p>
+              已清除 <strong class="num">{{ purgeRun?.deletedCount || 0 }}</strong> 筆訂單，封存於
+              <span class="mono">salesArchives/{{ (purgeRun?.years || []).join('、') }}</span>
+            </p>
+            <p v-if="purgeRun?.missingCount">另有 <span class="num">{{ purgeRun.missingCount }}</span> 筆在清除前已被刪除，未列入封存</p>
+            <p v-if="purgeRemaining">目前還有 <span class="num">{{ purgeRemaining }}</span> 筆在備份之後才送出的訂單，沒有被清除</p>
+            <router-link :to="{ name: 'super-admin-analytics' }" class="purge-link">前往銷售報表查看歷年比較</router-link>
+          </div>
+          <p v-if="purgeError" class="purge-error" role="alert">{{ purgeError }}</p>
+
+          <div class="notify-actions">
+            <button
+              v-if="purgePhase === 'failed' || purgeWaiting"
+              type="button"
+              class="btn danger-btn"
+              :disabled="purgeBusy"
+              @click="retryPurge"
+            >
+              {{ purgeRun ? '繼續清除' : '重新開始' }}
+            </button>
+            <button type="button" class="btn-outline" :disabled="purgeBusy" @click="closePurge">
+              {{ purgePhase === 'done' ? '完成' : '關閉' }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </q-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { httpsCallable } from 'firebase/functions'
-import { functions } from 'src/boot/firebase'
+import { Circle, CircleCheck, CircleX, LoaderCircle } from 'lucide-vue-next'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { useAdminOrders } from 'src/composables/useAdminOrders'
+import { useNotificationJob } from 'src/composables/useNotificationJob'
+import { useOrderPurge } from 'src/composables/useOrderPurge'
 import { fetchOrder, resendOrderEmail } from 'src/services/orderService'
-import { shouldPollNotification, needsNotificationEnqueue, canClearNotification } from 'src/utils/notificationProgress'
+import { needsNotificationEnqueue, canClearNotification } from 'src/utils/notificationProgress'
+import {
+  COMPLIMENTARY_OPTIONS, DELIVERED_OPTIONS, NOTIFY_AUDIENCE, PAID_OPTIONS,
+  choosesComplimentary, choosesStatus, createRecipientFilters, describeRecipients,
+  recipientFilterError, recipientFilterPayload
+} from 'src/utils/notificationFilters'
+import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
+import { fetchTicketTypes } from 'src/services/ticketTypeService'
+import { STREET_SCHOOL } from 'src/data/schools'
 
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 
-// Managers only get the notification tools; admins also manage orders
+// Managers only get the notification tools; admins also manage orders;
+// super admins may also purge every order (purgeOrders checks this too)
 const canAccessAdmin = computed(() => auth.isManager)
 const canManageOrders = computed(() => auth.isAdmin)
+const canPurge = computed(() => auth.isSuperAdmin)
+
+const STAGE_STATUS = { pending: '等待中', running: '進行中', done: '完成', failed: '失敗' }
+
+const {
+  PURGE_CONFIRM_PHRASE,
+  open: purgeOpen,
+  phase: purgePhase,
+  typed: purgeTyped,
+  phraseMatches: purgePhraseMatches,
+  busy: purgeBusy,
+  orderCount,
+  countError: orderCountError,
+  unfinished: unfinishedPurge,
+  resuming: purgeResuming,
+  stages: purgeStages,
+  run: purgeRun,
+  waiting: purgeWaiting,
+  error: purgeError,
+  remaining: purgeRemaining,
+  checkUnfinished,
+  openPurge,
+  openResume,
+  close: closePurge,
+  start: startPurge,
+  retry: retryPurge
+} = useOrderPurge({ showToast: toast.show, staffName: () => auth.displayName })
 
 const DEFAULT_NOTIFY_MESSAGE = '請出示 QR Code 給工作人員，以完成繳費或領票。'
 
 function createNotifyForm(school = 'all') {
   return {
     type: 'payment',
-    school,
+    filters: createRecipientFilters(school),
     subject: '',
     paymentTime: '',
     pickupTime: '',
@@ -460,9 +684,20 @@ function createNotifyForm(school = 'all') {
 }
 
 const showNotifyModal = ref(false)
-const sendingNotify = ref(false)
+const {
+  sending: sendingNotify,
+  pendingJob,
+  notificationError,
+  notificationProgress,
+  pollNotificationStatus,
+  setPendingJob,
+  prepareNotification,
+  runNotificationJob
+} = useNotificationJob()
 const resendingIds = ref(new Set())
 const notifyForm = ref(createNotifyForm())
+// 路宣 buyers got paper tickets and left no email, so no notice reaches them
+const notifySchools = computed(() => schools.filter((school) => school !== STREET_SCHOOL))
 
 const {
   schools,
@@ -489,14 +724,35 @@ const {
 
 const deliveryStats = computed(() => calculateDeliveryStats(currentOrders.value))
 
-const notifyTargetSchoolLabel = computed(() =>
-  notifyForm.value.school === 'all' ? '全部學校' : notifyForm.value.school
-)
+const notifyFilters = computed(() => notifyForm.value.filters)
+const notifyTicketTypes = ref([])
+const ticketTypesError = ref('')
+let ticketTypesLoaded = false
+
+// 公關票 orders carry their own ticket type, chosen by the 公關票 filter
+async function loadNotifyTicketTypes() {
+  if (ticketTypesLoaded) return
+  ticketTypesError.value = ''
+  try {
+    notifyTicketTypes.value = await fetchTicketTypes()
+    ticketTypesLoaded = true
+  } catch (error) {
+    console.error('Load ticket types error:', error)
+    ticketTypesError.value = '票種載入失敗，暫時無法依票種篩選。'
+  }
+}
+
+const notifyRecipientLabel = computed(() => describeRecipients(
+  notifyFilters.value, notifyForm.value.type,
+  Object.fromEntries(notifyTicketTypes.value.map((type) => [type.id, type.name]))
+))
+const notifyFilterError = computed(() => recipientFilterError(notifyFilters.value))
 
 // Only admins may list every order (firestore.rules); managers get the
 // notification tools only
 onMounted(() => {
   if (canManageOrders.value) fetchOrders()
+  if (canPurge.value) checkUnfinished()
 })
 
 const exactOrderId = ref('')
@@ -537,6 +793,7 @@ const notifyTypeLabel = computed(() => {
 
 const canSendNotify = computed(() => {
   const f = notifyForm.value
+  if (notifyFilterError.value) return false
   if (f.type === 'custom') return !!f.message.trim()
   if (!f.location.trim()) return false
   if (f.type === 'payment') return !!f.paymentTime.trim()
@@ -545,8 +802,9 @@ const canSendNotify = computed(() => {
 })
 
 function openNotifyModal() {
-  notifyForm.value.school = selectedSchool.value
+  notifyForm.value.filters = createRecipientFilters(selectedSchool.value)
   showNotifyModal.value = true
+  loadNotifyTicketTypes()
 }
 
 function closeNotifyModal() {
@@ -554,156 +812,46 @@ function closeNotifyModal() {
   showNotifyModal.value = false
 }
 
-const prepareOrderNotification = httpsCallable(functions, 'prepareOrderNotification')
-const sendOrderNotification = httpsCallable(functions, 'sendOrderNotification')
-const getOrderNotificationStatus = httpsCallable(functions, 'getOrderNotificationStatus')
-
-// Progress is remembered per staff account. Delivery continues on the server
-// after this page closes, and reopening only polls the existing job.
-const PENDING_JOB_KEY = `cksc_notification_job_${auth.user?.uid || 'anonymous'}`
-
-function loadPendingJob() {
-  try {
-    const job = JSON.parse(localStorage.getItem(PENDING_JOB_KEY) || 'null')
-    return job?.jobId ? job : null
-  } catch {
-    return null
-  }
-}
-
-const pendingJob = ref(loadPendingJob())
-const notificationError = ref('')
-let notificationPollTimer
-let notificationDisposed = false
-let pollingNotification = false
-// SES acceptance does not establish inbox delivery.
-const notificationProgress = computed(() => {
-  const job = pendingJob.value
-  if (!job) return ''
-  const labels = {
-    ready: '尚未加入寄送佇列', queued: '已排入佇列', sending: '寄送中',
-    partial: '寄送中', done: '處理完成', failed: '部分寄送失敗', uncertain: '部分寄送結果待查'
-  }
-  let text = `${labels[job.status] || '等待確認'}：郵件服務已接受 ${job.acceptedCount ?? job.sentCount ?? 0} / ${job.total || 0} 封`
-  if (job.pendingCount) text += `，待處理 ${job.pendingCount} 封`
-  if (job.pendingEnqueueCount) text += `，尚有 ${job.pendingEnqueueCount} 位收件者未加入佇列，請按「繼續加入寄送佇列」`
-  if (job.failedCount) text += `，失敗 ${job.failedCount} 封`
-  if (job.uncertainCount) text += `，結果待查 ${job.uncertainCount} 封，請先查核寄送紀錄再決定是否補寄`
-  return text
-})
-
-function scheduleNotificationPoll() {
-  clearTimeout(notificationPollTimer)
-  if (!notificationDisposed && shouldPollNotification(pendingJob.value)) {
-    notificationPollTimer = setTimeout(pollNotificationStatus, 5000)
-  }
-}
-
-async function pollNotificationStatus() {
-  const jobId = pendingJob.value?.jobId
-  if (!jobId || pollingNotification || notificationDisposed) return
-  pollingNotification = true
-  notificationError.value = ''
-  try {
-    const result = (await getOrderNotificationStatus({ jobId })).data
-    if (!notificationDisposed && pendingJob.value?.jobId === jobId) setPendingJob(result)
-  } catch (error) {
-    if (!notificationDisposed) notificationError.value = error?.message || '寄送進度載入失敗，請重試。'
-  } finally {
-    pollingNotification = false
-    scheduleNotificationPoll()
-  }
-}
-
-onMounted(() => { if (pendingJob.value) pollNotificationStatus() })
-onBeforeUnmount(() => {
-  notificationDisposed = true
-  clearTimeout(notificationPollTimer)
-})
-
-function setPendingJob(job) {
-  const previous = pendingJob.value?.jobId === job?.jobId ? pendingJob.value : null
-  pendingJob.value = job ? {
-    jobId: job.jobId, status: job.status, sentCount: job.sentCount,
-    acceptedCount: job.acceptedCount, total: job.total, failedCount: job.failedCount,
-    uncertainCount: job.uncertainCount, pendingCount: job.pendingCount,
-    pendingEnqueueCount: job.pendingEnqueueCount,
-    enqueueUnconfirmed: job.enqueueUnconfirmed ?? previous?.enqueueUnconfirmed ?? false
-  } : null
-  if (!job) clearTimeout(notificationPollTimer)
-
-  try {
-    if (job) localStorage.setItem(PENDING_JOB_KEY, JSON.stringify(pendingJob.value))
-    else localStorage.removeItem(PENDING_JOB_KEY)
-  } catch {
-    // storage unavailable (private mode); the job still resumes this session
-  }
-}
-
 async function confirmSendNotify() {
   if (!canSendNotify.value) {
-    toast.show(notifyForm.value.type === 'custom' ? '請填寫訊息內容' : '請填寫必要的時間與地點')
+    if (notifyFilterError.value) toast.show(notifyFilterError.value)
+    else toast.show(notifyForm.value.type === 'custom' ? '請填寫訊息內容' : '請填寫必要的時間與地點')
     return
   }
 
   // The server saves the recipient list as a job; nothing is sent yet
   let job
-  sendingNotify.value = true
   try {
-    job = (await prepareOrderNotification({
+    job = await prepareNotification({
       type: notifyForm.value.type,
-      school: notifyForm.value.school,
+      filters: recipientFilterPayload(notifyFilters.value, notifyForm.value.type),
       // the subject input only exists for custom notices (PARTY-22)
       subject: notifyForm.value.type === 'custom' ? notifyForm.value.subject.trim() : '',
       paymentTime: notifyForm.value.paymentTime.trim(),
       pickupTime: notifyForm.value.pickupTime.trim(),
       location: notifyForm.value.location.trim(),
       message: notifyForm.value.message.trim()
-    })).data
+    })
   } catch (error) {
     console.error('Prepare notification error:', error)
     toast.show(error?.message ? `發送失敗：${error.message}` : '發送失敗，請稍後再試')
     return
-  } finally {
-    sendingNotify.value = false
   }
 
   if (!job.total) {
-    toast.show(`${notifyTargetSchoolLabel.value}目前沒有可寄送的訂購者`)
+    toast.show(`目前沒有符合條件的訂購者（${notifyRecipientLabel.value}）`)
     return
   }
 
   if (
     !window.confirm(
-      `確定要寄送${notifyTypeLabel.value}給${notifyTargetSchoolLabel.value} ${job.total} 位訂購者嗎？此動作無法復原。`
+      `確定要寄送${notifyTypeLabel.value}給 ${job.total} 位訂購者嗎？\n條件：${notifyRecipientLabel.value}\n此動作無法復原。`
     )
   ) {
     return
   }
 
   await runNotificationJob(job)
-}
-
-// One short, idempotent call enqueues the saved recipient job. Progress is
-// polled separately and delivery continues when this page is closed.
-async function runNotificationJob(job) {
-  if (sendingNotify.value) return
-  setPendingJob({ ...job, enqueueUnconfirmed: true })
-  sendingNotify.value = true
-  notificationError.value = ''
-  try {
-    const result = (await sendOrderNotification({ jobId: job.jobId })).data
-    setPendingJob({ ...result, enqueueUnconfirmed: false })
-    toast.show('通知已加入寄送佇列，可稍後查看進度。')
-    scheduleNotificationPoll()
-  } catch (error) {
-    console.error('Queue notification error:', error)
-    notificationError.value = error?.message || '佇列狀態尚未確認，請檢查進度後再試。'
-    // A lost acknowledgement must not start a second recipient job.
-    await pollNotificationStatus()
-  } finally {
-    sendingNotify.value = false
-  }
 }
 
 const EMAIL_STATUS_LABELS = {

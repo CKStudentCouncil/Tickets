@@ -26,7 +26,7 @@
               本系統將採取合理技術與資安管理措施，保護您的個人資料安全，防止未經授權之存取、洩漏或竄改。
             </li>
             <li>
-              本系統使用第三方服務（如 Google reCAPTCHA、Google Analytics、Amazon Web Services、Firebase等）以提供系統服務、保護系統安全並就系統使用情形進行分析，該等服務可能會蒐集使用者之部分資訊，如您不同意第三方服務之資料蒐集，請勿使用本系統。
+              本系統使用第三方服務（如 Cloudflare Turnstile、Google Analytics、Amazon Web Services、Firebase等）以提供系統服務、保護系統安全並就系統使用情形進行分析，該等服務可能會蒐集使用者之部分資訊，如您不同意第三方服務之資料蒐集，請勿使用本系統。
             </li>
           </ul>
         </section>

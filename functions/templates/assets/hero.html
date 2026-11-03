@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+  Source of hero.jpg, the artwork at the top of every email: the homepage
+  poster (public/homepageposter.png) cropped to the black hole, with the
+  "2026 · CK PARTY NIGHT" eyebrow and the poster's own COSMOS lettering
+  (public/poster.jpg, the same crop the homepage hero uses) laid on top.
+  Email clients can't reliably lay live text over a background image, so the
+  lockup is baked in; the caption under it stays live text in shared.js.
+  After editing, regenerate the JPEG from the repo root:
+
+    node functions/templates/assets/render-hero.mjs
+-->
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500&display=block" rel="stylesheet">
+  <style>
+    html, body { margin: 0; background: #050608; }
+
+    .hero {
+      position: relative;
+      width: 1280px;
+      height: 760px;
+      overflow: hidden;
+      background: #050608;
+    }
+
+    /* 5008 x 7063 poster scaled to 1280 wide; shifted up so the black hole sits in the upper half */
+    .art {
+      position: absolute;
+      left: 0;
+      top: -130px;
+      width: 1280px;
+      height: auto;
+    }
+
+    .shade {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(7, 9, 12, .35), rgba(7, 9, 12, .04) 24%, rgba(7, 9, 12, .14) 50%, rgba(7, 9, 12, .82) 80%, #050608 100%);
+    }
+
+    .lockup {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 56px;
+      text-align: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 34px;
+      padding-left: .5em;
+      font-family: 'Manrope', sans-serif;
+      font-size: 26px;
+      font-weight: 500;
+      letter-spacing: .5em;
+      color: #e4a468;
+      text-shadow: 0 2px 14px rgba(0, 0, 0, .85);
+    }
+
+    .wordmark {
+      display: block;
+      width: 760px;
+      height: auto;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <img class="art" src="../../../public/homepageposter.png" alt="">
+    <div class="shade"></div>
+    <div class="lockup">
+      <p class="eyebrow">2026 · CK PARTY NIGHT</p>
+      <svg class="wordmark" viewBox="124 1232 818 80" aria-hidden="true">
+        <defs>
+          <!-- Same filter as the homepage: keep the cream lettering, drop the artwork behind it -->
+          <filter id="cosmos-lettering" color-interpolation-filters="sRGB">
+            <feColorMatrix type="matrix" values="
+              1 0 0 0 0
+              0 1 0 0 0
+              0 0 1 0 0
+              .2126 .7152 .0722 0 0
+            " />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="8" intercept="-5.6" />
+            </feComponentTransfer>
+          </filter>
+        </defs>
+        <image href="../../../public/poster.jpg" width="1076" height="1522" filter="url(#cosmos-lettering)" />
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,322 @@
+/* the 公關票 admin page, on top of managementpage.scss (admin shell) and
+   selleradminpage.scss (search, tables) */
+
+.admin-page {
+  // input outlines: 3.26:1 on --field
+  --field-line: rgba(242, 240, 233, 0.38);
+
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--ember);
+    outline-offset: 2px;
+  }
+}
+
+.page-intro {
+  max-width: 62ch;
+  margin: 12px 0 0;
+  color: rgba(242, 240, 233, 0.62);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+/* ---------- fields ---------- */
+.field > span:first-child {
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--lunar);
+}
+
+.field input[type='text'],
+.field input[type='email'],
+.field input[type='number'],
+.search {
+  min-height: 44px;
+  border-color: var(--field-line);
+}
+
+.field input[type='email'] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--field-line);
+  background: var(--field);
+  color: var(--off-white);
+  font: 500 13.5px 'Manrope', sans-serif;
+
+  &:focus {
+    outline: none;
+    border-color: var(--ember);
+  }
+}
+
+.field input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.search::placeholder,
+.field input::placeholder {
+  // 4.68:1 on --field
+  color: rgba(154, 163, 172, 0.75);
+}
+
+/* ---------- officers ---------- */
+.share-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -12px 0 24px;
+  padding: 10px 10px 10px 14px;
+  border: 1px dashed var(--line);
+
+  .mono {
+    flex: 1;
+    min-width: 0;
+    color: var(--lunar);
+    overflow-wrap: anywhere;
+  }
+}
+
+.guest-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guest-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto) auto;
+  grid-template-areas:
+    'who time actions'
+    'step step step';
+  align-items: center;
+  gap: 0 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-soft);
+
+  &.open { border-bottom-color: var(--line); }
+}
+
+.guest-who {
+  grid-area: who;
+  min-width: 0;
+
+  p { margin: 0; overflow-wrap: anywhere; }
+
+  .guest-name {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .guest-email {
+    margin-top: 4px;
+    color: var(--lunar);
+  }
+}
+
+.guest-time {
+  grid-area: time;
+  margin: 0;
+  color: var(--lunar);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.guest-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+
+  .btn,
+  .btn-outline { min-height: 38px; }
+}
+
+.send-step {
+  grid-area: step;
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  background: var(--field);
+}
+
+.quota-line {
+  line-height: 1.6;
+
+  strong {
+    color: var(--off-white);
+    font-weight: 800;
+  }
+
+  .held { color: var(--ember); }
+}
+
+.officer-form { margin-bottom: 20px; }
+
+.send-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  .btn,
+  .btn-outline { min-height: 44px; }
+}
+
+/* ---------- direct send and the add form ---------- */
+.send-form {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  margin-top: 4px;
+
+  > .btn { min-height: 44px; }
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.review {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  padding: 18px;
+  border: 1px solid rgba(228, 164, 104, 0.5);
+  background: rgba(228, 164, 104, 0.06);
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+  }
+}
+
+.warning {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ember);
+}
+
+/* ---------- ledger ---------- */
+.ledger-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin: 2px 0 10px;
+  color: var(--lunar);
+  font-size: 13px;
+
+  strong {
+    margin-right: 2px;
+    color: var(--off-white);
+    font-size: 1.35rem;
+    font-weight: 800;
+  }
+}
+
+table th { font-size: 12px; }
+
+td.strong { font-weight: 700; }
+
+td .via { color: var(--lunar); }
+
+.source-filter {
+  max-width: 280px;
+  margin-bottom: 12px;
+}
+
+.status {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  color: var(--lunar);
+  font-size: 12px;
+
+  &.on {
+    border-color: rgba(228, 164, 104, 0.5);
+    color: var(--ember);
+  }
+}
+
+td.mono a {
+  color: var(--ember);
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+}
+
+/* ---------- narrow ---------- */
+@media (max-width: 720px) {
+  .share-link {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+
+    .btn-outline { min-height: 44px; }
+  }
+
+  .guest-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'who'
+      'time'
+      'actions'
+      'step';
+    gap: 8px;
+    padding: 18px 0;
+  }
+
+  .guest-actions {
+    justify-content: stretch;
+    margin-top: 6px;
+
+    .btn { flex: 1; justify-content: center; min-height: 44px; }
+    .btn-outline { min-height: 44px; }
+  }
+
+  .send-step { margin-top: 6px; padding: 14px; }
+  .send-step-actions .btn { flex: 1; }
+}
+
+/* ---------- invite links ---------- */
+.new-link {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 8px;
+
+  .share-link { margin: 0; }
+}
+
+.new-link-label {
+  margin: 0;
+  color: var(--ember);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+
+.sub-heading {
+  margin: 28px 0 8px;
+  color: var(--lunar);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+
+  .num { margin-left: 6px; color: var(--off-white); }
+}
+
+td.note-cell {
+  max-width: 280px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

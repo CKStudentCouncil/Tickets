@@ -55,27 +55,15 @@ docker compose up --build -V
 
 The image installs the root dependencies and runs the frontend dev server. Backend tests still need the `functions/` dependencies; emulator tests also need Firebase CLI and Java in the environment running them.
 
-### Firebase connection and App Check
+### Firebase connection
 
 The frontend initializes Firebase in [src/boot/firebase.js](src/boot/firebase.js) and calls functions in `asia-east1`. It currently points to `cksc-ticket`. **Running the frontend locally still uses that project's live Firebase services.** There are no frontend emulator connection calls in the current boot file.
 
-For isolated browser testing, configure a development Firebase project in `src/boot/firebase.js`, set the CLI project in `.firebaserc`, and configure its Google sign-in, App Check, rules, functions, and test data. Changing `.firebaserc` alone does not change the browser's Firebase project. Keep App Check's site key in [src/config/app.js](src/config/app.js) aligned with the selected web app.
+For isolated browser testing, configure a development Firebase project in `src/boot/firebase.js`, set the CLI project in `.firebaserc`, and configure its Google sign-in, rules, functions, and test data. Changing `.firebaserc` alone does not change the browser's Firebase project.
 
 Email and QR destinations use the hardcoded `SITE_URL`, independently of the Firebase project. To test those links against a development frontend, update it in both `src/config/app.js` and `functions/lib/constants.js`.
 
-With the configured App Check key, `quasar dev` uses the debug provider. Register the token printed in the browser console under Firebase console → App Check → Apps → Manage debug tokens, then reload the page. Alternatively, register a fixed token and supply it when starting the server:
-
-```bash
-APP_CHECK_DEBUG_TOKEN=<registered-token> yarn dev
-```
-
-For Docker:
-
-```bash
-APP_CHECK_DEBUG_TOKEN=<registered-token> docker compose up --build
-```
-
-Treat debug tokens as credentials and keep them out of Git. [quasar.config.js](quasar.config.js) only exposes this variable in development builds. An unregistered token can cause `appCheck/fetch-status-error` with HTTP 403.
+The production functions only accept Turnstile tokens solved on `tickets.cksc.tw` (`TURNSTILE_HOSTNAMES`), so with `ENFORCE_TURNSTILE=true` orders and survey answers cannot be sent from `quasar dev` against the live project.
 
 ## Finding the right code
 
@@ -84,8 +72,9 @@ Treat debug tokens as credentials and keep them out of Git. [quasar.config.js](q
 | Screens and navigation | `src/pages/`, `src/layouts/MainLayout.vue`, `src/router/routes.js`, `src/router/index.js` |
 | Reusable UI | `src/components/` |
 | Shared frontend state | `src/stores/auth.js`, `src/stores/shop.js`, `src/stores/toast.js` |
-| Firebase access helpers | `src/services/`: orders, ticket types, shop settings, and published content |
-| Shared screen behavior | `src/composables/`, including admin order handling and reactive time |
+| Firebase access helpers | `src/services/`: orders, ticket types, shop settings, published content, sales archives / purges, and survey responses |
+| Shared screen behavior | `src/composables/`, including admin order handling, the order purge, the sales report and reactive time |
+| Sales report | `src/pages/AnalyticsPage.vue`, `src/components/analytics/` (SVG charts use attributes, not CSS, so the PDF export keeps them), `src/utils/salesAnalytics.js` (pure report), `src/utils/salesImport.js` (Excel import) |
 | Styling | `src/css/app.scss` for global styles; page styles in `src/css/` imported by the corresponding Vue files |
 | Site values and form options | `src/config/app.js`, `src/data/` |
 | Frontend utilities | `src/utils/`: Taiwan dates, QR codes, PDFs, analytics, redirects, text, and debounce |
@@ -110,7 +99,11 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 | Signed-in buyer | Purchase with a verified account email and read their own orders |
 | `manager` | Open individual orders, mark delivery/check-in, access staff survey views, and prepare/send notifications |
 | `admin` | Manager capabilities plus list all orders, change payment status, delete orders, and resend confirmation emails |
-| `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup |
+| `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup; read 銷售報表 (`/super_admin/analytics`), import earlier years and purge every order; keep the 公關票 officers and their quotas and send 公關票 outside any quota (`/super_admin/guests`) |
+| Seller (on `sellers/{email}`) | Not a staff role: register tickets to sell on `/sell` (學弟登記賣票). Super admins keep the list on `/admin/sellers`; admins see registrations there and record pickup and payment |
+| `admin` and above, on the street | 路宣登記 on `/admin/street`: register tickets sold for cash and handed over as paper tickets (no buyer details, no email). Super admins open it, choose its ticket type and see every sale and each admin's cash on `/super_admin/street` |
+| Officer (on `officers/{email}`) | Not a staff role: give out 公關票 on `/officer` within the quota super admins set, by name and email or as one-time invite links |
+| Guest (any signed-in account) | Not a staff role: claim a 公關票 invite link on `/invite/:id`; the ticket goes to their account email |
 
 Route guards control navigation. Firestore rules and backend role checks enforce data access. When changing permissions, keep [src/router/index.js](src/router/index.js), `src/stores/auth.js`, [firestore.rules](firestore.rules), and [functions/lib/common.js](functions/lib/common.js) aligned.
 
@@ -126,7 +119,7 @@ For a new development project, bootstrap the first super admin by adding `users/
 
 Keep price, eligibility, sale windows, stock limits, and purchase limits authoritative on the server. Changes to validation belong in [functions/lib/orderValidation.js](functions/lib/orderValidation.js) and its tests, with matching frontend feedback where needed. Preserve the same request ID when retrying an uncertain checkout result.
 
-Campus-only tickets require both the school `建國中學` and an account at `@gl.ck.tp.edu.tw`. Per-person ticket allowance is counted by account email. Buyer order-list queries must filter on `userId`; Firestore rejects queries that could return another buyer's orders.
+Campus-only tickets require both the school `建國中學` and an account at `@gl.ck.tp.edu.tw`. A ticket type's optional `studentOnlyUntil` (學生優先購買至) lets only school accounts (domain `edu.tw` or ending in `.edu.tw`) buy it before that time, then everyone. Other accounts may buy it before that time by signing the 學生身分切結書 (`studentDeclared: true`); such orders count as 學生 and show 學生（切結） to staff. School accounts buying such a type must send `studentConfirmed: true` (the buyer ticks 「我確認我是在學學生…」), before and after that time. `createOrder` marks every order `buyerType: 'student' | 'public'` from the account email (staff only: the check-in desk, the admin list and the Excel export; never the buyer) and the items of such types `checkId`, so the check-in desk asks 學生 buyers for a student ID before they are collected. Teachers and university students have school accounts too; the check at pickup is what holds. Deploy the functions before setting this field: an older `createOrder` ignores it. Per-person ticket allowance is counted by account email. Buyer order-list queries must filter on `userId`; Firestore rejects queries that could return another buyer's orders.
 
 ### Key Firestore records
 
@@ -138,11 +131,23 @@ Campus-only tickets require both the school `建國中學` and an account at `@g
 | `orders/{id}/history/{eventId}` | Function-only append-only staff action history; staff may read it |
 | `users/{uid}`, `pendingUsers/{email}` | Active staff profiles and invitations |
 | `partyStories`, `partyLineup` | Scheduled public content |
-| `surveyResponses` | Public survey submissions, subject to rules validation |
+| `surveyResponses` | Public survey submissions, written only by `submitSurvey` after its Turnstile check |
 | `ticketSales/{typeId}/shards/{shardId}` | Backend stock counters, with caps on the parent ticket-sales document |
-| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl` | Backend-only allowance, recovery, rate-limit, stock-release, campaign and mail-worker bookkeeping |
+| `settings/sellerProgram` | Public seller program settings: `enabled`, the ticket type sellers take from (`ticketTypeId`, the 二售 type) and the shared `goal`; written by super admins |
+| `sellers/{email}`, `sellerRegistrations/{id}`, `sellerStats/summary` | Seller list (super admins), registrations created by `registerSellerTickets` (admins flip `delivered` / `paid` or delete; deleting returns the tickets to stock), and the shared registered total |
+| `officers/{email}` | 公關票 officers: `name` and `quota` written by super admins; `used` (tickets sent plus those held by open invite links) only by the functions, and a quota cannot go below it |
+| `officerInvites/{id}` | 公關票 invite links, written only by the functions; the random id is the secret in the link. `status` `open` or `claimed` (with `orderId`, `claimedByUid`); revoking an open one deletes it and gives its tickets back. A super admin's link has `council: true`, no officer and takes no quota |
+| `settings/streetSale` | Public 路宣登記 settings: `enabled` and the ticket type sold (`ticketTypeId`); written by super admins. The sales are orders with `streetSale: true`, school `路宣` and `promoterEmail` / `promoterName`, created only by `registerStreetSale` |
+| `officerInviteNotes/{id}` | A link's optional note (what it is for), written only by `createOfficerInvite`; kept apart from the link and the order, which the guest reads, so only its officer and super admins see it |
+| `buyerPurchases`, `orderRequests`, `rateLimits`, `stockReleases`, `notificationJobs`, `mailQueue`, `mailQueueControl`, `invitationRequests`, `officerReleases`, `streetSaleRequests` | Backend-only allowance, recovery, rate-limit, stock-release, campaign, mail-worker, 公關票 retry, quota-release and 路宣 retry bookkeeping |
+| `salesArchives/{year}`, `.../rows/{n}`, `.../archivedOrders/{id}` | A past sale: summary with `openDate` / `closeDate`, sale rows without buyers' details (what the report compares), and the purged orders themselves. Written only by `purgeOrders` / `importSalesArchive`; super admins read them |
+| `orderPurges/{purgeId}`, `systemLogs/{id}` | A purge run's progress (followed live by `/admin`) and the audit log of purges and imports; function-written, super-admin readable |
 
-Create orders through `createOrder`; clients cannot create or update them directly. Staff collection and payment use the expected-state callables in `orderActions.js`, with trusted attribution and atomic audit writes. Order deletion triggers stock and allowance release and invalidates shard caps. Client writes to backend bookkeeping collections are denied.
+Create orders through `createOrder` (or, for 公關票, the callables in `guests.js`); clients cannot create or update them directly. A 公關票 is an NT$0, already-paid order with `complimentary: true`, school `公關票`, an id starting `PR` and the officer who gave it out (`officerEmail`, `officerName`; null when a super admin sent it); it takes no stock, deleting it gives its tickets back to that officer's quota and is left out of payment notices, and its email is an invitation instead of the purchase confirmation. Staff collection and payment use the expected-state callables in `orderActions.js`, with trusted attribution and atomic audit writes. Order deletion triggers stock and allowance release and invalidates shard caps. Client writes to backend bookkeeping collections are denied.
+
+清除所有訂單 deletes through `purgeOrders` only: it deletes exactly the orders in the browser's Excel backup, archives every one before deleting any, then deletes each with its archived copy and stock release in one transaction (its `stockReleases` marker stops `releaseOrderStock` from releasing twice). An interrupted run resumes with the same `purgeId`.
+
+`/super_admin/analytics` listens to every order (one read per order when it opens). Keep the admin order list on bounded pages.
 
 Admin reads use bounded live pages and filter-specific server aggregates. Name/email/phone search applies to the visible page; exact order ID lookup covers any order. Full Excel export explicitly paginates the selected filters and loads ExcelJS only when requested. Order value and collected payment are distinct in both UI and export.
 
@@ -179,11 +184,10 @@ The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-eas
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ENFORCE_APP_CHECK` | `false` | Require App Check for `createOrder` |
 | `CREATE_ORDER_MIN_INSTANCES` | `0` | Keep checkout instances warm |
 | `ORDER_LIMIT_PER_ACCOUNT` | `0` | Limit orders per account per ten minutes; zero disables the limit |
 | `SES_RECIPIENTS_PER_SECOND` | `14` | Share pacing across confirmations, resends and notification recipients |
-| `ENFORCE_TURNSTILE` | `false` | Require a Cloudflare Turnstile token for `createOrder` |
+| `ENFORCE_TURNSTILE` | `false` | Require a Cloudflare Turnstile token for `createOrder`, `submitSurvey` and `submitPartySurvey` |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Site hostnames whose Turnstile tokens are accepted; never `localhost` |
 
 These are code defaults; the project's deployed values may differ. Changes require redeploying functions.
@@ -249,11 +253,10 @@ firebase deploy --project <project-id> --only firestore:indexes
 
 | Symptom | Checks |
 | --- | --- |
-| App Check HTTP 403 during local development | Register the browser's debug token in the selected Firebase project's App Check settings; reload or restart with a registered fixed token |
-| Google sign-in fails | Check the selected web app, Google provider, authorized domain, popup handling, and App Check; embedded app browsers may need Safari or Chrome |
+| Google sign-in fails | Check the selected web app, Google provider, authorized domain, and popup handling; embedded app browsers may need Safari or Chrome |
 | Redirect to `/comingsoon` | Check `settings/shop.openAt` and the fallback `SHOP_OPEN_AT`; ordinary buyers are gated before opening |
 | Empty ticket list | Check that `settings/ticketTypes` exists, contains valid types, and their sale windows have not ended |
-| Checkout fails | Confirm verified sign-in, deployed `createOrder` in `asia-east1`, shop/ticket sale windows, eligibility, allowance, stock, and App Check; inspect the returned callable error |
+| Checkout fails | Confirm verified sign-in, deployed `createOrder` in `asia-east1`, shop/ticket sale windows, eligibility, allowance, stock, and the Turnstile check; inspect the returned callable error |
 | Firestore `permission-denied` | Check the current staff role, buyer `userId` filter, permitted update fields, and public-content query filters against `firestore.rules` |
 | Missing-index error | Check `firestore.indexes.json` and deploy the required indexes to the selected project |
 | Missing confirmation email | Check the order's `emailStatus`, function logs, and SES/Secret Manager setup; an admin can resend the confirmation |

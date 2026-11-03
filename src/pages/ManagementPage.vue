@@ -293,6 +293,15 @@
               >
                 {{ salePeriodSummary(ticketType).text }}
               </p>
+
+              <label class="hide-until-sale">
+                <input
+                  v-model="ticketType.hideUntilSale"
+                  type="checkbox"
+                >
+
+                <span>開賣前隱藏此票種（取消勾選則提前顯示並倒數）</span>
+              </label>
             </div>
 
             <label class="field">
@@ -351,6 +360,38 @@
                 :disabled="ticketType.unlimited"
               >
             </label>
+
+            <div class="field ticket-time-field">
+              <span>七、學生優先購買至（選填）</span>
+
+              <div class="time-inputs">
+                <input
+                  type="date"
+                  :value="getPart(ticketType.studentOnlyUntil, 'date')"
+                  @input="setPart(ticketType, 'studentOnlyUntil', 'date', $event.target.value, '12:00')"
+                >
+
+                <input
+                  type="time"
+                  :value="getPart(ticketType.studentOnlyUntil, 'time')"
+                  @input="setPart(ticketType, 'studentOnlyUntil', 'time', $event.target.value, '12:00')"
+                >
+              </div>
+
+              <div v-if="ticketType.studentOnlyUntil" class="time-presets">
+                <button type="button" class="time-chip" @click="ticketType.studentOnlyUntil = ''">
+                  清除
+                </button>
+              </div>
+
+              <p class="time-summary">
+                {{
+                  ticketType.studentOnlyUntil
+                    ? `${formatDateTime(ticketType.studentOnlyUntil)} 前只有學校帳號（edu.tw）能買，之後開放所有人；庫存共用`
+                    : '留空：不限學校帳號'
+                }}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -490,12 +531,15 @@ function createEmptyTicketType() {
     eligibleBuyerIdentity: 'campus_students',
     salesStartTime: '',
     salesEndTime: '',
+    hideUntilSale: true,
     price: 0,
     // blank on purpose: the admin must enter a total or tick 不限量 (PARTY-18)
     totalTicketQuantity: null,
     unlimitedStock: false,
     unlimited: false,
-    purchaseLimitPerPerson: 1
+    purchaseLimitPerPerson: 1,
+    // 學生優先購買至; blank = not used
+    studentOnlyUntil: ''
   }
 }
 
@@ -600,6 +644,7 @@ async function loadTicketTypeSettings() {
           ...ticketType,
           salesStartTime: toDateTimeInput(ticketType.salesStartTime),
           salesEndTime: toDateTimeInput(ticketType.salesEndTime),
+          studentOnlyUntil: ticketType.studentOnlyUntil ? toDateTimeInput(ticketType.studentOnlyUntil) : '',
           // old entries saved 0 meaning "unlimited"; make the admin choose again
           totalTicketQuantity: Number(ticketType.totalTicketQuantity) > 0
             ? Number(ticketType.totalTicketQuantity)
@@ -664,6 +709,15 @@ function validateTicketTypeForm() {
         `「${label}」的販售結束時間必須晚於開始時間`
       )
 
+      return false
+    }
+
+    if (
+      ticketType.studentOnlyUntil &&
+      (parseDate(ticketType.studentOnlyUntil) <= parseDate(ticketType.salesStartTime) ||
+        parseDate(ticketType.studentOnlyUntil) > parseDate(ticketType.salesEndTime))
+    ) {
+      toast.show(`「${label}」的學生優先購買時間必須在販售期間內`)
       return false
     }
 
@@ -736,6 +790,7 @@ async function saveTicketTypeSettings() {
         // stored with an explicit +08:00 so the server reads the same instant
         salesStartTime: toStoredDateTime(ticketType.salesStartTime),
         salesEndTime: toStoredDateTime(ticketType.salesEndTime),
+        hideUntilSale: ticketType.hideUntilSale !== false,
         price: Number(ticketType.price) || 0,
         totalTicketQuantity: ticketType.unlimitedStock
           ? null
@@ -744,7 +799,10 @@ async function saveTicketTypeSettings() {
         unlimited: !!ticketType.unlimited,
         purchaseLimitPerPerson: ticketType.unlimited
           ? null
-          : Number(ticketType.purchaseLimitPerPerson) || 1
+          : Number(ticketType.purchaseLimitPerPerson) || 1,
+        studentOnlyUntil: ticketType.studentOnlyUntil
+          ? toStoredDateTime(ticketType.studentOnlyUntil)
+          : null
       })),
       // uid, not name/email: this document is publicly readable (PARTY-26)
       auth.user.uid
