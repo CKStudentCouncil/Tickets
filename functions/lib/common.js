@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1'
+import { HttpsError } from 'firebase-functions/v2/https'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
@@ -12,7 +12,7 @@ export const db = getFirestore()
 // Resolved lazily so modules that never touch Storage load without a bucket
 export const getBucket = () => getStorage().bucket()
 
-export const HttpsError = functions.https.HttpsError
+export { HttpsError }
 
 // Staff role rank of an account: manager 1, admin 2, super_admin 3, else 0
 export async function getRoleRank(uid) {

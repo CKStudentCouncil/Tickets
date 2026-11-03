@@ -1,4 +1,5 @@
-import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
+import { onDocumentDeleted } from 'firebase-functions/v2/firestore'
 import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
@@ -62,9 +63,9 @@ const resultOf = (id, registration) => ({
   ticketTypeName: registration.ticketTypeName
 })
 
-export const registerSellerTickets = functions
-  .region(REGION)
-  .https.onCall(async (data, context) => {
+export const registerSellerTickets = onCall(
+  { region: REGION },
+  async ({ data, ...context }) => {
     const account = getBuyerAccount(context)
     const { requestId, quantity, sellerName } = sanitizeSellerInput(data)
     const ref = registrationRef(requestId)
@@ -151,21 +152,20 @@ export const registerSellerTickets = functions
       console.error('[registerSellerTickets] unexpected error:', error)
       throw new HttpsError('internal', '登記失敗，請稍後再試')
     }
-  })
+  }
+)
 
 // When an admin deletes a registration, give its tickets back to the stock
 // and take them off the shared total. The marker document makes this safe if
 // the trigger is delivered more than once.
-export const releaseSellerStock = functions
-  .region(REGION)
-  .runWith({ failurePolicy: true })
-  .firestore.document('sellerRegistrations/{registrationId}')
-  .onDelete(async (snap, context) => {
+export const releaseSellerStock = onDocumentDeleted(
+  { document: 'sellerRegistrations/{registrationId}', region: REGION, retry: true },
+  async ({ data: snap, params }) => {
     const registration = snap.data() || {}
     const quantity = Number(registration.quantity)
     if (!Number.isInteger(quantity) || quantity <= 0) return
 
-    const markerRef = releaseRef(context.params.registrationId)
+    const markerRef = releaseRef(params.registrationId)
 
     await db.runTransaction(async (tx) => {
       if ((await tx.get(markerRef)).exists) return
@@ -188,4 +188,5 @@ export const releaseSellerStock = functions
       )
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
-  })
+  }
+)

@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
 import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
@@ -82,10 +82,9 @@ export function cleanAnswers(sections, input) {
   return answers
 }
 
-export const submitPartySurvey = functions
-  .region(REGION)
-  .runWith({ secrets: [TURNSTILE_SECRET] })
-  .https.onCall(async (data, context) => {
+export const submitPartySurvey = onCall(
+  { region: REGION, secrets: [TURNSTILE_SECRET] },
+  async ({ data, ...context }) => {
     // only signed-in accounts may answer; the response still stores no uid
     if (!context.auth?.uid) throw new HttpsError('unauthenticated', '請先登入再填寫問卷')
     const year = Number(data?.year)
@@ -100,4 +99,5 @@ export const submitPartySurvey = functions
     await requireTurnstile(data, context, PARTY_SURVEY_ACTION)
     await db.collection(`partySurveys/${year}/responses`).add({ answers, createdAt: FieldValue.serverTimestamp() })
     return { ok: true }
-  })
+  }
+)

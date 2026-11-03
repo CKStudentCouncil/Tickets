@@ -2,12 +2,12 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
+import { PROJECT_ID, db, fft, functions, isEmulator, wrapCallable } from './setup.js'
 import { CHANNEL_OPTIONS, DEVICE_OPTIONS, IDENTITY_OPTIONS, ISSUE_COUNT_OPTIONS, SCORE_IDS } from '../../lib/survey.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callSubmit = fft.wrap(functions.submitSurvey)
+const callSubmit = wrapCallable(functions.submitSurvey)
 
 const response = (extra = {}) => ({
   identity: IDENTITY_OPTIONS[0],

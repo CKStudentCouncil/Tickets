@@ -3,15 +3,13 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
+import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator, wrapCallable, wrapTrigger } from './setup.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callRegister = fft.wrap(functions.registerSellerTickets)
-const callRelease = fft.wrap(functions.releaseSellerStock)
-// createOrder is a 2nd gen callable: one request carries the data and the auth
-const wrappedCreate = fft.wrap(functions.createOrder)
-const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
+const callRegister = wrapCallable(functions.registerSellerTickets)
+const callRelease = wrapTrigger(functions.releaseSellerStock)
+const callCreate = wrapCallable(functions.createOrder)
 
 const TICKET_TYPES = [
   // 二售 sells later; sellers take from it before the public sale opens

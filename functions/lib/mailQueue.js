@@ -1,6 +1,6 @@
-import * as functions from 'firebase-functions/v1'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { randomUUID } from 'node:crypto'
-import { db } from './common.js'
+import { db, HttpsError } from './common.js'
 import { REGION, getAdminOrderUrl, getBuyerOrderUrl } from './constants.js'
 import { MAIL_SECRETS, SENDER } from './mailSender.js'
 import { SES_RECIPIENTS_PER_SECOND } from './params.js'
@@ -68,10 +68,10 @@ export function enqueueOrderConfirmation(orderId, order) {
 
 export function enqueueManualOrderResend(orderId, order, actorUid, { requestId } = {}) {
   if (order.streetSale === true) {
-    throw new functions.https.HttpsError('failed-precondition', '路宣紙本票不寄送 Email')
+    throw new HttpsError('failed-precondition', '路宣紙本票不寄送 Email')
   }
   if (requestId != null && !/^[A-Za-z0-9_-]{8,80}$/.test(String(requestId))) {
-    throw new functions.https.HttpsError('invalid-argument', '重寄請求編號無效')
+    throw new HttpsError('invalid-argument', '重寄請求編號無效')
   }
   // Each deliberate resend is a new job; retries of that action can reuse its
   // requestId. Uncertain original sends never automatically become retries.
@@ -83,7 +83,17 @@ export function enqueueManualOrderResend(orderId, order, actorUid, { requestId }
 
 export const enqueueNotificationBatch = (id, payload) => queue.enqueue(id, payload)
 
-export const processMailQueue = functions.region(REGION)
-  .runWith({ secrets: MAIL_SECRETS, timeoutSeconds: 120, maxInstances: 1 })
-  .pubsub.schedule('every 1 minutes').timeZone('Asia/Taipei')
-  .onRun(() => queue.runWorker())
+// One run at a time: a run may outlast the minute until the next one, and a
+// 2nd gen instance would otherwise take that one alongside it.
+export const processMailQueue = onSchedule(
+  {
+    schedule: 'every 1 minutes',
+    timeZone: 'Asia/Taipei',
+    region: REGION,
+    secrets: MAIL_SECRETS,
+    timeoutSeconds: 120,
+    maxInstances: 1,
+    concurrency: 1
+  },
+  () => queue.runWorker()
+)

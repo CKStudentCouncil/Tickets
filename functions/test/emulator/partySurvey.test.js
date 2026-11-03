@@ -2,11 +2,11 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
+import { PROJECT_ID, db, fft, functions, isEmulator, wrapCallable } from './setup.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callSubmit = fft.wrap(functions.submitPartySurvey)
+const callSubmit = wrapCallable(functions.submitPartySurvey)
 
 const SECTIONS = [
   { id: 'about', title: '基本資料', questions: [{ id: 'mood', type: 'single', title: '開心嗎？', required: true, options: ['開心', '普通'] }] }

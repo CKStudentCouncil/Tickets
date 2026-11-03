@@ -14,14 +14,12 @@ import { writeFileSync } from 'node:fs'
 import os from 'node:os'
 import { DocumentReference, Firestore, Query, Transaction } from 'firebase-admin/firestore'
 
-import { HOUR, PROJECT_ID, fft, functions, db, iso, isEmulator } from '../emulator/setup.js'
+import { HOUR, PROJECT_ID, fft, functions, db, iso, isEmulator, wrapCallable, wrapTrigger } from '../emulator/setup.js'
 import { SHARD_COUNT } from '../../lib/orderValidation.js'
 import { SCENARIOS } from './scenarios.js'
 
-// createOrder is a 2nd gen callable: one request carries the data and the auth
-const wrappedCreate = fft.wrap(functions.createOrder)
-const callCreate = (data, context) => wrappedCreate({ data, ...context })
-const callPlan = fft.wrap(functions.planStockShards)
+const callCreate = wrapCallable(functions.createOrder)
+const callPlan = wrapTrigger(functions.planStockShards)
 
 /* ---------- counting Firestore operations ---------- */
 

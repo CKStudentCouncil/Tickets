@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
 
@@ -101,9 +101,9 @@ export function streetOrderOf({ quantity, ticketTypeId, ticketType, promoter, ti
   }
 }
 
-export const registerStreetSale = functions
-  .region(REGION)
-  .https.onCall(async (data, context) => {
+export const registerStreetSale = onCall(
+  { region: REGION },
+  async ({ data, ...context }) => {
     if (!context.auth?.uid) throw new HttpsError('unauthenticated', '請先登入')
     const uid = context.auth.uid
     const { requestId, quantity } = sanitizeStreetSaleInput(data)
@@ -204,4 +204,5 @@ export const registerStreetSale = functions
         throw new HttpsError('internal', '登記失敗，請稍後再試')
       }
     }
-  })
+  }
+)

@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
 import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError, assertRole } from './common.js'
@@ -223,10 +223,10 @@ export function sanitizeImport(data) {
 // 匯入往年資料 on /super_admin/analytics: an earlier year's orders, read in
 // the browser from the Excel export of that year. Replaces an earlier
 // import of the same year, never a year purgeOrders archived.
-export const importSalesArchive = functions
-  .region(REGION)
-  .runWith({ timeoutSeconds: 120, memory: '512MB' })
-  .https.onCall(async (data, context) => {
+export const importSalesArchive = onCall(
+  // one import at a time per instance, as in 1st gen: it holds the whole file in memory
+  { region: REGION, timeoutSeconds: 120, memory: '512MiB', concurrency: 1 },
+  async ({ data, ...context }) => {
     await assertRole(context, 'super_admin')
     const input = sanitizeImport(data)
     const profile = (await db.doc(`users/${context.auth.uid}`).get()).data() || {}
@@ -256,4 +256,5 @@ export const importSalesArchive = functions
     })
 
     return { year: input.year, orderCount: summary.orderCount, revenue: summary.revenue }
-  })
+  }
+)

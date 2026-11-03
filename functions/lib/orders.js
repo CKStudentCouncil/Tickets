@@ -1,5 +1,5 @@
-import * as functions from 'firebase-functions/v1'
 import { onCall } from 'firebase-functions/v2/https'
+import { onDocumentCreated, onDocumentDeleted, onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes, randomInt } from 'node:crypto'
 
@@ -681,33 +681,32 @@ export function applyStockReleases(tx, releases) {
 // the buyer's per-person allowance. The marker document makes this safe if
 // the trigger is delivered more than once, and lets purgeOrders release the
 // orders it deletes itself.
-export const releaseOrderStock = functions
-  .region(REGION)
-  .runWith({ failurePolicy: true }) // retried on failure; the marker keeps it idempotent
-  .firestore.document('orders/{orderId}')
-  .onDelete(async (snap, context) => {
+export const releaseOrderStock = onDocumentDeleted(
+  { document: 'orders/{orderId}', region: REGION, retry: true }, // retried on failure; the marker keeps it idempotent
+  async ({ data: snap, params }) => {
     const release = stockReleaseOf(snap.data())
     if (!release) return
 
-    const markerRef = stockReleaseRef(context.params.orderId)
+    const markerRef = stockReleaseRef(params.orderId)
 
     await db.runTransaction(async (tx) => {
       if ((await tx.get(markerRef)).exists) return
       applyStockReleases(tx, [release])
       tx.create(markerRef, { releasedAt: FieldValue.serverTimestamp() })
     })
-  })
+  }
+)
 
 // Plans the shard caps of every limited type as soon as the ticket types are
 // saved, so the first checkouts after a stock change need not each lock all
 // shards to do it (createOrder plans them first too, if this has not run yet).
-export const planStockShards = functions
-  .region(REGION)
-  .firestore.document('settings/ticketTypes')
-  .onWrite(async () => {
+export const planStockShards = onDocumentWritten(
+  { document: 'settings/ticketTypes', region: REGION },
+  async () => {
     await planStaleCaps()
     await refreshSoldOut()
-  })
+  }
+)
 
 // Marks every limited type with nothing left as sold out at its stock and
 // clears the others, counting from the stock counters, so a type that sold
@@ -732,23 +731,22 @@ async function refreshSoldOut() {
 
 // The deterministic queue ID makes duplicate trigger deliveries harmless.
 // Provider sends and retry / uncertain outcomes are handled by the mail worker.
-export const sendOrderQRCode = functions
-  .region(REGION)
-  .runWith({ failurePolicy: true })
-  .firestore.document('orders/{orderId}')
-  .onCreate(async (snap, context) => {
-    const orderId = context.params.orderId
+export const sendOrderQRCode = onDocumentCreated(
+  { document: 'orders/{orderId}', region: REGION, retry: true },
+  async ({ data: snap, params }) => {
+    const orderId = params.orderId
     const current = await snap.ref.get()
 
     if (!current.exists || current.data().emailStatus === 'sent') return
 
     await enqueueOrderConfirmation(orderId, current.data())
-  })
+  }
+)
 
 // Staff can resend the confirmation from the admin order list
-export const resendOrderEmail = functions
-  .region(REGION)
-  .https.onCall(async (data, context) => {
+export const resendOrderEmail = onCall(
+  { region: REGION },
+  async ({ data, ...context }) => {
     await assertRole(context, 'admin')
 
     const orderId = String(data?.orderId || '')
@@ -763,4 +761,5 @@ export const resendOrderEmail = functions
     if (!snap.data().customerEmail) throw new HttpsError('failed-precondition', '訂單沒有 Email')
 
     return enqueueManualOrderResend(orderId, snap.data(), context.auth.uid, { requestId: data?.requestId })
-  })
+  }
+)

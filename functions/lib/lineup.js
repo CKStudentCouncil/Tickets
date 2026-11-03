@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
 import { randomUUID } from 'node:crypto'
 
 import { getBucket, HttpsError, assertRole } from './common.js'
@@ -17,10 +17,10 @@ function publicUrl(bucketName, storagePath, token) {
   )
 }
 
-export const uploadLineupImage = functions
-  .region(REGION)
-  .runWith({ memory: '512MB' })
-  .https.onCall(async (data, context) => {
+export const uploadLineupImage = onCall(
+  // one image at a time per instance, as in 1st gen: sharp holds each in memory
+  { region: REGION, memory: '512MiB', concurrency: 1 },
+  async ({ data, ...context }) => {
     await assertRole(context, 'super_admin')
 
     const itemId = String(data?.itemId || '')
@@ -68,11 +68,12 @@ export const uploadLineupImage = functions
     })
 
     return { url: publicUrl(bucket.name, storagePath, token), storagePath }
-  })
+  }
+)
 
-export const deleteLineupImage = functions
-  .region(REGION)
-  .https.onCall(async (data, context) => {
+export const deleteLineupImage = onCall(
+  { region: REGION },
+  async ({ data, ...context }) => {
     await assertRole(context, 'super_admin')
 
     const storagePath = String(data?.storagePath || '')
@@ -84,4 +85,5 @@ export const deleteLineupImage = functions
     await getBucket().file(storagePath).delete({ ignoreNotFound: true })
 
     return { deleted: true }
-  })
+  }
+)

@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
 import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
@@ -99,12 +99,12 @@ export function cleanSurveyResponse(input) {
   }
 }
 
-export const submitSurvey = functions
-  .region(REGION)
-  .runWith({ secrets: [TURNSTILE_SECRET] })
-  .https.onCall(async (data, context) => {
+export const submitSurvey = onCall(
+  { region: REGION, secrets: [TURNSTILE_SECRET] },
+  async ({ data, ...context }) => {
     const response = cleanSurveyResponse(data?.response)
     await requireTurnstile(data, context, SURVEY_ACTION)
     await db.collection('surveyResponses').add({ ...response, createdAt: FieldValue.serverTimestamp() })
     return { ok: true }
-  })
+  }
+)

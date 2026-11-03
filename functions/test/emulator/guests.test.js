@@ -3,17 +3,17 @@
 import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { HOUR, PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
+import { HOUR, PROJECT_ID, db, fft, functions, isEmulator, wrapCallable, wrapTrigger } from './setup.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callSend = fft.wrap(functions.sendGuestInvitation)
-const callOfficerSend = fft.wrap(functions.sendOfficerTicket)
-const callCreateInvite = fft.wrap(functions.createOfficerInvite)
-const callRevokeInvite = fft.wrap(functions.revokeOfficerInvite)
-const callClaimInvite = fft.wrap(functions.claimOfficerInvite)
-const callRelease = fft.wrap(functions.releaseOfficerQuota)
-const callPrepare = fft.wrap(functions.prepareOrderNotification)
+const callSend = wrapCallable(functions.sendGuestInvitation)
+const callOfficerSend = wrapCallable(functions.sendOfficerTicket)
+const callCreateInvite = wrapCallable(functions.createOfficerInvite)
+const callRevokeInvite = wrapCallable(functions.revokeOfficerInvite)
+const callClaimInvite = wrapCallable(functions.claimOfficerInvite)
+const callRelease = wrapTrigger(functions.releaseOfficerQuota)
+const callPrepare = wrapCallable(functions.prepareOrderNotification)
 
 const SUPER = { uid: 'super-uid', email: 'super@example.com' }
 const ADMIN = { uid: 'admin-uid', email: 'admin@example.com' }

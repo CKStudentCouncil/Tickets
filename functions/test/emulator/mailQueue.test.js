@@ -1,7 +1,7 @@
 import { after, beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Timestamp } from 'firebase-admin/firestore'
-import { PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
+import { PROJECT_ID, db, fft, functions, isEmulator, wrapCallable } from './setup.js'
 import { createMailQueue, MAIL_LEASE_MS, MAIL_MAX_ATTEMPTS } from '../../lib/mailQueueCore.js'
 import { enqueueManualOrderResend } from '../../lib/mailQueue.js'
 
@@ -165,9 +165,9 @@ test('campaign preparation paginates recipients into immutable batches; repeated
   })
   await seed.commit()
   const context = { auth: { uid: 'staff' } }
-  const prepare = fft.wrap(functions.prepareOrderNotification)
-  const send = fft.wrap(functions.sendOrderNotification)
-  const status = fft.wrap(functions.getOrderNotificationStatus)
+  const prepare = wrapCallable(functions.prepareOrderNotification)
+  const send = wrapCallable(functions.sendOrderNotification)
+  const status = wrapCallable(functions.getOrderNotificationStatus)
   const prepared = await prepare({ type: 'custom', message: 'Test', school: 'all' }, context)
   assert.equal(prepared.total, 260, 'recipient 251 and later were not omitted')
   const ref = db.doc(`notificationJobs/${prepared.jobId}`)
