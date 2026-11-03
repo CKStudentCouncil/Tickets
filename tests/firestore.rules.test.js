@@ -898,3 +898,107 @@ describe('路宣登記 (settings/streetSale, street sale orders)', () => {
     await assertFails(setDoc(doc(as(staff.superAdmin), 'streetPromoters', 'x@example.com'), { email: 'x@example.com' }))
   })
 })
+
+describe('報帳 (reimbursements)', () => {
+  const seed = (fn) => env.withSecurityRulesDisabled((context) => fn(context.firestore()))
+  // what submitReimbursement saves (functions/lib/reimbursements.js)
+  const claim = (who, fields = {}) => ({
+    name: '林管理',
+    amount: 1200,
+    note: '場佈材料',
+    category: '場佈道具',
+    year: 2026,
+    status: 'pending',
+    submitterUid: who.uid,
+    submitterEmail: who.email,
+    invoices: [{ fileId: 'drive-file-1', name: 'IMG_0001.jpg', contentType: 'image/jpeg', size: 1024, url: 'https://drive.google.com/file/d/drive-file-1/view' }],
+    createdAt: serverTimestamp(),
+    ...fields
+  })
+  // what ReimbursementAdminPage.vue writes (setReimbursementStatus)
+  const review = (who, status, fields = {}) => ({
+    status,
+    reviewedAt: serverTimestamp(),
+    reviewedByUid: who.uid,
+    reviewedByName: '總召',
+    ...fields
+  })
+  const stored = (who, status = 'pending') => ({ ...claim(who), status, createdAt: Timestamp.now() })
+
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'reimbursements', 'mine'), stored(staff.admin))
+      await setDoc(doc(db, 'reimbursements', 'approved'), stored(staff.admin, 'approved'))
+      await setDoc(doc(db, 'reimbursements', 'theirs'), stored(staff.superAdmin))
+    })
+  })
+
+  test('nobody creates a claim directly, so none is saved without its invoices', async () => {
+    for (const who of [staff.admin, staff.superAdmin]) {
+      await assertFails(setDoc(doc(as(who), 'reimbursements', 'c1'), claim(who)))
+      await assertFails(setDoc(doc(as(who), 'reimbursements', 'c2'), { ...claim(who), invoices: [] }))
+    }
+    await assertFails(setDoc(doc(as(staff.manager), 'reimbursements', 'c3'), claim(staff.manager)))
+    await assertFails(setDoc(doc(anon(), 'reimbursements', 'c4'), claim(buyer)))
+  })
+
+  test('the Drive folder record is for the functions alone', async () => {
+    await seed((db) => setDoc(doc(db, 'reimbursementFolders', '2026'), { folderId: 'drive-folder' }))
+    await assertFails(getDoc(doc(as(staff.superAdmin), 'reimbursementFolders', '2026')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'reimbursementFolders', '2026'), { folderId: 'elsewhere' }))
+  })
+
+  test('admins read their own claims, with a submitterUid filter; super admins list them all', async () => {
+    const db = as(staff.admin)
+    await assertSucceeds(getDoc(doc(db, 'reimbursements', 'mine')))
+    await assertFails(getDoc(doc(db, 'reimbursements', 'theirs')))
+    await assertSucceeds(getDocs(query(collection(db, 'reimbursements'), where('submitterUid', '==', staff.admin.uid))))
+    await assertFails(getDocs(collection(db, 'reimbursements')))
+    await assertFails(getDocs(query(collection(db, 'reimbursements'), where('year', '==', 2026))))
+
+    await assertFails(getDoc(doc(as(staff.manager), 'reimbursements', 'mine')))
+    await assertSucceeds(getDocs(query(collection(as(staff.superAdmin), 'reimbursements'), where('year', '==', 2026))))
+  })
+
+  test('only super admins review a claim, and only its status', async () => {
+    const reviewer = as(staff.superAdmin)
+    for (const status of ['approved', 'paid', 'rejected', 'pending']) {
+      await assertSucceeds(updateDoc(doc(reviewer, 'reimbursements', 'mine'), review(staff.superAdmin, status)))
+    }
+    // admins cannot review, not even their own claim
+    await assertFails(updateDoc(doc(as(staff.admin), 'reimbursements', 'mine'), review(staff.admin, 'approved')))
+    await assertFails(updateDoc(doc(as(staff.admin), 'reimbursements', 'mine'), { amount: 9999 }))
+
+    for (const fields of [
+      { status: 'done' },
+      { reviewedByUid: staff.admin.uid },
+      { reviewedAt: Timestamp.fromDate(new Date('2020-01-01')) },
+      { reviewedByName: 'x'.repeat(101) },
+      { amount: 9999 },
+      { name: '改名' },
+      { invoices: [] }
+    ]) {
+      await assertFails(updateDoc(doc(reviewer, 'reimbursements', 'mine'), review(staff.superAdmin, 'approved', fields)))
+    }
+    await assertFails(updateDoc(doc(reviewer, 'reimbursements', 'mine'), { status: 'approved' }))
+  })
+
+  test('super admins correct the 科目 alone; nobody else can', async () => {
+    await assertSucceeds(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐飲' }))
+    await assertFails(updateDoc(doc(as(staff.admin), 'reimbursements', 'mine'), { category: '餐飲' }))
+    for (const category of ['', 'x'.repeat(21), 3]) {
+      await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category }))
+    }
+    // not together with anything else, so it never passes as a review
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐飲', amount: 1 }))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐飲', status: 'approved' }))
+  })
+
+  test('the submitter withdraws a pending claim; super admins delete any', async () => {
+    await assertFails(deleteDoc(doc(as(staff.admin), 'reimbursements', 'approved')))
+    await assertFails(deleteDoc(doc(as(staff.admin), 'reimbursements', 'theirs')))
+    await assertFails(deleteDoc(doc(as(staff.manager), 'reimbursements', 'mine')))
+    await assertSucceeds(deleteDoc(doc(as(staff.admin), 'reimbursements', 'mine')))
+    await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'reimbursements', 'approved')))
+  })
+})

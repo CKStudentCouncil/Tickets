@@ -1,0 +1,184 @@
+/* on top of managementpage.scss and selleradminpage.scss: 報帳管理 */
+
+.negative { color: var(--danger); }
+.owed { color: var(--ember); font-weight: 700; }
+
+.profit-table {
+  margin-top: 24px;
+
+  table { max-width: 640px; }
+
+  th:not(:first-child),
+  td:not(:first-child) { text-align: right; }
+
+  .subtotal td { font-weight: 700; }
+
+  tfoot th,
+  tfoot td {
+    border-top: 1px solid var(--line);
+    border-bottom: none;
+    color: var(--off-white);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  tfoot .negative { color: var(--danger); }
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+
+  .search { margin-bottom: 0; }
+  .status-filter { width: auto; min-width: 140px; padding-right: 36px; }
+}
+
+.status-select {
+  width: auto;
+  min-width: 108px;
+  padding: 6px 32px 6px 10px;
+  font-size: 12.5px;
+
+  &.status-approved,
+  &.status-paid { border-color: rgba(228, 164, 104, .5); color: var(--ember); }
+  &.status-rejected { border-color: rgba(226, 100, 90, .5); color: var(--danger); }
+  &:disabled { opacity: .5; }
+}
+
+table td.note-cell {
+  min-width: 160px;
+  max-width: 280px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+table td.invoice-cell a {
+  display: inline-block;
+  margin-right: 10px;
+  color: var(--ember);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+table td.reviewed {
+  color: var(--lunar);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .basis-toggle { width: 100%; }
+  .filters { flex-direction: column; }
+  .filters .search,
+  .filters .status-filter { width: 100%; max-width: none; }
+}
+
+/* ---------- 收支表: the 總預算表 layout ---------- */
+
+.basis-toggle {
+  display: inline-flex;
+
+  .btn-outline + .btn-outline { margin-left: -1px; }
+
+  .btn-outline.active {
+    position: relative;
+    border-color: var(--ember);
+    background: rgba(228, 164, 104, 0.14);
+    color: var(--ember);
+  }
+}
+
+// only the PDF shows the titles; the page has the panel heading
+.statement-sheet .sheet-title { display: none; }
+
+table.statement {
+  min-width: 720px;
+  table-layout: fixed;
+
+  .code-col { width: 42px; }
+  .name-col { width: 34%; }
+  .amount-col { width: 118px; }
+
+  th,
+  td {
+    padding: 8px 10px;
+    border: 1px solid var(--line-soft);
+    white-space: normal;
+    vertical-align: top;
+  }
+
+  thead th { text-align: center; }
+
+  td.code { text-align: center; color: var(--lunar); }
+  td.amount { text-align: right; }
+  td.name { overflow-wrap: anywhere; }
+  td.note { color: var(--lunar); font-size: 12px; overflow-wrap: anywhere; }
+
+  .level-1 td.name { padding-left: 24px; }
+  .level-2 td.name { padding-left: 38px; }
+
+  .kind-group td { font-weight: 700; }
+  .kind-group.level-0 td { background: rgba(242, 240, 233, 0.04); font-size: 14px; }
+
+  .kind-total td,
+  .kind-balance td {
+    color: var(--off-white);
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .kind-total td { border-bottom: 2px solid var(--line); }
+  .kind-balance td { border-top: 2px solid var(--line); }
+  td.negative { color: var(--danger); }
+}
+
+// html2pdf's copy (src/utils/pdf.js): black on white, ruled like the printed
+// 總預算表, A4 portrait. The copy sits outside .admin-page, so nothing here
+// relies on its colour variables.
+.statement-sheet.pdf-export {
+  background: #fff;
+  color: #000;
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+
+  .sheet-title {
+    display: block;
+    margin-bottom: 14px;
+    text-align: center;
+
+    p { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.2em; }
+    h3 { margin: 6px 0 10px; font-size: 20px; font-weight: 800; letter-spacing: 0.12em; }
+    .sheet-basis { font-size: 9.5px; font-weight: 400; letter-spacing: 0; text-align: right; }
+  }
+
+  .table-wrap { overflow: visible; }
+
+  table.statement {
+    width: 100%;
+    min-width: 0;
+    color: #000;
+    font-size: 10.5px;
+
+    .code-col { width: 26px; }
+    .name-col { width: 36%; }
+    .amount-col { width: 82px; }
+
+    th,
+    td {
+      padding: 4px 6px;
+      border: 1px solid #000;
+      background: none;
+      color: #000;
+    }
+
+    th { font-weight: 700; letter-spacing: 0.04em; }
+    td.note { font-size: inherit; }
+    .kind-total td,
+    .kind-balance td { font-size: 11.5px; border-width: 1px; }
+    .kind-total td { border-bottom-width: 2px; }
+    .kind-balance td { border-top-width: 2px; }
+    .kind-group.level-0 td { font-size: 11.5px; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+  }
+}

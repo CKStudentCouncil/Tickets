@@ -14,7 +14,8 @@
     "logs": "firebase functions:log",
     "test": "node --test \"test/unit/*.test.js\"",
     "test:emulator": "firebase emulators:exec --only firestore --project demo-cksc-ticket \"node --test --test-concurrency=1 test/emulator/*.test.js\"",
-    "test:load": "node test/load/run.js"
+    "test:load": "node test/load/run.js",
+    "drive:auth": "node scripts/driveAuth.js"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1139.0",

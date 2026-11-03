@@ -129,3 +129,11 @@ test('submitSurvey takes exactly the options and rating questions of the survey 
   const pageScores = page.SCALE_SECTIONS.flatMap((section) => section.questions.map((q) => q.id))
   assert.deepEqual([...server.SCORE_IDS].sort(), [...pageScores].sort())
 })
+
+test('報帳 limits and 科目 match src/data/reimbursements.js', async () => {
+  const page = await import(srcFile('data/reimbursements.js'))
+  const server = await import('../../lib/reimbursements.js')
+  for (const name of ['MAX_REIMBURSER_NAME', 'MAX_REIMBURSEMENT_AMOUNT', 'MAX_REIMBURSEMENT_NOTE', 'MAX_INVOICE_FILES', 'MAX_INVOICE_BYTES', 'REIMBURSEMENT_CATEGORIES']) {
+    assert.deepEqual(page[name], server[name], name)
+  }
+})

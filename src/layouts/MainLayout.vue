@@ -283,6 +283,8 @@ const navGroups = computed(() => {
     auth.isManager && { to: '/admin/scan', label: '掃描票券' },
     auth.isSuperAdmin && { to: '/super_admin/analytics', label: '銷售報表' },
     //auth.isAdmin && { to: '/admin/street', label: '路宣登記' },
+    auth.isAdmin && { to: '/admin/reimburse', label: '報帳申請' },
+    auth.isSuperAdmin && { to: '/super_admin/reimbursements', label: '報帳管理' },
     auth.isManager && !auth.isAdmin && { to: '/admin', label: '通知管理' },
     auth.isAdmin && { to: '/admin', label: '後台管理' },
     auth.isSuperAdmin && { to: '/admin/management', label: '票務管理' },

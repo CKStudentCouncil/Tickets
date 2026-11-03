@@ -1,0 +1,196 @@
+/* on top of sellerpage.scss and officerpage.scss: the 報帳申請 page */
+
+.field textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--white);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.6;
+  resize: vertical;
+
+  &:focus { outline: none; border-color: var(--ember); }
+}
+
+.field select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 40px 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background-color: var(--field);
+  background-image: linear-gradient(45deg, transparent 50%, var(--lunar) 50%),
+    linear-gradient(135deg, var(--lunar) 50%, transparent 50%);
+  background-position: calc(100% - 20px) center, calc(100% - 15px) center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--white);
+  font: inherit;
+  font-size: 16px;
+  appearance: none;
+
+  &:focus { outline: none; border-color: var(--ember); }
+  &:invalid { color: var(--lunar); }
+  option { background: var(--field); color: var(--white); }
+}
+
+.field input[aria-invalid='true'] { border-color: rgba(226, 100, 90, .6); }
+
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+  font-style: normal;
+}
+
+/* invoices: the picked files, then the picker (a label around a hidden file input) */
+.invoice-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 6px 6px 6px 8px;
+    border: 1px solid var(--line-strong);
+    background: var(--field);
+  }
+
+  .invoice-thumb {
+    flex: none;
+    width: 42px;
+    height: 42px;
+    object-fit: cover;
+    background: #fff;
+  }
+
+  .invoice-pdf {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(226, 100, 90, .14);
+    color: var(--danger);
+    font-size: 10px;
+    letter-spacing: .06em;
+  }
+
+  .invoice-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--white);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .invoice-size { flex: none; font-weight: 400; letter-spacing: 0; }
+}
+
+.invoice-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--lunar);
+  cursor: pointer;
+
+  &:hover { color: var(--danger); }
+  &:disabled { opacity: .4; cursor: not-allowed; }
+}
+
+.invoice-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  border: 1px dashed rgba(231, 180, 123, .55);
+  background: rgba(231, 180, 123, .05);
+  color: var(--ember);
+  cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease;
+
+  span { color: inherit; font-size: 13px; letter-spacing: .06em; }
+
+  // the whole box opens the picker; the input stays focusable for keyboards
+  input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-height: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  &:hover { background: rgba(231, 180, 123, .1); border-color: var(--ember); }
+  &:focus-within { outline: 2px solid var(--ember); outline-offset: 2px; }
+  &.disabled { opacity: .45; cursor: not-allowed; }
+  &.disabled input { cursor: not-allowed; }
+}
+
+.amount-due {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+
+  span { color: var(--lunar); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+  strong { color: var(--ember); font-size: clamp(26px, 4vw, 34px); font-weight: 600; letter-spacing: -.03em; }
+}
+
+.claim-summary {
+  margin: 0;
+  color: var(--white);
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.new-link .muted { font-size: 13px; }
+
+.guide-note { margin-top: 18px; }
+
+.claim-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 24px;
+
+  div { padding: 12px 14px; border: 1px solid var(--line); background: var(--field); }
+  dt { color: var(--lunar); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+  dd { margin: 4px 0 0; font-size: 17px; font-weight: 600; }
+}
+
+.history-main,
+.claim-note { overflow-wrap: anywhere; }
+.claim-note { margin-bottom: 2px; }
+
+.badges { align-items: center; }
+
+.badge.status-approved,
+.badge.status-paid { border-color: rgba(228, 164, 104, .5); color: var(--ember); }
+.badge.status-paid { background: rgba(231, 180, 123, .12); }
+.badge.status-rejected { border-color: rgba(226, 100, 90, .5); color: var(--danger); }
+
+@media (max-width: 480px) {
+  .claim-totals { grid-template-columns: 1fr; }
+}

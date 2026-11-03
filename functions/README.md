@@ -29,7 +29,11 @@ functions/
 │   ├── guests.js                # 公關票: officer quotas, invite links, direct sends
 │   ├── survey.js                # submitSurvey (購票系統問卷)
 │   ├── partySurvey.js           # submitPartySurvey (舞會滿意度調查)
+│   ├── reimbursements.js        # submitReimbursement, trashReimbursementInvoices (報帳)
+│   ├── drive.js                 # the council's Google Drive for 報帳 invoices (plain REST, no SDK)
 │   └── lineup.js                # uploadLineupImage, deleteLineupImage
+├── scripts/
+│   └── driveAuth.js             # one-time Google Drive grant (yarn drive:auth)
 └── templates/
     ├── shared.js                # escapeHtml, colours, fonts
     ├── orderConfirmation.js     # purchase confirmation email
@@ -65,12 +69,14 @@ functions/
 | `revokeOfficerInvite` | callable | the link's officer, or a super admin (council links: super admins only) | Deletes an unclaimed link and its note and gives its tickets back to the quota; a claimed one cannot be revoked |
 | `claimOfficerInvite` | callable | signed-in, verified accounts | Claims an open link: creates the order for the caller's name and account email (`userId` the caller, `inviteId` the link) and marks the link claimed. The same account claiming again gets the same order; links of an officer since removed no longer work |
 | `releaseOfficerQuota` | `orders/{id}` deleted | — | Gives a deleted officer ticket's tickets back to that officer's quota (once, via `officerReleases/{orderId}`) |
+| `submitReimbursement` | callable | admin+ | 報帳: checks the claim (name, whole NT$ 1–1,000,000, a 科目 from `REIMBURSEMENT_CATEGORIES`, optional note, the party year) and 1–5 invoices (JPEG, PNG, WEBP or PDF, each checked by its first bytes, 7 MB together). Uploads the invoices to the council's Google Drive (see below), then creates `reimbursements/{requestId}` as `pending` with each file's Drive id and link. A failed upload trashes what went up and saves nothing; a retried call with the same `requestId` returns the same claim. A grant that no longer works returns `failed-precondition` |
+| `trashReimbursementInvoices` | `reimbursements/{id}` deleted | — | Moves a withdrawn or deleted claim's invoices to the Drive's trash, where they can be restored for 30 days |
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
 
 Avoid saving the ticket types on the management page during a sale opening: every checkout reads `settings/ticketTypes` in its transaction, so a save then makes them wait.
 
-Stock is counted in 50 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-49}`, so simultaneous checkouts do not all lock one counter. Each shard may sell up to its cap, stored in `ticketSales/{ticketTypeId}.shardCaps` together with the stock it was planned for. The caps add up to the stock and none is below what its shard has already sold, so lowering the stock or limiting a type that sold unlimited never oversells. When the stock changes (a save on the management page, or a deleted order placed before the shards), `planStockShards` plans the caps again from what each shard has sold; a checkout that finds them out of date plans them first, in a transaction of its own (and its order transaction would still do it, locking every shard, if they went out of date meanwhile). Before its transaction an order reads the shards and caps without locking them, turns the buyer away if the type is sold out, and otherwise locks one random shard that still has room. If that shard filled up meanwhile or another checkout won the lock, it looks again and picks a fresh random shard: the first tries are one transaction attempt each after a short random wait, the later ones let Firestore retry, which waits longer but keeps the checkout's place in the lock queue. It never locks every shard with room, which would collide with every other checkout. Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}.sold` only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}`, `notificationJobs/{jobId}`, `turnstilePasses/{requestId}`, `invitationRequests/{requestId}`, `officerInvites/{id}`, `officerInviteNotes/{id}` and `officerReleases/{orderId}`, are only written by the functions (the Firestore rules deny clients).
+Stock is counted in 50 shard documents per ticket type, `ticketSales/{ticketTypeId}/shards/{0-49}`, so simultaneous checkouts do not all lock one counter. Each shard may sell up to its cap, stored in `ticketSales/{ticketTypeId}.shardCaps` together with the stock it was planned for. The caps add up to the stock and none is below what its shard has already sold, so lowering the stock or limiting a type that sold unlimited never oversells. When the stock changes (a save on the management page, or a deleted order placed before the shards), `planStockShards` plans the caps again from what each shard has sold; a checkout that finds them out of date plans them first, in a transaction of its own (and its order transaction would still do it, locking every shard, if they went out of date meanwhile). Before its transaction an order reads the shards and caps without locking them, turns the buyer away if the type is sold out, and otherwise locks one random shard that still has room. If that shard filled up meanwhile or another checkout won the lock, it looks again and picks a fresh random shard: the first tries are one transaction attempt each after a short random wait, the later ones let Firestore retry, which waits longer but keeps the checkout's place in the lock queue. It never locks every shard with room, which would collide with every other checkout. Each order records its shards in `stockShards`. `ticketSales/{ticketTypeId}.sold` only holds the legacy count of orders placed before the shards, which still counts against the stock. Per-person limits are tracked in `buyerPurchases/{sha256(email)}`. These collections, and `orderRequests/{requestId}`, `rateLimits/*`, `stockReleases/{orderId}`, `notificationJobs/{jobId}`, `turnstilePasses/{requestId}`, `invitationRequests/{requestId}`, `officerInvites/{id}`, `officerInviteNotes/{id}`, `officerReleases/{orderId}`, `reimbursements/{id}` (created only here; super admins then change the status or the 科目) and `reimbursementFolders/{year}`, are only written by the functions (the Firestore rules deny clients).
 
 `orderRequests.createdAt`, `buyerPurchases.updatedAt` and `turnstilePasses.expiresAt` are left out of the indexes (`fieldOverrides` in `firestore.indexes.json`): every checkout writes them with the current time, and Firestore caps a collection whose indexed field only ever grows at 500 writes a second, which a sale opening can pass. Nothing queries them; index them again (or shard them) before adding a query that does.
 
@@ -136,6 +142,42 @@ firebase functions:secrets:set UPSTASH_REDIS_REST_TOKEN
 
 Turnstile tokens are single-use, but the site retries a busy checkout with the same token and `requestId` (see checkout recovery below). A passed check is therefore remembered in `turnstilePasses/{requestId}` for 10 minutes, so the retry is let through while the same token on another checkout is not.
 
+`submitReimbursement` and `trashReimbursementInvoices` need the three Google Drive secrets below.
+
+### Google Drive (報帳 invoices)
+
+The two 報帳 functions act as `ckhssc@gl.ck.tp.edu.tw` through an OAuth grant limited to the `drive.file` scope: they see only the folders and files they made, nothing else in that Drive. Invoices go into `CK Party Night 報帳發票 {year}` in that account's My Drive, made with the year's first claim; its id is kept in `reimbursementFolders/{year}`. The folder may be moved or renamed in Drive. If it is deleted, the next claim starts a new one.
+
+Set it up once, before the next functions deploy (which fails while any of the three secrets is missing):
+
+1. In the Google Cloud console of `cksc-ticket`, enable the **Google Drive API**.
+2. **OAuth consent screen**: user type *External* (the project is not in the `gl.ck.tp.edu.tw` organisation), any app name and support email, and the scope `.../auth/drive.file`. Then **publish the app** (In production): an app left in *Testing* gets refresh tokens that expire after 7 days. `drive.file` is not a sensitive scope, so publishing needs no review by Google.
+3. **Credentials → Create OAuth client ID → Desktop app**, in the same project. Store its ID and secret:
+   ```bash
+   firebase functions:secrets:set DRIVE_CLIENT_ID -P cksc-ticket
+   firebase functions:secrets:set DRIVE_CLIENT_SECRET -P cksc-ticket
+   ```
+4. Grant access as the council account, on your own computer:
+   ```bash
+   cd functions
+   DRIVE_CLIENT_ID=$(firebase functions:secrets:access DRIVE_CLIENT_ID -P cksc-ticket) \
+   DRIVE_CLIENT_SECRET=$(firebase functions:secrets:access DRIVE_CLIENT_SECRET -P cksc-ticket) \
+   yarn drive:auth
+   ```
+   Open the printed link and sign in as `ckhssc@gl.ck.tp.edu.tw` (choose *Use another account* if the browser is signed in to another one), then allow access. The script refuses any other account. It writes the refresh token to a file only you can read and prints the command that stores it; run it with `-P cksc-ticket`, then delete the file:
+   ```bash
+   firebase functions:secrets:set DRIVE_REFRESH_TOKEN --data-file "<the printed path>" -P cksc-ticket
+   rm "<the printed path>"
+   ```
+   If Google says the app is blocked, the `gl.ck.tp.edu.tw` Workspace admin must trust the OAuth client ID (Admin console → Security → API controls → App access control).
+5. Deploy the two functions and the rules:
+   ```bash
+   firebase deploy -P cksc-ticket --only firestore:rules,functions:submitReimbursement,functions:trashReimbursementInvoices
+   ```
+6. After the first claim, share the folder with whoever reviews the claims. 報帳管理 links each invoice to Drive, and only accounts with access to the folder can open it.
+
+Whoever made the OAuth client does not matter: the account that signs in at step 4 is the one the functions act as, and it owns the invoices. If that grant stops working (password reset, the app removed from the account), claims fail with 「雲端硬碟的授權失效了」; repeat step 4 and redeploy the two functions.
+
 ## Order actions and checkout recovery
 
 Clients cannot directly update orders or write their audit history. Collection and payment use callables that read the staff role and order in the same transaction. A stale second scan returns `already-exists` without replacing the first collector. Managers need a valid ticket QR; only admins can reset collection or override QR verification, with a reason of 1–500 characters. Payment requires an admin.
@@ -172,6 +214,7 @@ yarn install
 yarn test                # unit tests (also run before every functions deploy)
 yarn test:emulator       # emulator tests, needs Java
 yarn test:load           # many simultaneous checkouts on the emulator (not in CI)
+yarn drive:auth          # grant the 報帳 functions access to the council's Google Drive (see above)
 yarn serve               # functions emulator
 yarn deploy              # firebase deploy --only functions
 yarn logs

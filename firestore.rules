@@ -425,6 +425,49 @@ service cloud.firestore {
     }
 
     // =========================
+    // 報帳 (functions/lib/reimbursements.js)
+    // =========================
+
+    // Admins claim back what they spent on the party; super admins approve,
+    // pay out or reject the claims and count the approved ones against the
+    // takings (/super_admin/reimbursements). Claims are created only by
+    // submitReimbursement, which first puts the invoices in the council's
+    // Google Drive, so every claim has them; its reimbursementFolders fall
+    // through to the deny-all rule below.
+    match /reimbursements/{reimbursementId} {
+      // admins read their own (lists must filter on submitterUid)
+      allow get, list: if isSuperAdmin() || (
+        isAdmin() && resource.data.submitterUid == request.auth.uid
+      );
+
+      allow create: if false;
+
+      // Reviewing changes the status alone, signed by whoever reviewed it;
+      // super admins may also correct the 科目 the claimant picked (the
+      // page offers REIMBURSEMENT_CATEGORIES in src/data/reimbursements.js).
+      // The claim and its invoices stay as they were sent.
+      allow update: if isSuperAdmin() && ((
+        onlyChanges(['status', 'reviewedAt', 'reviewedByUid', 'reviewedByName'])
+        && request.resource.data.status in ['pending', 'approved', 'paid', 'rejected']
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.reviewedByUid == request.auth.uid
+        && isShortString(request.resource.data.reviewedByName, 100)
+      ) || (
+        onlyChanges(['category'])
+        && isShortString(request.resource.data.category, 20)
+        && request.resource.data.category.size() >= 1
+      ));
+
+      // the submitter withdraws a claim only while it is pending;
+      // trashReimbursementInvoices then trashes its invoices
+      allow delete: if isSuperAdmin() || (
+        isAdmin()
+        && resource.data.submitterUid == request.auth.uid
+        && resource.data.status == 'pending'
+      );
+    }
+
+    // =========================
     // Survey
     // =========================
 

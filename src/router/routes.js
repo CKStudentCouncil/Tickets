@@ -187,6 +187,16 @@ const routes = [
         }
       },*/
       {
+        // 報帳申請: admins claim back what they spent; super admins review
+        // the claims on /super_admin/reimbursements (報帳管理)
+        path: 'reimburse',
+        name: 'admin-reimburse',
+        component: () => import('pages/ReimbursePage.vue'),
+        meta: {
+          requiresAdmin: true
+        }
+      },
+      {
         path: 'survey',
         name: 'admin-survey',
         component: () => import('pages/SurveyAdminPage.vue')
@@ -226,6 +236,13 @@ const routes = [
         path: 'guests',
         name: 'super-admin-guests',
         component: () => import('pages/GuestAdminPage.vue')
+      },
+      {
+        // 報帳管理: review the claims and the party's profit (sales less
+        // approved claims)
+        path: 'reimbursements',
+        name: 'super-admin-reimbursements',
+        component: () => import('pages/ReimbursementAdminPage.vue')
       },
       /*{
         // 路宣管理: every street sale and its totals, each seller's cash, and

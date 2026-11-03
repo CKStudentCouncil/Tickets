@@ -21,6 +21,8 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - 清除所有訂單 for super admins: Excel backup, then a Firestore archive (`salesArchives`), then deletion with stock release and an audit log; nothing is deleted unless the backup and archive succeed
 - 路宣登記 for admins: tickets sold for cash on the street and handed over as paper tickets at once, registered on `/admin/street` with a price board and a change calculator. Each is a paid, collected order from stock under the identity 路宣, with nothing about the buyer and no email; only super admins see the totals (`/super_admin/street`, and 路宣 in the 銷售報表)
 - 公關票 by officer quota: super admins give each officer (幹部) a quota; officers send free tickets on `/officer`, by name and email or as one-time invite links that guests claim on `/invite/:id`, and super admins may send one directly or make a link outside any quota. Links can carry a note only the officer and super admins see. Each has the same QR code and check-in as an order
+- 報帳 for admins: claim back what they spent on the party on `/admin/reimburse`, with the name of whoever spent it, a whole NT$ amount, a 科目, an optional note and 1–5 photos or PDFs of the invoices. The invoices are saved to the council's Google Drive (`ckhssc@gl.ck.tp.edu.tw`) before the claim is; a pending claim can be withdrawn, which moves its invoices to the Drive's trash
+- 報帳管理 for super admins on `/super_admin/reimbursements`: approve, pay out or reject claims and correct their 科目, see who is still owed, and the party's profit (orders, 路宣 and 學弟賣票 less the approved claims, collected so far and projected). Its 收支表 lays the same figures out like the council's 總預算表 (款 / 項 / 目 / 節: ticket sales by type, claims by 科目) and downloads as Excel or PDF
 - Launch gate that redirects visitors to `/comingsoon` before the sale opens
 
 ## Tech Stack
@@ -112,7 +114,7 @@ dist/spa
 ```bash
 yarn test                            # checkout/campaign recovery and backend units (no emulator needed)
 yarn test:rules                        # Firestore rules, needs Java for the emulator
-yarn --cwd functions test:emulator    # checkout, atomic staff actions and mail queue, needs Java
+yarn --cwd functions test:emulator    # checkout, atomic staff actions, mail queue and 報帳 (fake Drive), needs Java
 cd functions && yarn test:load        # load test: hundreds of simultaneous checkouts, needs Java
 ```
 
@@ -150,6 +152,8 @@ firebase use <your-project>
 ## Cloud Functions & Email
 
 See [functions/README.md](functions/README.md) for the function list, queued-mail outcomes, release order, and AWS SES secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`). Ordering and staff status changes need the functions deployed; queued mail also needs the scheduled worker running.
+
+報帳 invoices go to Google Drive through an OAuth grant from `ckhssc@gl.ck.tp.edu.tw`, kept in the `DRIVE_CLIENT_ID`, `DRIVE_CLIENT_SECRET` and `DRIVE_REFRESH_TOKEN` secrets. Setting it up takes a few minutes in the Google Cloud console and one sign-in as that account (`yarn --cwd functions drive:auth`); the steps are under [Google Drive (報帳 invoices)](functions/README.md#google-drive-報帳-invoices).
 
 ## Ticket Eligibility and Purchase Limits
 
@@ -211,6 +215,8 @@ The frontend is hosted on GitHub Pages; deploy only the rules and functions:
 firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,functions
 ```
 
+A functions deploy fails while any secret a function declares is missing, the Drive secrets included. Until they are set, deploy the other functions by name (`--only functions:createOrder,functions:…`).
+
 ## Main Routes
 
 | Route | Description |
@@ -228,7 +234,9 @@ firebase deploy -P cksc-ticket --only firestore:indexes,firestore:rules,function
 | `/admin/orders/:id` | Staff order view (ticket QR codes link here) |
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |
+| `/admin/reimburse` | 報帳申請: claim back what you spent, with the invoices (admins) |
 | `/super_admin/analytics` | 銷售報表 (super admins) |
+| `/super_admin/reimbursements` | 報帳管理: review claims, the party's profit and its 收支表 (super admins) |
 | `/super_admin/guests` | 公關票: officers and their quotas, direct sends, council invite links and every ticket (super admins) |
 | `/officer` | 公關票 for officers: send tickets and make invite links within their quota |
 | `/invite/:id` | 公關票 invite link: the guest signs in and claims the ticket (not in the menu) |
