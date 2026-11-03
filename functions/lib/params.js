@@ -2,7 +2,7 @@
 // edit needed). See functions/README.md.
 import { defineBoolean, defineInt, defineString } from 'firebase-functions/params'
 
-// Warm createOrder instances kept running, each serving up to 80 checkouts
+// Warm createOrder instances kept running, each serving up to 1000 checkouts
 // at once; raise to 5-10 around the sale opening to avoid cold starts, set
 // back to 0 afterwards (it costs money).
 export const CREATE_ORDER_MIN_INSTANCES = defineInt('CREATE_ORDER_MIN_INSTANCES', { default: 0 })
