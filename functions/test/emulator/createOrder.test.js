@@ -4,11 +4,13 @@ import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { HOUR, PROJECT_ID, db, fft, functions, iso, soldOf, isEmulator } from './setup.js'
-import { getBuyerKey, SHARD_COUNT } from '../../lib/orderValidation.js'
+import { getBuyerKey } from '../../lib/orderValidation.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
-const callCreate = fft.wrap(functions.createOrder)
+// createOrder is a 2nd gen callable: one request carries the data and the auth
+const wrappedCreate = fft.wrap(functions.createOrder)
+const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
 const callRelease = fft.wrap(functions.releaseOrderStock)
 const callPlan = fft.wrap(functions.planStockShards)
 
@@ -226,11 +228,20 @@ describe('createOrder', () => {
 
   test('concurrent checkouts never oversell (PARTY-5)', async (t) => {
     const attempts = 25
-    const results = await Promise.allSettled(
-      Array.from({ length: attempts }, (_, i) =>
-        callCreate(order([{ id: 'small', quantity: 1 }]), as(`buyer${i}@example.com`))
-      )
-    )
+    // as the storefront does (orderService.js): a checkout still busy when its
+    // time runs out says "try again" (aborted), and is sent again with the same
+    // requestId until it ends in an order or sold out
+    const checkout = async (i) => {
+      const payload = { ...order([{ id: 'small', quantity: 1 }]), requestId: `req-concurrent-${String(i).padStart(4, '0')}` }
+      for (let tries = 1; ; tries++) {
+        try {
+          return await callCreate(payload, as(`buyer${i}@example.com`))
+        } catch (error) {
+          if (error?.code !== 'aborted' || tries >= 3) throw error
+        }
+      }
+    }
+    const results = await Promise.allSettled(Array.from({ length: attempts }, (_, i) => checkout(i)))
     const succeeded = results.filter((r) => r.status === 'fulfilled').length
     const sold = await soldOf('small')
     t.diagnostic(`${succeeded} of ${attempts} concurrent orders succeeded for 5 tickets`)
@@ -473,7 +484,7 @@ describe('releaseOrderStock', () => {
     // Seed evenly distributed counted sales to exercise caps planned above a
     // reduced limit without placing sixty unrelated orders in this regression.
     const batch = db.batch()
-    for (let k = 0; k < SHARD_COUNT; k++) {
+    for (let k = 0; k < 20; k++) {
       batch.set(db.doc(`ticketSales/open/shards/${k}`), { sold: 3 })
     }
     const ref = db.doc('orders/CKS202601010101')

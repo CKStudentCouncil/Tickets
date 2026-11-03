@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions/v1'
+import { onCall } from 'firebase-functions/v2/https'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes, randomInt } from 'node:crypto'
 
@@ -30,10 +31,19 @@ import { CHECKOUT_ACTION, TURNSTILE_SECRET, checkTurnstile } from './turnstile.j
 import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
 
 const ORDER_ID_ATTEMPTS = 3
-// Fresh looks at the shards before giving up when the locked ones were full
-const STOCK_ATTEMPTS = 6
-// After this many, lock every shard with room rather than one random shard
-const SPREAD_AFTER = 2
+// Tries at the stock before giving up, each after a fresh look at the shards:
+// when the locked shards filled up meanwhile or another checkout won the lock
+const STOCK_ATTEMPTS = 8
+// The first ones are one transaction attempt each, after a short random wait
+// (up to 100, 200, 400 ms...). Firestore's own retries wait 1 s, 1.5 s,
+// 2.3 s... on the same shards, but keep the checkout's place in the lock
+// queue, so the later tries use them and a checkout that keeps losing still
+// gets through.
+const FAST_STOCK_ATTEMPTS = 4
+const FAST_RETRY_MS = 25
+const LATE_TX_ATTEMPTS = 5
+// No new try after this long, well within the function timeout
+const STOCK_RETRY_MS = 20 * 1000
 const RATE_WINDOW_MS = 10 * 60 * 1000
 // How long a passed Turnstile check covers retries of the same checkout
 const TURNSTILE_PASS_MS = 10 * 60 * 1000
@@ -106,8 +116,10 @@ async function finishRejectedRequest(requestRef, account, error) {
     return { error: rejectedRequestError(rejected, account) }
   })
 }
-// Firestore gave up on a transaction after repeated lock contention
+// Firestore aborted the transaction: another one held the locks it needed
 export const isContention = (error) => error?.code === 10 || error?.code === 'aborted'
+// Firestore could not be reached for this attempt (gRPC UNAVAILABLE)
+export const isUnavailable = (error) => error?.code === 14
 
 const ALL_SHARDS = Array.from({ length: SHARD_COUNT }, (_, k) => k)
 // also used by seller registrations (sellers.js), which take from the same stock
@@ -156,6 +168,31 @@ function currentCapsOf(legacySnap, stock) {
   return getCurrentCaps(legacySnap.data()?.shardCaps, getAvailable(stock, soldOf(legacySnap)))
 }
 
+// Plans the caps of every limited type whose stored ones are out of date.
+// Simultaneous calls race on the same documents; Firestore's own retries keep
+// each one's place, and once one has planned the caps the others find nothing
+// to do.
+function planStaleCaps() {
+  return db.runTransaction(async (tx) => {
+    const limited = [...ticketTypesOf(await tx.get(settingsRef))]
+      .filter(([id, ticketType]) => TICKET_TYPE_ID_PATTERN.test(id) && getStockLimit(ticketType) !== null)
+    if (limited.length === 0) return
+
+    const legacySnaps = await tx.getAll(...limited.map(([id]) => legacyRef(id)))
+    const stale = limited
+      .map(([id, ticketType], i) => ({ id, stock: getStockLimit(ticketType), legacySnap: legacySnaps[i] }))
+      .filter(({ stock, legacySnap }) => !currentCapsOf(legacySnap, stock))
+    if (stale.length === 0) return
+
+    const shardSnaps = await tx.getAll(...stale.flatMap(({ id }) => ALL_SHARDS.map((k) => shardRef(id, k))))
+    stale.forEach(({ stock, legacySnap }, i) => {
+      const available = getAvailable(stock, soldOf(legacySnap))
+      const sold = shardSnaps.slice(i * SHARD_COUNT, (i + 1) * SHARD_COUNT).map(soldOf)
+      tx.set(legacySnap.ref, { shardCaps: { available, caps: planShardCaps(available, sold) } }, { merge: true })
+    })
+  })
+}
+
 // Unlocked look before the transaction, so a sold-out type turns buyers away
 // without opening one and the transaction locks only shards with room.
 // Returns null when this requestId was already resolved (the transaction
@@ -164,8 +201,10 @@ function currentCapsOf(legacySnap, stock) {
 // ({ id, stock }) this order takes the last tickets of, to mark sold out once
 // it commits. Throws the errors the transaction would for unknown types,
 // types not on sale or not for this buyer, and sold-out types (marking those
-// with nothing left).
-async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, spread }) {
+// with nothing left). Caps that are out of date are planned first: the
+// transaction would otherwise lock every shard to plan them, and every
+// checkout at once would fight over all of them.
+async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, planned = false }) {
   const refs = [settingsRef, soldOutRef, ...ticketTypeIds.map(legacyRef), ...(requestRef ? [requestRef] : [])]
   const [settingsSnap, soldOutSnap, ...snaps] = await db.getAll(...refs)
   const legacySnaps = snaps.slice(0, ticketTypeIds.length)
@@ -188,6 +227,10 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
   })
   if (limited.length === 0) return { chosen: {}, emptied: [] }
+  if (!planned && limited.some(({ stock, legacySnap }) => !currentCapsOf(legacySnap, stock))) {
+    await planStaleCaps()
+    return chooseShards({ ticketTypeIds, quantities, requestRef, order, account, planned: true })
+  }
 
   const shardSnaps = await db.getAll(...limited.flatMap(({ id }) => ALL_SHARDS.map((k) => shardRef(id, k))))
 
@@ -195,7 +238,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
     const sold = shardSnaps.slice(i * SHARD_COUNT, (i + 1) * SHARD_COUNT).map(soldOf)
     const caps = currentCapsOf(legacySnap, stock) || planShardCaps(getAvailable(stock, soldOf(legacySnap)), sold)
     const left = caps.reduce((sum, cap, k) => sum + Math.max(0, cap - sold[k]), 0)
-    const shards = planShards({ caps, sold, quantity: quantities.get(id), random: randomInt, spread })
+    const shards = planShards({ caps, sold, quantity: quantities.get(id), random: randomInt })
     return { id, ticketType, stock, left, shards }
   })
   const marked = soldOutSnap.data() || {}
@@ -320,11 +363,11 @@ async function enforceAccountLimit(account) {
   })
 }
 
-// Firestore gives up on a transaction after repeated contention; say so
-// clearly instead of the generic "internal" error.
+// A checkout that kept losing the race for stock gives up; say so clearly
+// instead of the generic "internal" error.
 function toHttpsError(error) {
   if (error instanceof HttpsError) return error
-  if (error instanceof ShardsTaken || isContention(error)) {
+  if (error instanceof ShardsTaken || isContention(error) || isUnavailable(error)) {
     return new HttpsError('aborted', '目前購票人數眾多，請稍後再試一次')
   }
   console.error('[createOrder] unexpected error:', error)
@@ -336,10 +379,20 @@ function toHttpsError(error) {
 // Everything runs in one transaction so simultaneous checkouts cannot
 // oversell or exceed the per-person limit. Buyers read their orders back
 // straight from Firestore (the rules allow the account in `userId`).
-export const createOrder = functions
-  .region(REGION)
-  .runWith({ minInstances: CREATE_ORDER_MIN_INSTANCES, secrets: [TURNSTILE_SECRET] })
-  .https.onCall(async (data, context) => {
+// 2nd gen, so one instance serves many checkouts at once: a 1st gen instance
+// takes one request at a time, and a sale opening would start one per buyer.
+// `context` is the callable request (auth and rawRequest as in 1st gen).
+export const createOrder = onCall(
+  {
+    region: REGION,
+    concurrency: 80,
+    cpu: 1,
+    timeoutSeconds: 60,
+    minInstances: CREATE_ORDER_MIN_INSTANCES,
+    secrets: [TURNSTILE_SECRET]
+  },
+  async (context) => {
+    const { data } = context
     const account = getBuyerAccount(context)
 
     const requestId = isValidRequestId(data?.requestId) ? data.requestId : null
@@ -374,7 +427,7 @@ export const createOrder = functions
 
     const buyerRef = db.doc(`buyerPurchases/${getBuyerKey(order.customerEmail)}`)
     const legacyRefs = ticketTypeIds.map(legacyRef)
-    const choose = (spread) => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, spread })
+    const choose = () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account })
     let idAttempt = 1
     let stockAttempt = 1
 
@@ -384,16 +437,18 @@ export const createOrder = functions
       const [checks, look] = await Promise.allSettled([
         Promise.all([assertTurnstile(data, context, account, requestId), assertShopOpen(account)])
           .then(() => enforceAccountLimit(account)),
-        choose(false)
+        choose()
       ])
       if (checks.status === 'rejected') throw checks.reason
       if (look.status === 'rejected') throw look.reason
       let stockLook = look.value
+      const retryUntil = Date.now() + STOCK_RETRY_MS
 
       for (;;) {
         const orderRef = db.doc(`orders/${generateOrderId(schoolCode, dateKey)}`)
 
         try {
+          const maxAttempts = stockAttempt <= FAST_STOCK_ATTEMPTS ? 1 : LATE_TX_ATTEMPTS
           const result = await db.runTransaction(async (tx) => {
             const refs = [settingsRef, buyerRef, orderRef, ...(requestRef ? [requestRef] : []), ...legacyRefs]
             const snaps = await tx.getAll(...refs)
@@ -501,19 +556,23 @@ export const createOrder = functions
             }
 
             return { status: 201, id: orderRef.id }
-          }, { maxAttempts: 10 })
+          }, { maxAttempts })
 
           if (result.status === 201) await markSoldOut(stockLook?.emptied || [])
           return result
         } catch (error) {
           if (error instanceof OrderIdTaken && idAttempt++ < ORDER_ID_ATTEMPTS) continue
-          // the last tickets are fought over until Firestore gives up; if they
-          // are gone by then, say sold out rather than "try again"
-          if (isContention(error)) await choose(false)
-          if (!(error instanceof ShardsTaken) || stockAttempt++ >= STOCK_ATTEMPTS) throw error
-          // others took those shards: back off a little, then look again
-          await sleep(randomInt(20, 100) * stockAttempt)
-          stockLook = await choose(stockAttempt > SPREAD_AFTER)
+          const lostRace = error instanceof ShardsTaken || isContention(error) || isUnavailable(error)
+          if (!lostRace || stockAttempt++ >= STOCK_ATTEMPTS || Date.now() > retryUntil) {
+            // the last tickets are fought over until the tries run out; if
+            // they are gone by then, say sold out rather than "try again"
+            if (lostRace) await choose()
+            throw error
+          }
+          // others took those shards: back off a random while that grows with
+          // each loss, so the losers do not all come back at once, then look again
+          if (stockAttempt <= FAST_STOCK_ATTEMPTS) await sleep(randomInt(FAST_RETRY_MS * 2 ** stockAttempt))
+          stockLook = await choose()
         }
       }
     } catch (error) {
@@ -529,7 +588,8 @@ export const createOrder = functions
       }
       throw toHttpsError(error)
     }
-  })
+  }
+)
 
 export const stockReleaseRef = (orderId) => db.doc(`stockReleases/${orderId}`)
 
@@ -640,29 +700,12 @@ export const releaseOrderStock = functions
 
 // Plans the shard caps of every limited type as soon as the ticket types are
 // saved, so the first checkouts after a stock change need not each lock all
-// shards to do it (createOrder still does, if this has not run yet).
+// shards to do it (createOrder plans them first too, if this has not run yet).
 export const planStockShards = functions
   .region(REGION)
   .firestore.document('settings/ticketTypes')
   .onWrite(async () => {
-    await db.runTransaction(async (tx) => {
-      const limited = [...ticketTypesOf(await tx.get(settingsRef))]
-        .filter(([id, ticketType]) => TICKET_TYPE_ID_PATTERN.test(id) && getStockLimit(ticketType) !== null)
-      if (limited.length === 0) return
-
-      const legacySnaps = await tx.getAll(...limited.map(([id]) => legacyRef(id)))
-      const stale = limited
-        .map(([id, ticketType], i) => ({ id, stock: getStockLimit(ticketType), legacySnap: legacySnaps[i] }))
-        .filter(({ stock, legacySnap }) => !currentCapsOf(legacySnap, stock))
-      if (stale.length === 0) return
-
-      const shardSnaps = await tx.getAll(...stale.flatMap(({ id }) => ALL_SHARDS.map((k) => shardRef(id, k))))
-      stale.forEach(({ stock, legacySnap }, i) => {
-        const available = getAvailable(stock, soldOf(legacySnap))
-        const sold = shardSnaps.slice(i * SHARD_COUNT, (i + 1) * SHARD_COUNT).map(soldOf)
-        tx.set(legacySnap.ref, { shardCaps: { available, caps: planShardCaps(available, sold) } }, { merge: true })
-      })
-    })
+    await planStaleCaps()
     await refreshSoldOut()
   })
 

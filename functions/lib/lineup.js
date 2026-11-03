@@ -1,6 +1,5 @@
 import * as functions from 'firebase-functions/v1'
 import { randomUUID } from 'node:crypto'
-import sharp from 'sharp'
 
 import { getBucket, HttpsError, assertRole } from './common.js'
 import { REGION } from './constants.js'
@@ -41,6 +40,8 @@ export const uploadLineupImage = functions
       throw new HttpsError('invalid-argument', '圖片大小需介於 1 byte 與 7 MB 之間')
     }
 
+    // loaded here, not with every function: createOrder should start up quickly
+    const { default: sharp } = await import('sharp')
     let output
     try {
       output = await sharp(input)

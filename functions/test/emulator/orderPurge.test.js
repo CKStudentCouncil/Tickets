@@ -12,7 +12,9 @@ import { PURGE_CONFIRM_PHRASE } from '../../lib/orderPurge.js'
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 const callPurge = fft.wrap(functions.purgeOrders)
-const callCreate = fft.wrap(functions.createOrder)
+// createOrder is a 2nd gen callable: one request carries the data and the auth
+const wrappedCreate = fft.wrap(functions.createOrder)
+const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
 const callRelease = fft.wrap(functions.releaseOrderStock)
 
 const TICKET_TYPES = [
