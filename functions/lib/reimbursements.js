@@ -30,7 +30,7 @@ export const MAX_REIMBURSEMENT_NOTE = 200
 export const MAX_INVOICE_FILES = 5
 // Callable payloads are capped at 10 MB and base64 adds ~33%
 export const MAX_INVOICE_BYTES = 7 * 1024 * 1024
-export const REIMBURSEMENT_CATEGORIES = ['場地', '音響燈光', '舞台演出', '場佈道具', '宣傳印刷', '票務', '餐飲', '其他']
+export const REIMBURSEMENT_CATEGORIES = ['場地', '廠商', '場佈', '文書', '票務', '餐食', '其他']
 export const FOLDER_NAME = 'CK Party Night 報帳發票'
 
 // Firestore's gRPC code when create() finds the document already there
@@ -185,7 +185,7 @@ export const submitReimbursement = functions
       // the owner deleted the folder: the next try makes a new one
       if (error.status === 404) await folderRef(claim.year).delete().catch(() => {})
       if (error.auth) {
-        throw new HttpsError('failed-precondition', '雲端硬碟的授權失效了，請通知系統管理員重新授權')
+        throw new HttpsError('failed-precondition', '雲端硬碟的授權失效了，請通知開發者重新授權')
       }
       throw new HttpsError('unavailable', '發票上傳失敗，請稍後再試')
     }

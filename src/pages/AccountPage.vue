@@ -53,9 +53,13 @@
 
     <div class="stats">
       <div class="stat-card"><strong class="num">{{ users.length }}</strong><span>總使用者</span></div>
-      <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'super_admin').length }}</strong><span>舞會總副召</span></div>
-      <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'admin').length }}</strong><span>建班幹部</span></div>
-      <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'manager').length }}</strong><span>友校幹部</span></div>
+      <div
+        v-for="r in ROLES_HIGH_FIRST"
+        :key="r.value"
+        class="stat-card"
+      >
+        <strong class="num">{{ roleCounts[r.value] || 0 }}</strong><span>{{ r.label }}</span>
+      </div>
     </div>
 
     <div class="filters panel">
@@ -66,10 +70,13 @@
       >
       <select v-model="filterRole">
         <option value="all">全部角色</option>
-        <option value="developer">開發者</option>
-        <option value="super_admin">舞會總副召</option>
-        <option value="admin">建班幹部</option>
-        <option value="manager">友校幹部</option>
+        <option
+          v-for="r in ROLES_HIGH_FIRST"
+          :key="r.value"
+          :value="r.value"
+        >
+          {{ r.label }}
+        </option>
       </select>
     </div>
 
@@ -140,13 +147,10 @@
           </option>
         </select>
         <p v-if="selectedUser.id === auth.user?.uid" class="hint">
-          無法變更自己的角色
+          無法變更自己的角色或刪除自己的帳號
         </p>
         <p v-else-if="!canManage(selectedUser)" class="hint warn">
           只有開發者可以變更或刪除開發者
-        </p>
-        <p v-else-if="isLastOfRole(selectedUser) && pendingRole !== selectedUser.role" class="hint warn">
-          這是最後一位{{ roleLabel(selectedUser.role) }}，無法降級
         </p>
 
         <button
@@ -161,7 +165,7 @@
         <button
           type="button"
           class="btn danger"
-          :disabled="selectedUser.id === auth.user?.uid || PROTECTED_ROLES.includes(selectedUser.role)"
+          :disabled="selectedUser.id === auth.user?.uid || !canManage(selectedUser)"
           @click="deleteUser(selectedUser.id)"
         >
           刪除使用者
@@ -296,6 +300,7 @@ import {
 import { db } from 'src/boot/firebase'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
+import { STAFF_ROLES, roleLabel } from 'src/data/roles'
 
 const auth = useAuthStore()
 const canAccessAdmin = computed(() => auth.isSuperAdmin)
@@ -331,26 +336,29 @@ const filteredUsers = computed(() =>
   })
 )
 
-// Lowest rank first. Only developers may grant the developer role, or
-// change or delete a developer; firestore.rules enforce the same.
-const ROLES = [
-  { value: 'manager', label: '友校幹部' },
-  { value: 'admin', label: '建班幹部' },
-  { value: 'super_admin', label: '舞會總副召' },
-  { value: 'developer', label: '開發者' }
-]
+// the stats cards and the role filter list the highest rank first
+const ROLES_HIGH_FIRST = [...STAFF_ROLES].reverse()
 
-// Cannot be deleted directly (demote them first), and the last active
-// one of each cannot be demoted
+const roleCounts = computed(() => {
+  const counts = {}
+  for (const u of users.value) counts[u.role] = (counts[u.role] || 0) + 1
+  return counts
+})
+
+// Kept by 刪除所有使用者
 const PROTECTED_ROLES = ['super_admin', 'developer']
 
+// Only developers may grant the developer role, or change or delete a
+// developer; firestore.rules enforce the same. Nobody may change their own
+// role or delete themselves, and since the viewer always stays a 舞會總副召
+// or 開發者, the page can never remove the last one with access to it.
 const assignableRoles = computed(() =>
-  ROLES.filter((r) => r.value !== 'developer' || auth.isDeveloper)
+  STAFF_ROLES.filter((r) => r.value !== 'developer' || auth.isDeveloper)
 )
 
 // A developer's own role must stay listed so the disabled select still shows it
 function roleOptionsFor(user) {
-  return ROLES.filter((r) => r.value !== 'developer' || auth.isDeveloper || user.role === 'developer')
+  return STAFF_ROLES.filter((r) => r.value !== 'developer' || auth.isDeveloper || user.role === 'developer')
 }
 
 function canManage(user) {
@@ -362,23 +370,11 @@ const canApplyRole = computed(() => {
   if (selectedUser.value.id === auth.user?.uid) return false
   if (!canManage(selectedUser.value)) return false
   if (!assignableRoles.value.some((r) => r.value === pendingRole.value)) return false
-  if (pendingRole.value === selectedUser.value.role) return false
-  if (isLastOfRole(selectedUser.value)) return false
-  return true
+  return pendingRole.value !== selectedUser.value.role
 })
-
-function roleLabel(role) {
-  return ROLES.find((r) => r.value === role)?.label || role || '未設定'
-}
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim())
-}
-
-// the only active 舞會總副召 or 開發者 left
-function isLastOfRole(user) {
-  if (user.pending || !PROTECTED_ROLES.includes(user.role)) return false
-  return users.value.filter((u) => !u.pending && u.role === user.role).length === 1
 }
 
 onMounted(async () => {
@@ -389,18 +385,22 @@ onMounted(async () => {
   await loadUsers()
 })
 
+async function fetchUsers() {
+  const [userSnap, pendingSnap] = await Promise.all([
+    getDocs(collection(db, 'users')),
+    getDocs(collection(db, 'pendingUsers'))
+  ])
+
+  return [
+    ...userSnap.docs.map((d) => ({ ...d.data(), id: d.id, role: d.data().role || 'manager', pending: false })),
+    ...pendingSnap.docs.map((d) => ({ ...d.data(), id: d.id, role: d.data().role || 'manager', pending: true }))
+  ]
+}
+
 async function loadUsers() {
   loading.value = true
   try {
-    const [userSnap, pendingSnap] = await Promise.all([
-      getDocs(collection(db, 'users')),
-      getDocs(collection(db, 'pendingUsers'))
-    ])
-
-    users.value = [
-      ...userSnap.docs.map((d) => ({ ...d.data(), id: d.id, role: d.data().role || 'manager', pending: false })),
-      ...pendingSnap.docs.map((d) => ({ ...d.data(), id: d.id, role: d.data().role || 'manager', pending: true }))
-    ]
+    users.value = await fetchUsers()
   } catch {
     toast.show('獲取使用者資料失敗')
   } finally {
@@ -445,7 +445,7 @@ async function applyRole(userId) {
 
 async function deleteUser(userId) {
   const user = users.value.find((u) => u.id === userId)
-  if (!user || !window.confirm('確定要刪除此使用者嗎？')) return
+  if (!user || !window.confirm(`確定要刪除${roleLabel(user.role)} ${user.email} 嗎？`)) return
   try {
     await deleteDoc(accountRef(user))
     users.value = users.value.filter((u) => u.id !== userId)
@@ -521,6 +521,16 @@ const BATCH_SIZE = 450
 async function deleteAllUsers() {
   if (deleteAllConfirmText.value !== 'DELETE ALL') return
   deletingAll.value = true
+
+  // Re-read the accounts first: one made a developer since the page loaded
+  // would have the rules reject a super admin's whole batch
+  try {
+    users.value = await fetchUsers()
+  } catch {
+    toast.show('獲取使用者資料失敗')
+    deletingAll.value = false
+    return
+  }
 
   const targets = users.value.filter((u) => !PROTECTED_ROLES.includes(u.role) && u.id !== auth.user?.uid)
   const deletedIds = new Set()

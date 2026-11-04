@@ -396,6 +396,39 @@ describe('developers', () => {
     await assertSucceeds(batch.commit())
   })
 
+  test('no one creates a staff account for someone else, so an invite cannot be pre-empted', async () => {
+    await seedDevInvite()
+    const invitee = { uid: 'dev2-uid', email: devInvite.email }
+    const account = (role) => ({ email: invitee.email, role, uid: invitee.uid })
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'users', invitee.uid), account('manager')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'users', invitee.uid), account('developer')))
+    await assertFails(setDoc(doc(as(staff.developer), 'users', invitee.uid), account('developer')))
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'users', 'fresh-uid'), { email: 'f@example.com', role: 'admin' }))
+  })
+
+  test("super admins cannot edit any field of a developer's account", async () => {
+    const target = doc(as(staff.superAdmin), 'users', staff.developer.uid)
+    await assertFails(updateDoc(target, { name: '改名' }))
+    await assertFails(updateDoc(target, { role: 'developer', name: '改名' }))
+  })
+
+  test('nobody changes their own role or deletes their own account', async () => {
+    for (const who of [staff.superAdmin, staff.developer]) {
+      const own = doc(as(who), 'users', who.uid)
+      await assertFails(updateDoc(own, { role: 'admin' }))
+      await assertFails(deleteDoc(own))
+    }
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'users', staff.superAdmin.uid), { role: 'developer' }))
+    // their own profile otherwise stays theirs to edit
+    await assertSucceeds(updateDoc(doc(as(staff.superAdmin), 'users', staff.superAdmin.uid), { name: '總副召' }))
+  })
+
+  test('a developer can demote or delete the only super admin', async () => {
+    const target = doc(as(staff.developer), 'users', staff.superAdmin.uid)
+    await assertSucceeds(updateDoc(target, { role: 'admin' }))
+    await assertSucceeds(deleteDoc(target))
+  })
+
   test('super admins can still delete managers, admins and invites', async () => {
     const db = as(staff.superAdmin)
     await assertSucceeds(deleteDoc(doc(db, 'users', staff.manager.uid)))
@@ -972,7 +1005,7 @@ describe('報帳 (reimbursements)', () => {
     name: '林管理',
     amount: 1200,
     note: '場佈材料',
-    category: '場佈道具',
+    category: '場佈',
     year: 2026,
     status: 'pending',
     submitterUid: who.uid,
@@ -1050,14 +1083,14 @@ describe('報帳 (reimbursements)', () => {
   })
 
   test('super admins correct the 科目 alone; nobody else can', async () => {
-    await assertSucceeds(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐飲' }))
-    await assertFails(updateDoc(doc(as(staff.admin), 'reimbursements', 'mine'), { category: '餐飲' }))
+    await assertSucceeds(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐食' }))
+    await assertFails(updateDoc(doc(as(staff.admin), 'reimbursements', 'mine'), { category: '餐食' }))
     for (const category of ['', 'x'.repeat(21), 3]) {
       await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category }))
     }
     // not together with anything else, so it never passes as a review
-    await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐飲', amount: 1 }))
-    await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐飲', status: 'approved' }))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐食', amount: 1 }))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'reimbursements', 'mine'), { category: '餐食', status: 'approved' }))
   })
 
   test('the submitter withdraws a pending claim; super admins delete any', async () => {

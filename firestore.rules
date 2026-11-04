@@ -61,7 +61,10 @@ service cloud.firestore {
 
     // Super admins manage staff accounts and invites, but only developers
     // may grant the developer role or touch an account or invite that has
-    // it, so a super admin can never remove or demote a developer.
+    // it, so a super admin can never remove or demote a developer. Staff
+    // accounts are created only by their own activation (below), so a super
+    // admin cannot pre-empt a developer's invite by creating the invitee's
+    // account first.
     function canGrantRole(role) {
       return isSuperAdmin() && isStaffRole(role) && (role != 'developer' || isDeveloper());
     }
@@ -93,10 +96,12 @@ service cloud.firestore {
       allow get: if (signedIn() && request.auth.uid == userId) || isSuperAdmin();
       allow list: if isSuperAdmin();
 
-      // An invited staff member activates their own account on first login.
-      // The role must be exactly the one in their invite, and the invite must
-      // be deleted in the same batch so it can never be used twice.
-      allow create: if canGrantRole(request.resource.data.role) || (
+      // An invited staff member activates their own account on first login,
+      // the only way a client creates one: super admins invite through
+      // pendingUsers. The role must be exactly the one in their invite, and
+      // the invite must be deleted in the same batch so it can never be used
+      // twice.
+      allow create: if (
         signedIn()
         && request.auth.uid == userId
         && request.auth.token.email_verified == true
@@ -111,14 +116,21 @@ service cloud.firestore {
         ])
       );
 
-      // Staff may refresh their own profile, never their role.
-      allow update: if (canManageExisting() && canGrantRole(request.resource.data.role)) || (
+      // Staff may refresh their own profile, never their role. Nobody
+      // changes their own role or deletes their own account, so whoever
+      // removes a developer is another developer who stays: there is always
+      // at least one.
+      allow update: if (
+        canManageExisting()
+        && canGrantRole(request.resource.data.role)
+        && (userId != request.auth.uid || request.resource.data.role == resource.data.get('role', ''))
+      ) || (
         signedIn()
         && request.auth.uid == userId
         && onlyChanges(['email', 'displayName', 'photoURL', 'updatedAt'])
       );
 
-      allow delete: if canManageExisting();
+      allow delete: if canManageExisting() && userId != request.auth.uid;
     }
 
     // Invites, keyed by lower-case email. Only super admins can list them;

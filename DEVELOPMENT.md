@@ -108,9 +108,9 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 | Officer (on `officers/{email}`) | Not a staff role: give out 公關票 on `/officer` within the quota super admins set, by name and email or as one-time invite links |
 | Guest (any signed-in account) | Not a staff role: claim a 公關票 invite link on `/invite/:id`; the ticket goes to their account email |
 
-Route guards control navigation. Firestore rules and backend role checks enforce data access. When changing permissions, keep [src/router/index.js](src/router/index.js), `src/stores/auth.js`, [firestore.rules](firestore.rules), and [functions/lib/common.js](functions/lib/common.js) aligned.
+Route guards control navigation. Firestore rules and backend role checks enforce data access. When changing permissions, keep [src/router/index.js](src/router/index.js), [src/data/roles.js](src/data/roles.js), [firestore.rules](firestore.rules), and [functions/lib/common.js](functions/lib/common.js) aligned.
 
-For a new development project, bootstrap the first developer (or super admin) by adding `users/{uid}` with `role: "developer"` (or `"super_admin"`) in the Firebase console, using the account's Authentication UID. That account can invite staff on `/admin/account`. Invitations live at `pendingUsers/{lowercase-email}`; the invitee's first sign-in creates their staff document and consumes the invitation in one batch.
+For a new development project, bootstrap the first developer by adding `users/{uid}` with `role: "developer"` in the Firebase console, using the account's Authentication UID. Start from a developer, not a super admin: super admins cannot grant the developer role, so developers could then only be added in the console. That account can invite staff on `/admin/account`. Invitations live at `pendingUsers/{lowercase-email}`; the invitee's first sign-in creates their staff document and consumes the invitation in one batch, and that is the only way a client can create a staff document. Nobody may change their own role or delete their own account, so a developer is only ever removed by another developer who stays, and the last developer can never be removed.
 
 ### Checkout
 

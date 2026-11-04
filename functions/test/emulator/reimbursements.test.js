@@ -28,7 +28,7 @@ const claim = (extra = {}) => ({
   name: '林小明',
   amount: 1200,
   note: '場佈材料',
-  category: '場佈道具',
+  category: '場佈',
   year: 2026,
   invoices: [invoice(JPEG, 'image/jpeg', 'IMG_0001.jpg'), invoice(PDF, 'application/pdf', '收據.pdf')],
   ...extra
@@ -129,7 +129,7 @@ describe('submitReimbursement', () => {
     assert.equal(saved.name, '林小明')
     assert.equal(saved.amount, 1200)
     assert.equal(saved.note, '場佈材料')
-    assert.equal(saved.category, '場佈道具')
+    assert.equal(saved.category, '場佈')
     assert.equal(saved.year, 2026)
     assert.equal(saved.status, 'pending')
     assert.equal(saved.submitterUid, 'admin-uid')

@@ -25,10 +25,10 @@ const registrations = [
   { ticketTypeId: 'second', ticketTypeName: '二售票', price: 500, quantity: 4, paid: false }
 ]
 const claims = [
-  { name: '林小明', amount: 3480, note: '燈條、膠帶', category: '場佈道具', status: 'pending', createdAt: '2026-11-03T10:00:00+08:00' },
-  { name: '林小明', amount: 820, note: '工作人員餐點', category: '餐飲', status: 'approved', createdAt: '2026-11-02T10:00:00+08:00' },
-  { name: '陳大華', amount: 12000, note: '音響訂金', category: '音響燈光', status: 'paid', createdAt: '2026-10-28T10:00:00+08:00' },
-  { name: '王同學', amount: 450, note: '', category: '餐飲', status: 'rejected', createdAt: '2026-10-27T10:00:00+08:00' },
+  { name: '林小明', amount: 3480, note: '燈條、膠帶', category: '場佈', status: 'pending', createdAt: '2026-11-03T10:00:00+08:00' },
+  { name: '林小明', amount: 820, note: '工作人員餐點', category: '餐食', status: 'approved', createdAt: '2026-11-02T10:00:00+08:00' },
+  { name: '陳大華', amount: 12000, note: '音響訂金', category: '廠商', status: 'paid', createdAt: '2026-10-28T10:00:00+08:00' },
+  { name: '王同學', amount: 450, note: '', category: '餐食', status: 'rejected', createdAt: '2026-10-27T10:00:00+08:00' },
   { name: '舊報帳', amount: 300, note: '膠帶', status: 'paid', createdAt: '2026-10-20T10:00:00+08:00' }
 ]
 
@@ -48,9 +48,9 @@ test('the realized statement counts money collected and claims approved, laid ou
     ['  1 0', '二售票', 5000, null, '10 張'],
     [' 4 0 0', '公關票', 0, null, '2 張，不收費'],
     ['2 0 0 0', '舞會支出', null, 13120, ''],
-    [' 1 0 0', '音響燈光', null, 12000, '1 筆'],
+    [' 1 0 0', '廠商', null, 12000, '1 筆'],
     ['  1 0', '音響訂金', null, 12000, '陳大華・已撥款'],
-    [' 2 0 0', '餐飲', null, 820, '1 筆'],
+    [' 2 0 0', '餐食', null, 820, '1 筆'],
     ['  1 0', '工作人員餐點', null, 820, '林小明・已核准'],
     [' 3 0 0', '未分類', null, 300, '1 筆'],
     ['  1 0', '膠帶', null, 300, '舊報帳・已撥款'],
@@ -63,9 +63,9 @@ test('the projected statement counts every order and registration and every clai
   const rows = table(statement)
   assert.deepEqual(rows.find((row) => row[1] === '線上售票'), [' 1 0 0', '線上售票', 5400, null, '7 張'])
   assert.deepEqual(rows.find((row) => row[1] === '學弟賣票'), [' 3 0 0', '學弟賣票', 7000, null, '14 張'])
-  // 場佈道具 comes before 餐飲 (REIMBURSEMENT_CATEGORIES order); no 未填用途 claim is left nameless
+  // 場佈 comes before 餐食 (REIMBURSEMENT_CATEGORIES order); no 未填用途 claim is left nameless
   const expenses = statement.rows.slice(statement.rows.findIndex((row) => row.name === '舞會支出') + 1)
-  assert.deepEqual(expenses.filter((row) => row.kind === 'group').map((row) => row.name), ['音響燈光', '場佈道具', '餐飲', '未分類'])
+  assert.deepEqual(expenses.filter((row) => row.kind === 'group').map((row) => row.name), ['廠商', '場佈', '餐食', '未分類'])
   assert.equal(statement.expense, 16600)
   assert.equal(statement.balance, statement.income - 16600)
 })

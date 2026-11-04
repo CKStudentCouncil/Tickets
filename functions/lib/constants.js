@@ -54,7 +54,7 @@ export const ELIGIBLE_IDENTITIES = {
 export const BUYER_TYPES = { STUDENT: 'student', PUBLIC: 'public' }
 
 // super_admin is shown as 舞會總副召; developer can do everything a
-// super_admin can. Keep in sync with src/stores/auth.js and firestore.rules
+// super_admin can. Keep in sync with src/data/roles.js and firestore.rules
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3, developer: 4 }
 
 // 學弟登記賣票: tickets one registration may take (a seller sold 120 last

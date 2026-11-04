@@ -88,6 +88,7 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
 import { SCHOOL_ACCOUNT_DOMAIN, isEduAccount, isSchoolAccount } from 'src/data/schools'
+import { isStaffRole } from 'src/data/roles'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { safeRedirect } from 'src/utils/redirect'
@@ -96,8 +97,6 @@ const SIGN_IN_OPTIONS = [
   { mode: 'school', title: '使用建中帳號登入', hint: `@${SCHOOL_ACCOUNT_DOMAIN}・可購買本校學生票` },
   { mode: 'any', title: '使用其他 Google 帳號登入', hint: '友校學生、家長、老師與校外人士' }
 ]
-
-const STAFF_ROLES = ['manager', 'admin', 'super_admin', 'developer']
 
 // Google refuses to sign in inside app webviews (disallowed_useragent)
 const IN_APP_BROWSERS = [
@@ -187,7 +186,7 @@ async function linkUserAccount(user) {
   if (!pendingSnap.exists()) return null
 
   const pendingData = pendingSnap.data()
-  if (!STAFF_ROLES.includes(pendingData.role)) return null
+  if (!isStaffRole(pendingData.role)) return null
 
   // Must be one batch: the rules only allow creating the account when the
   // invite is consumed in the same write, so it can never be reused.
@@ -217,14 +216,14 @@ async function afterLogin(user, mode) {
     // only staff accounts are linked; a buyer can carry on regardless
     console.error('Account linking error:', error)
     if (error?.code === 'permission-denied') {
-      toast.show('幹部帳號授權資料無法驗證，請聯繫系統管理員')
+      toast.show('幹部帳號授權資料無法驗證，請聯繫舞會總副召')
     }
   }
 
   // the auth listener may have loaded the profile before it was linked
   await authStore.refresh()
 
-  const isStaff = STAFF_ROLES.includes(role)
+  const isStaff = isStaffRole(role)
 
   if (mode === 'school' && !isSchoolAccount(user.email)) {
     toast.show(`${user.email} 不是 @${SCHOOL_ACCOUNT_DOMAIN} 帳號，無法購買本校學生票`)

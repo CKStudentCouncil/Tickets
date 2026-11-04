@@ -20,7 +20,7 @@ const CLAIM = {
   name: ' 林小明 ',
   amount: 1200,
   note: ' 場佈材料 ',
-  category: '場佈道具',
+  category: '場佈',
   year: 2026,
   invoices: [file(JPEG, 'image/jpeg', 'IMG_0001.jpg')]
 }
@@ -43,7 +43,7 @@ test('a claim keeps its trimmed fields and the decoded invoices', () => {
   assert.equal(claim.note, '場佈材料')
   assert.equal(claim.amount, 1200)
   assert.equal(claim.year, 2026)
-  assert.equal(claim.category, '場佈道具')
+  assert.equal(claim.category, '場佈')
   assert.deepEqual(claim.invoices.map((invoice) => invoice.ext), ['jpg', 'png', 'pdf', 'webp'])
   assert.ok(claim.invoices[0].content.equals(JPEG))
   assert.equal(claim.invoices[0].name, 'a.jpg')
@@ -55,7 +55,7 @@ test('name, amount, note and year are checked', () => {
     { name: '' }, { name: '   ' }, { name: 'x'.repeat(51) }, { name: 3 },
     { amount: 0 }, { amount: -1 }, { amount: 12.5 }, { amount: '1200' }, { amount: 1000001 },
     { note: 'x'.repeat(201) },
-    { category: undefined }, { category: '交通' }, { category: ' 餐飲' },
+    { category: undefined }, { category: '交通' }, { category: ' 餐食' },
     { year: '2026' }, { year: 1999 }
   ]) {
     assert.equal(code(() => sanitizeReimbursementInput({ ...CLAIM, ...fields })), 'invalid-argument', JSON.stringify(fields))
@@ -96,7 +96,7 @@ test('Drive file names sort by date and say whose claim and how much', () => {
   assert.equal(invoiceFileName(claim, claim.invoices[0], 0, '20261103'), '20261103_林_小明_NT$1200_reimbu_1.jpg')
   assert.equal(
     invoiceDescription(claim, 'admin@example.com'),
-    '報帳：林/小明 NT$ 1,200（場佈道具）\n用途：場佈材料\n申請人：admin@example.com\n報帳編號：reimburse-request-0001'
+    '報帳：林/小明 NT$ 1,200（場佈）\n用途：場佈材料\n申請人：admin@example.com\n報帳編號：reimburse-request-0001'
   )
   assert.equal(invoiceDescription({ ...claim, note: '' }, 'a@b.c').includes('用途'), false)
 })

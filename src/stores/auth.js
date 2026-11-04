@@ -6,11 +6,7 @@ import { auth, db } from 'src/boot/firebase'
 import { isEduAccount as isEduEmail, isSchoolAccount as isSchoolEmail } from 'src/data/schools'
 import { isOnSellerList } from 'src/services/sellerService'
 import { isOnOfficerList } from 'src/services/guestService'
-
-// super_admin is shown as 舞會總副召; developer can do everything a
-// super_admin can, and only developers may add or remove developers.
-// Keep in sync with functions/lib/constants.js and firestore.rules
-const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3, developer: 4 }
+import { ROLE_RANK } from 'src/data/roles'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)

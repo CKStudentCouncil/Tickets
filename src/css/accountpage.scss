@@ -287,8 +287,9 @@ textarea:focus-visible {
 .account-page .stats {
   display: grid;
 
+  /* 總使用者 and one card per staff role (src/data/roles.js) */
   grid-template-columns:
-    repeat(4, minmax(0, 1fr));
+    repeat(5, minmax(0, 1fr));
 
   margin-top: 42px;
 
@@ -838,20 +839,27 @@ textarea:focus-visible {
     justify-content: flex-start;
   }
 
+  /* 總使用者 across the top, the four role cards two by two below */
   .account-page .stats {
     grid-template-columns:
       repeat(2, minmax(0, 1fr));
   }
 
-  .account-page .stat-card:nth-child(2) {
+  .account-page .stat-card:first-child {
+    grid-column: 1 / -1;
+
     border-right: 0;
   }
 
-  .account-page .stat-card:nth-child(n + 3) {
+  .account-page .stat-card:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .account-page .stat-card:nth-child(n + 2) {
     border-top: 1px solid var(--account-line-soft);
   }
 
-  .account-page .stat-card:nth-child(3) {
+  .account-page .stat-card:nth-child(even) {
     padding-left: 0;
   }
 
@@ -911,12 +919,11 @@ textarea:focus-visible {
   }
 
   .account-page .stat-card:first-child,
-  .account-page .stat-card:nth-child(3) {
+  .account-page .stat-card:nth-child(even) {
     padding-left: 0;
   }
 
-  .account-page .stat-card:nth-child(2),
-  .account-page .stat-card:last-child {
+  .account-page .stat-card:nth-child(odd) {
     padding-right: 0;
   }
 
