@@ -22,88 +22,6 @@
       <template v-else>
 
         <!-- =========================
-             CLUBS
-             ========================= -->
-        <section
-          v-if="clubs.length > 0"
-          class="lineup-section"
-        >
-          <div class="section-heading">
-            <div>
-              <p class="section-eyebrow">CLUBS</p>
-              <h2>社團</h2>
-            </div>
-
-            <span class="section-count">
-              {{ String(clubs.length).padStart(2, '0') }}
-            </span>
-          </div>
-
-          <div class="lineup-list">
-            <article
-              v-for="item in clubs"
-              :key="item.id"
-              class="lineup-item"
-            >
-              <div
-                v-if="item.imageUrl"
-                class="item-image"
-              >
-                <img
-                  :src="item.imageUrl"
-                  :alt="item.title || item.name"
-                  :style="cropStyle(item.imageCrop)"
-                  loading="lazy"
-                >
-              </div>
-
-              <div class="item-body">
-
-                <div class="item-meta">
-                  <span>CLUB</span>
-
-                  <time
-                    v-if="item.publishAt"
-                    :datetime="item.publishAt"
-                  >
-                    {{ formatDate(item.publishAt) }}
-                  </time>
-                </div>
-
-                <h3>
-                  {{ item.title || item.name }}
-                </h3>
-
-                <p
-                  v-if="
-                    item.title &&
-                    item.name &&
-                    item.title !== item.name
-                  "
-                  class="item-name"
-                >
-                  {{ item.name }}
-                </p>
-
-                <div
-                  v-if="getParagraphs(item.content).length > 0"
-                  class="item-content"
-                >
-                  <p
-                    v-for="(paragraph, index) in getParagraphs(item.content)"
-                    :key="index"
-                  >
-                    {{ paragraph }}
-                  </p>
-                </div>
-
-              </div>
-            </article>
-          </div>
-        </section>
-
-
-        <!-- =========================
              ARTISTS
              ========================= -->
         <section
@@ -183,7 +101,87 @@
             </article>
           </div>
         </section>
+        
+        <!-- =========================
+             CLUBS
+             ========================= -->
+        <section
+          v-if="clubs.length > 0"
+          class="lineup-section"
+        >
+          <div class="section-heading">
+            <div>
+              <p class="section-eyebrow">CLUBS</p>
+              <h2>社團</h2>
+            </div>
 
+            <span class="section-count">
+              {{ String(clubs.length).padStart(2, '0') }}
+            </span>
+          </div>
+
+          <div class="lineup-list">
+            <article
+              v-for="item in clubs"
+              :key="item.id"
+              class="lineup-item"
+            >
+              <div
+                v-if="item.imageUrl"
+                class="item-image"
+              >
+                <img
+                  :src="item.imageUrl"
+                  :alt="item.title || item.name"
+                  :style="cropStyle(item.imageCrop)"
+                  loading="lazy"
+                >
+              </div>
+
+              <div class="item-body">
+
+                <div class="item-meta">
+                  <span>CLUB</span>
+
+                  <time
+                    v-if="item.publishAt"
+                    :datetime="item.publishAt"
+                  >
+                    {{ formatDate(item.publishAt) }}
+                  </time>
+                </div>
+
+                <h3>
+                  {{ item.title || item.name }}
+                </h3>
+
+                <p
+                  v-if="
+                    item.title &&
+                    item.name &&
+                    item.title !== item.name
+                  "
+                  class="item-name"
+                >
+                  {{ item.name }}
+                </p>
+
+                <div
+                  v-if="getParagraphs(item.content).length > 0"
+                  class="item-content"
+                >
+                  <p
+                    v-for="(paragraph, index) in getParagraphs(item.content)"
+                    :key="index"
+                  >
+                    {{ paragraph }}
+                  </p>
+                </div>
+
+              </div>
+            </article>
+          </div>
+        </section>
 
         <!-- Empty -->
         <div
