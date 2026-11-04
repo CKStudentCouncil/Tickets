@@ -1,0 +1,19 @@
+{
+  "name": "cksc-gate-worker",
+  "description": "Stock gate in front of createOrder: a Cloudflare Worker that takes tickets from the counts in Redis and signs a pass (HS256 JWT) for the function",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.js",
+    "bench": "node bench/local.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

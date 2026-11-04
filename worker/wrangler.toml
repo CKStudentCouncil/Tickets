@@ -1,0 +1,21 @@
+# Stock gate Worker in front of createOrder (see README.md)
+name = "cksc-gate"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+# Every request makes one Redis call, so that round trip decides the latency:
+# Smart Placement may run the Worker next to Upstash (Tokyo) rather than next
+# to each buyer once it has seen enough traffic
+placement = { mode = "smart" }
+
+[vars]
+FIREBASE_PROJECT_ID = "cksc-ticket"
+ALLOWED_ORIGINS = "https://tickets.cksc.tw"
+# How long an isolate turns a type away without asking Redis after Redis did
+SOLD_OUT_CACHE_MS = "1000"
+
+# Secrets (wrangler secret put <NAME>):
+#   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN  the same database as createOrder
+#   GATE_PASS_SECRET  the same value as the functions' GATE_PASS_SECRET secret
+
+[observability]
+enabled = true

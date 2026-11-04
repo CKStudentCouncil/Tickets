@@ -8,6 +8,12 @@ export const SITE_URL = 'https://tickets.cksc.tw'
 // functions/README.md).
 export const TURNSTILE_SITE_KEY = '0x4AAAAAAFWXF__M6iNt9Yf9'
 
+// Stock gate Worker (/worker) the storefront asks before each checkout, e.g.
+// 'https://cksc-gate.<account>.workers.dev'. Empty = createOrder is called
+// directly. Fill it in together with GATE_PASS=true in functions/.env (see
+// worker/README.md): createOrder then refuses checkouts without its pass.
+export const GATE_WORKER_URL = ''
+
 // Before the shop opens visitors (except staff) are redirected to /comingsoon
 // and createOrder refuses orders. Super admins set the opening time on the
 // management page (settings/shop); this is only the default used until they

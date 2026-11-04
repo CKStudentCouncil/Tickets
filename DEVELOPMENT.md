@@ -194,6 +194,7 @@ The backend uses the Firebase Functions v1 API, Node.js 22, and region `asia-eas
 | `ENFORCE_TURNSTILE` | `false` | Require a Cloudflare Turnstile token for `createOrder`, `submitSurvey` and `submitPartySurvey` |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Site hostnames whose Turnstile tokens are accepted; never `localhost` |
 | `STOCK_GATE` | `false` | Let `createOrder` turn buyers away by a ticket count in Redis (Upstash) before reading the stock; see `functions/README.md` |
+| `GATE_PASS` | `false` | Experimental: require a pass from the stock gate Worker (`/worker`) on `createOrder` instead of calling Redis; see `functions/README.md` |
 
 These are code defaults; the project's deployed values may differ. Changes require redeploying functions.
 
@@ -210,6 +211,8 @@ Run the checks relevant to your change from the repository root:
 | `yarn test` | Browser checkout/campaign recovery and backend units, including validation, mailer, notifications and shared-value consistency | Root and functions dependencies; no emulator |
 | `yarn test:rules` | Firestore permissions, ownership, role boundaries, and survey validation | Root dependencies, Firebase CLI, Java |
 | `yarn --cwd functions test:emulator` | Checkout/recovery, concurrent stock limits, the Redis stock gate, atomic staff actions and shared mail queue | Functions dependencies, Firebase CLI, Java, redis-server |
+| `yarn --cwd worker test` | The stock gate Worker: ID token checks, Redis admit, sold-out memory, CORS | redis-server (no install needed to test; `yarn --cwd worker install` for `wrangler`) |
+| `yarn --cwd worker bench` | Worker cost per checkout and a local sale opening (see `worker/README.md`) | redis-server |
 | `yarn --cwd functions test:load` | Concurrent checkout load scenarios; each gets a fresh emulator | Functions dependencies, Firebase CLI, Java; run when changing stock/concurrency behavior |
 | `yarn build` | Production frontend compilation into `dist/spa` | Root dependencies |
 

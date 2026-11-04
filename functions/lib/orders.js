@@ -26,10 +26,13 @@ import {
   planShards,
   sanitizeOrderInput
 } from './orderValidation.js'
-import { CREATE_ORDER_MIN_INSTANCES, ORDER_LIMIT_PER_ACCOUNT, STOCK_GATE } from './params.js'
+import { CREATE_ORDER_MIN_INSTANCES, GATE_PASS, ORDER_LIMIT_PER_ACCOUNT } from './params.js'
 import { CHECKOUT_ACTION, TURNSTILE_SECRET, checkTurnstile } from './turnstile.js'
 import { enqueueOrderConfirmation, enqueueManualOrderResend } from './mailQueue.js'
-import { STOCK_GATE_SECRETS, admitToStock, giveBackToStock, resetStockGate, seedStockGate } from './stockGate.js'
+import {
+  STOCK_GATE_SECRETS, admitToStock, giveBackToStock, resetStockGate, seedStockGate, settleHold, stockGateOn
+} from './stockGate.js'
+import { GatePassError, sameQuantities, verifyGatePass } from './gatePass.js'
 import { gateOutcome, withCheckoutLog } from './checkoutLog.js'
 
 const ORDER_ID_ATTEMPTS = 3
@@ -152,6 +155,35 @@ const soldOutError = (ticketType) =>
   Object.assign(new HttpsError('resource-exhausted', `${ticketType.name}剩餘票量不足`), { soldOut: true })
 // the stock gate counted too few left; it knows no ticket type names
 const gateSoldOutError = () => Object.assign(new HttpsError('resource-exhausted', '所選票種剩餘票量不足'), { soldOut: true })
+
+// Shared with the stock gate Worker (/worker), which signs the passes
+export const GATE_PASS_SECRET = 'GATE_PASS_SECRET'
+
+// With GATE_PASS on, the Worker has already taken this checkout's tickets
+// from the counts in Redis; its pass stands in for admitToStock's answer.
+// Without a pass the browser was told 售完 by the Worker (it calls
+// createOrder without one only to recover a checkout that may have
+// committed, which the requestId lookup before this answers), so it is
+// turned away as sold out. A pass is only good for its own account,
+// checkout and quantities.
+export async function admitByPass(token, { account, requestId, quantities }) {
+  if (!token) throw gateSoldOutError()
+  let claims
+  try {
+    claims = await verifyGatePass(token, process.env[GATE_PASS_SECRET])
+  } catch (error) {
+    if (!(error instanceof GatePassError)) throw error
+    console.warn('[createOrder] gate pass refused:', error.message)
+    throw new HttpsError('permission-denied', '購票憑證無效或已過期，請重新送出')
+  }
+  if (claims.sub !== account.uid || !requestId || claims.rid !== requestId ||
+      !sameQuantities(claims.q, Object.fromEntries(quantities))) {
+    throw new HttpsError('permission-denied', '購票憑證與這筆訂單不符，請重新送出')
+  }
+  if (!claims.held) return null
+  const missing = claims.miss && typeof claims.miss === 'object' ? claims.miss : {}
+  return { admitted: true, holdId: claims.rid, missing: Object.keys(missing), generations: missing }
+}
 
 // Records types ({ id, stock }) as sold out at their stock. Best effort: if it
 // fails, the storefront keeps saying 販售中 and createOrder still turns buyers away.
@@ -408,7 +440,7 @@ export const createOrder = onCall(
     cpu: 1,
     timeoutSeconds: 60,
     minInstances: CREATE_ORDER_MIN_INSTANCES,
-    secrets: [TURNSTILE_SECRET, ...STOCK_GATE_SECRETS]
+    secrets: [TURNSTILE_SECRET, GATE_PASS_SECRET, ...STOCK_GATE_SECRETS]
   },
   withCheckoutLog(async (context, log) => {
     const { data } = context
@@ -454,17 +486,19 @@ export const createOrder = onCall(
     let admission = null
 
     try {
-      // the stock gate, then the stock look, run alongside the checks before
-      // them; their errors come first. Only checkouts that pass Turnstile
+      // the stock gate (or the Worker's pass for it), then the stock look,
+      // run alongside the checks before them; their errors come first. Only checkouts that pass Turnstile
       // count against the rate limit. Turned away by the gate, a checkout
       // reads no stock at all.
       const [checks, look] = await Promise.allSettled([
         log.time('checksMs', () =>
           Promise.all([assertTurnstile(data, context, account, requestId), assertShopOpen(account)])
             .then(() => enforceAccountLimit(account))),
-        log.time('gateMs', () => admitToStock(requestId, Object.fromEntries(quantities))).then((answer) => {
+        log.time('gateMs', () => GATE_PASS.value()
+          ? admitByPass(data?.gatePass, { account, requestId, quantities })
+          : admitToStock(requestId, Object.fromEntries(quantities))).then((answer) => {
           admission = answer
-          log.set({ gate: gateOutcome(answer, STOCK_GATE.value()) })
+          log.set({ gate: gateOutcome(answer, stockGateOn()), ...(GATE_PASS.value() ? { gatePass: true } : {}) })
           if (answer && !answer.admitted) throw gateSoldOutError()
           answer?.missing.forEach((id) => seed.set(id, answer.generations?.[id]))
           return choose()
@@ -590,7 +624,12 @@ export const createOrder = onCall(
             return { status: 201, id: orderRef.id }
           }, { maxAttempts }))
 
-          if (result.status === 201) await markSoldOut(stockLook?.emptied || [])
+          if (result.status === 201) {
+            await Promise.all([
+              markSoldOut(stockLook?.emptied || []),
+              GATE_PASS.value() && admission?.admitted ? settleHold(admission.holdId) : null
+            ])
+          }
           return result
         } catch (error) {
           if (error instanceof OrderIdTaken && idAttempt++ < ORDER_ID_ATTEMPTS) continue

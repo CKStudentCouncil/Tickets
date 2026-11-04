@@ -31,3 +31,11 @@ export const STOCK_GATE = defineBoolean('STOCK_GATE', { default: false })
 // accepts. Never add localhost here: the production functions would then take
 // tokens solved on any developer's machine.
 export const TURNSTILE_HOSTNAMES = defineString('TURNSTILE_HOSTNAMES', { default: 'tickets.cksc.tw' })
+
+// Require a pass from the stock gate Worker (/worker) on createOrder: the
+// Worker takes the tickets from the counts in Redis and signs a short-lived
+// pass (HS256 JWT, lib/gatePass.js); createOrder checks the pass instead of
+// calling Redis itself. Needs the Worker deployed, GATE_WORKER_URL filled in
+// src/config/app.js, and the same GATE_PASS_SECRET secret in the Worker and
+// here; otherwise every order is rejected. Off, createOrder works as before.
+export const GATE_PASS = defineBoolean('GATE_PASS', { default: false })

@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { auth, db, functions } from 'src/boot/firebase'
+import { GATE_WORKER_URL } from 'src/config/app'
 import { createCheckoutRecovery, submitRecoveredCheckout } from 'src/utils/checkoutRecovery'
 import { parseDate } from 'src/utils/datetime'
 import { scanOrderSearchPage } from 'src/utils/orderSearch'
@@ -57,6 +58,44 @@ export function getPendingCheckout(uid = auth.currentUser?.uid) {
   return uid ? checkoutRecovery().get(uid) : null
 }
 
+const checkoutError = (code, message) => Object.assign(new Error(message), { code })
+
+// The tickets of an order payload as createOrder counts them ({ id: n })
+export function orderQuantities(payload) {
+  const quantities = {}
+  for (const item of Array.isArray(payload?.items) ? payload.items : []) {
+    const id = String(item?.ticketTypeId || item?.id || '')
+    quantities[id] = (quantities[id] || 0) + Number(item?.quantity)
+  }
+  return quantities
+}
+
+// Asks the stock gate Worker (GATE_WORKER_URL) to take this checkout's
+// tickets. Returns its pass for createOrder, or null when it says 售完.
+// Errors use the codes of createOrder's own, so the retries and the
+// checkout recovery treat them alike: a Worker that cannot be reached is
+// "try again" (same requestId; its hold lets the retry through again).
+async function fetchGatePass(payload, requestId) {
+  const idToken = await auth.currentUser.getIdToken()
+  let response
+  try {
+    response = await fetch(`${GATE_WORKER_URL.replace(/\/$/, '')}/pass`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, quantities: orderQuantities(payload) })
+    })
+  } catch {
+    throw checkoutError('functions/unavailable', '目前購票人數眾多，請稍後再試一次')
+  }
+  const body = await response.json().catch(() => ({}))
+  if (response.ok && body.pass) return body.pass
+  if (response.status === 409) return null
+  if (response.status === 401) throw checkoutError('functions/unauthenticated', '登入已過期，請重新登入後再購票')
+  if (response.status === 403) throw checkoutError('functions/failed-precondition', body.message || '此帳號無法購票')
+  if (response.status === 400) throw checkoutError('functions/invalid-argument', body.message || '訂單資料無效')
+  throw checkoutError('functions/unavailable', '目前購票人數眾多，請稍後再試一次')
+}
+
 // The server takes the email and uid from auth. Persist before sending so a
 // lost response can be retried after another click, navigation or reload.
 // The Turnstile token is not persisted: it is single-use, and the server
@@ -68,7 +107,20 @@ export function submitOrder(orderPayload, { uid = auth.currentUser?.uid, turnsti
       if (auth.currentUser?.uid !== uid) {
         throw Object.assign(new Error('登入帳號已變更，請改回原訂購帳號確認訂單。'), { code: 'checkout/account-changed' })
       }
-      const { data } = await createOrderCallable({ orderPayload: payload, requestId, turnstileToken })
+      let gatePass
+      if (GATE_WORKER_URL) {
+        gatePass = await fetchGatePass(payload, requestId)
+        // 售完 at the Worker ends a fresh checkout here, without calling
+        // createOrder. One that may already have committed (an earlier
+        // attempt's answer was lost) still asks createOrder, which finds it
+        // by its requestId before it looks for a pass.
+        if (!gatePass && !getPendingCheckout(uid)?.uncertain) {
+          throw checkoutError('functions/resource-exhausted', '所選票種剩餘票量不足')
+        }
+      }
+      const { data } = await createOrderCallable({
+        orderPayload: payload, requestId, turnstileToken, ...(gatePass ? { gatePass } : {})
+      })
       return data
     },
     wait: (attempt) => wait(500 * attempt + Math.random() * 1000)

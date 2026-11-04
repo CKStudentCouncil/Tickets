@@ -18,6 +18,9 @@ functions/
 │   ├── turnstile.js             # Cloudflare Turnstile siteverify check
 │   ├── orders.js                # checkout, stock release and confirmation enqueue
 │   ├── checkoutLog.js           # one structured log line per createOrder call (monitoring/)
+│   ├── stockGate.js             # the stock gate's counts in Redis (Upstash)
+│   ├── gateScripts.js           # its keys and admit Lua, shared with /worker
+│   ├── gatePass.js              # HS256 pass of the stock gate Worker, shared with /worker
 │   ├── orderActions.js          # atomic collection/payment updates and audit history
 │   ├── mailQueue.js             # message rendering and scheduled shared worker
 │   ├── mailQueueCore.js         # durable claims, rate reservation and outcomes
@@ -102,6 +105,17 @@ Setting it up: create a Redis database on Upstash in the region closest to `asia
 
 Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open. Until every instance runs the new code, old instances count only the legacy counter and new ones only the shards, so neither sees the other's sales. After deploying, save the ticket types once on the management page so `planStockShards` plans the caps before the sale opens. Do not roll back to a version without the shards once orders have `stockShards`: its `releaseOrderStock` would refund them to the legacy counter.
 
+### Worker pass (experimental, `GATE_PASS`)
+
+With `GATE_PASS=true` the stock gate moves in front of Cloud Functions, to the Cloudflare Worker in [/worker](../worker/README.md). The storefront asks the Worker first, with the buyer's Firebase ID token and what they want to buy. The Worker runs the same counts and admit script (`lib/gateScripts.js`) in one Upstash call and either answers 售完 itself or signs a pass, an HS256 JWT ([lib/gatePass.js](lib/gatePass.js)) bound to the account, the `requestId` and the quantities. `createOrder` checks the pass where it would otherwise call Redis, so buyers turned away never reach Cloud Functions at all.
+
+- A pass lives 120 seconds and serves one checkout: `createOrder` resolves a `requestId` once, and a retry asks the Worker again (its hold lets the same `requestId` through without taking more).
+- Without a pass `createOrder` answers 售完 (the storefront only calls it without one to recover a checkout that may have committed, which the `requestId` lookup answers first). A pass for another account, checkout or quantities, or signed with another secret, is refused.
+- The Worker keeps one hold per account: a new checkout of the same account first gives back its last one, so a script cannot drain the counts with checkouts it never finishes. A sold checkout's hold is emptied (`settleHold`) so that this does not put sold tickets back.
+- Everything else is as with the stock gate above: `createOrder` still sets missing counts from the shards (the pass says which), gives tickets back when a checkout fails for another reason than 售完, and the shards still decide every sale. When Redis gives the Worker no answer, the pass says so and the checkout reads the shards as without the gate.
+
+Turning it on: deploy the Worker (see its README) with the same Upstash database, set the same random value (at least 32 characters) as `GATE_PASS_SECRET` in the Worker and in Secret Manager below, set `GATE_PASS=true` here and deploy the functions, then fill in `GATE_WORKER_URL` in `src/config/app.js` and deploy the site. Turning it off is the reverse: empty `GATE_WORKER_URL` first, then `GATE_PASS=false`.
+
 ## Settings (`functions/.env`)
 
 | Name | Default | Meaning |
@@ -112,6 +126,7 @@ Deploying the shards (PARTY-28) or rolling them back: do it when no sale is open
 | `ENFORCE_TURNSTILE` | `false` | Reject `createOrder`, `submitSurvey` and `submitPartySurvey` calls without a Turnstile token that Cloudflare accepts. Turn on only after `TURNSTILE_SITE_KEY` is set and the `TURNSTILE_SECRET` secret exists (see the root README) |
 | `TURNSTILE_HOSTNAMES` | `tickets.cksc.tw` | Comma-separated site hostnames whose tokens are accepted. Never add `localhost` |
 | `STOCK_GATE` | `false` | Let `createOrder` turn buyers away by a ticket count in Redis before reading the stock (see Stock gate above). Needs the Upstash secrets |
+| `GATE_PASS` | `false` | Require the stock gate Worker's pass on `createOrder` instead of calling Redis (see Worker pass above). Needs the Worker, `GATE_PASS_SECRET` and `GATE_WORKER_URL` in `src/config/app.js`; otherwise every order is turned away |
 
 Change a value and redeploy the functions.
 
@@ -138,6 +153,12 @@ firebase functions:secrets:set TURNSTILE_SECRET
 ```bash
 firebase functions:secrets:set UPSTASH_REDIS_REST_URL
 firebase functions:secrets:set UPSTASH_REDIS_REST_TOKEN
+```
+
+`createOrder` also needs the secret it shares with the stock gate Worker, even while `GATE_PASS` is off (any value of 32 characters or more then):
+
+```bash
+firebase functions:secrets:set GATE_PASS_SECRET
 ```
 
 Turnstile tokens are single-use, but the site retries a busy checkout with the same token and `requestId` (see checkout recovery below). A passed check is therefore remembered in `turnstilePasses/{requestId}` for 10 minutes, so the retry is let through while the same token on another checkout is not.

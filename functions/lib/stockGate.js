@@ -27,19 +27,15 @@
 // back or the ticket types are saved: releaseOrderStock, releaseSellerStock
 // and planStockShards call resetStockGate.
 import { randomUUID } from 'node:crypto'
-import { STOCK_GATE } from './params.js'
+import { GATE_PASS, STOCK_GATE } from './params.js'
+import { ADMIT, GIVE_BACK, HOLD_TTL_S, gateKey, genKey, holdKey } from './gateScripts.js'
 
 export const UPSTASH_URL_SECRET = 'UPSTASH_REDIS_REST_URL'
 export const UPSTASH_TOKEN_SECRET = 'UPSTASH_REDIS_REST_TOKEN'
 export const STOCK_GATE_SECRETS = [UPSTASH_URL_SECRET, UPSTASH_TOKEN_SECRET]
 
-const PREFIX = 'stockGate:'
-export const gateKey = (ticketTypeId) => `${PREFIX}left:${ticketTypeId}`
-export const genKey = (ticketTypeId) => `${PREFIX}gen:${ticketTypeId}`
-export const holdKey = (holdId) => `${PREFIX}hold:${holdId}`
+export { accountKey, gateKey, genKey, holdKey } from './gateScripts.js'
 
-// A checkout's retries (same requestId) within this long are let through again
-const HOLD_TTL_S = 15 * 60
 // A count lives this long and is then set again from the shards, so whatever
 // it drifted by (tickets of a checkout that ended without giving them back, a
 // reset that did not reach Redis) lasts at most this long
@@ -57,47 +53,6 @@ const TRIGGER_TIMEOUT_MS = 5000
 // (a retry that never came); it is also how many buyers still reach
 // Firestore after a type really sold out, until those numbers are used up.
 export const gateSlack = (left) => Math.max(10, Math.ceil(left * 0.05))
-
-// KEYS = hold, then one count per type, then one generation per type; ARGV =
-// hold seconds, then the quantities. Returns { 1, position, generation, ... }
-// (let through; the types with no count, 1-based, each with its generation)
-// or { 0, position } (not enough left).
-const ADMIT = `
-local n = (#KEYS - 1) / 2
-if redis.call('EXISTS', KEYS[1]) == 1 then return {1} end
-local missing = {}
-for i = 2, n + 1 do
-  local left = redis.call('GET', KEYS[i])
-  if not left then
-    table.insert(missing, i - 1)
-    table.insert(missing, tonumber(redis.call('GET', KEYS[i + n]) or '0'))
-  elseif tonumber(left) < tonumber(ARGV[i]) then
-    return {0, i - 1}
-  end
-end
-local taken = {}
-for i = 2, n + 1 do
-  if redis.call('EXISTS', KEYS[i]) == 1 then
-    redis.call('DECRBY', KEYS[i], ARGV[i])
-    table.insert(taken, KEYS[i] .. '=' .. ARGV[i])
-  end
-end
-redis.call('SET', KEYS[1], table.concat(taken, ','), 'EX', ARGV[1])
-local result = {1}
-for _, value in ipairs(missing) do table.insert(result, value) end
-return result
-`
-
-// KEYS[1] = hold. Gives its tickets back to the counts still there.
-const GIVE_BACK = `
-local held = redis.call('GET', KEYS[1])
-if not held then return 0 end
-redis.call('DEL', KEYS[1])
-for key, n in string.gmatch(held, '([^=,]+)=(%d+)') do
-  if redis.call('EXISTS', key) == 1 then redis.call('INCRBY', key, n) end
-end
-return 1
-`
 
 // KEYS = count, generation; ARGV = count, seconds, generation seen ('' = do
 // not check). Sets the count unless one is there or the type was reset since.
@@ -119,8 +74,12 @@ end
 return n
 `
 
+// On with STOCK_GATE, and with GATE_PASS: then the Worker takes the tickets,
+// and createOrder still sets the counts it lacks and gives tickets back here.
+export const stockGateOn = () => STOCK_GATE.value() || GATE_PASS.value()
+
 function settings({ evenWhenOff = false } = {}) {
-  if (!evenWhenOff && !STOCK_GATE.value()) return null
+  if (!evenWhenOff && !stockGateOn()) return null
   const url = process.env[UPSTASH_URL_SECRET]
   const token = process.env[UPSTASH_TOKEN_SECRET]
   // the deploy needs the secrets even while the gate is off; placeholders
@@ -191,6 +150,15 @@ export async function admitToStock(holdId, quantities) {
 // 售完 gives its tickets back. Best effort.
 export async function giveBackToStock(holdId) {
   if (holdId) await command(['EVAL', GIVE_BACK, 1, holdKey(holdId)], 'give back')
+}
+
+// A checkout the Worker let through sold its tickets: its hold keeps letting
+// retries through but no longer has anything to give back, so that the
+// account's next checkout (ADMIT_ONE_PER_ACCOUNT gives back the last hold)
+// does not put sold tickets back in the counts. Best effort: if it fails,
+// the counts are that much too high until they are set again.
+export async function settleHold(holdId) {
+  if (holdId) await command(['SET', holdKey(holdId), '', 'XX', 'KEEPTTL'], 'settle')
 }
 
 // Sets the counts the gate did not have, from what the shards show is left
