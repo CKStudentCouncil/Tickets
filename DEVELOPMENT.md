@@ -100,7 +100,8 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 | Signed-in buyer | Purchase with a verified account email and read their own orders |
 | `manager` | Open individual orders, mark delivery/check-in, access staff survey views, and prepare/send notifications |
 | `admin` | Manager capabilities plus list all orders, change payment status, delete orders, and resend confirmation emails |
-| `super_admin` | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup; read 銷售報表 (`/super_admin/analytics`), import earlier years and purge every order; keep the 公關票 officers and their quotas and send 公關票 outside any quota (`/super_admin/guests`) |
+| `super_admin` (舞會總副召) | Admin capabilities plus manage ticket types, shop opening, staff accounts, stories, and lineup; read 銷售報表 (`/super_admin/analytics`), import earlier years and purge every order; keep the 公關票 officers and their quotas and send 公關票 outside any quota (`/super_admin/guests`). Cannot grant the `developer` role, or change or delete a developer's account or invite |
+| `developer` (開發者) | Everything `super_admin` can do, plus invite other developers and change or delete developers' accounts and invites |
 | Seller (on `sellers/{email}`) | Not a staff role: register tickets to sell on `/sell` (學弟登記賣票). Super admins keep the list on `/admin/sellers`; admins see registrations there and record pickup and payment |
 | `admin` and above, on the street | 路宣登記 on `/admin/street`: register tickets sold for cash and handed over as paper tickets (no buyer details, no email). Super admins open it, choose its ticket type and see every sale and each admin's cash on `/super_admin/street` |
 | `admin` and above, 報帳 | Claim back what they spent on `/admin/reimburse` (name, whole NT$ amount and invoice photos or PDFs, optional note), see their own claims and withdraw pending ones. Super admins approve, pay out, reject or delete any claim and see the party's profit on `/super_admin/reimbursements` |
@@ -109,7 +110,7 @@ Buyers and staff sign in with Google on `/login`. [src/stores/auth.js](src/store
 
 Route guards control navigation. Firestore rules and backend role checks enforce data access. When changing permissions, keep [src/router/index.js](src/router/index.js), `src/stores/auth.js`, [firestore.rules](firestore.rules), and [functions/lib/common.js](functions/lib/common.js) aligned.
 
-For a new development project, bootstrap the first super admin by adding `users/{uid}` with `role: "super_admin"` in the Firebase console, using the account's Authentication UID. That account can invite staff on `/admin/account`. Invitations live at `pendingUsers/{lowercase-email}`; the invitee's first sign-in creates their staff document and consumes the invitation in one batch.
+For a new development project, bootstrap the first developer (or super admin) by adding `users/{uid}` with `role: "developer"` (or `"super_admin"`) in the Firebase console, using the account's Authentication UID. That account can invite staff on `/admin/account`. Invitations live at `pendingUsers/{lowercase-email}`; the invitee's first sign-in creates their staff document and consumes the invitation in one batch.
 
 ### Checkout
 

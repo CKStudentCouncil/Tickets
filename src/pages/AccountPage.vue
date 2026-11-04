@@ -53,7 +53,7 @@
 
     <div class="stats">
       <div class="stat-card"><strong class="num">{{ users.length }}</strong><span>總使用者</span></div>
-      <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'super_admin').length }}</strong><span>系統管理員</span></div>
+      <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'super_admin').length }}</strong><span>舞會總副召</span></div>
       <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'admin').length }}</strong><span>建班幹部</span></div>
       <div class="stat-card"><strong class="num">{{ users.filter((u) => u.role === 'manager').length }}</strong><span>友校幹部</span></div>
     </div>
@@ -66,7 +66,8 @@
       >
       <select v-model="filterRole">
         <option value="all">全部角色</option>
-        <option value="super_admin">系統管理員</option>
+        <option value="developer">開發者</option>
+        <option value="super_admin">舞會總副召</option>
         <option value="admin">建班幹部</option>
         <option value="manager">友校幹部</option>
       </select>
@@ -128,17 +129,24 @@
         <select
           id="role-select"
           v-model="pendingRole"
-          :disabled="selectedUser.id === auth.user?.uid"
+          :disabled="selectedUser.id === auth.user?.uid || !canManage(selectedUser)"
         >
-          <option value="manager">友校幹部</option>
-          <option value="admin">建班幹部</option>
-          <option value="super_admin">系統管理員</option>
+          <option
+            v-for="option in roleOptionsFor(selectedUser)"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
         </select>
         <p v-if="selectedUser.id === auth.user?.uid" class="hint">
           無法變更自己的角色
         </p>
-        <p v-else-if="isLastSuperAdmin(selectedUser) && pendingRole !== 'super_admin'" class="hint warn">
-          這是最後一位系統管理員，無法降級
+        <p v-else-if="!canManage(selectedUser)" class="hint warn">
+          只有開發者可以變更或刪除開發者
+        </p>
+        <p v-else-if="isLastOfRole(selectedUser) && pendingRole !== selectedUser.role" class="hint warn">
+          這是最後一位{{ roleLabel(selectedUser.role) }}，無法降級
         </p>
 
         <button
@@ -153,7 +161,7 @@
         <button
           type="button"
           class="btn danger"
-          :disabled="selectedUser.id === auth.user?.uid || selectedUser.role === 'super_admin'"
+          :disabled="selectedUser.id === auth.user?.uid || PROTECTED_ROLES.includes(selectedUser.role)"
           @click="deleteUser(selectedUser.id)"
         >
           刪除使用者
@@ -200,9 +208,13 @@
 
         <label class="field-label" for="new-role">角色</label>
         <select id="new-role" v-model="newUser.role">
-          <option value="manager">友校幹部</option>
-          <option value="admin">建班幹部</option>
-          <option value="super_admin">系統管理員</option>
+          <option
+            v-for="option in assignableRoles"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
         </select>
 
         <p v-if="createError" class="hint warn">{{ createError }}</p>
@@ -235,7 +247,7 @@
       <div class="modal">
         <h2>刪除所有使用者</h2>
         <p class="hint warn">
-          此操作將刪除所有幹部帳號與待啟用邀請（系統管理員會保留），且無法復原。
+          此操作將刪除所有幹部帳號與待啟用邀請（舞會總副召與開發者會保留），且無法復原。
           請注意：這只會刪除資料庫中的使用者資料，不會刪除 Firebase
           Authentication 中已綁定 Google 登入的帳號（需要後端 Admin SDK / Cloud Function
           才能一併刪除登入帳號，避免產生無法登入卻仍存在的孤兒帳號）。
@@ -319,28 +331,54 @@ const filteredUsers = computed(() =>
   })
 )
 
+// Lowest rank first. Only developers may grant the developer role, or
+// change or delete a developer; firestore.rules enforce the same.
+const ROLES = [
+  { value: 'manager', label: '友校幹部' },
+  { value: 'admin', label: '建班幹部' },
+  { value: 'super_admin', label: '舞會總副召' },
+  { value: 'developer', label: '開發者' }
+]
+
+// Cannot be deleted directly (demote them first), and the last active
+// one of each cannot be demoted
+const PROTECTED_ROLES = ['super_admin', 'developer']
+
+const assignableRoles = computed(() =>
+  ROLES.filter((r) => r.value !== 'developer' || auth.isDeveloper)
+)
+
+// A developer's own role must stay listed so the disabled select still shows it
+function roleOptionsFor(user) {
+  return ROLES.filter((r) => r.value !== 'developer' || auth.isDeveloper || user.role === 'developer')
+}
+
+function canManage(user) {
+  return user.role !== 'developer' || auth.isDeveloper
+}
+
 const canApplyRole = computed(() => {
   if (!selectedUser.value) return false
   if (selectedUser.value.id === auth.user?.uid) return false
+  if (!canManage(selectedUser.value)) return false
+  if (!assignableRoles.value.some((r) => r.value === pendingRole.value)) return false
   if (pendingRole.value === selectedUser.value.role) return false
-  if (isLastSuperAdmin(selectedUser.value) && pendingRole.value !== 'super_admin') return false
+  if (isLastOfRole(selectedUser.value)) return false
   return true
 })
 
 function roleLabel(role) {
-  if (role === 'super_admin') return '系統管理員'
-  if (role === 'admin') return '建班幹部'
-  if (role === 'manager') return '友校幹部'
-  return role || '未設定'
+  return ROLES.find((r) => r.value === role)?.label || role || '未設定'
 }
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim())
 }
 
-function isLastSuperAdmin(user) {
-  if (user.role !== 'super_admin') return false
-  return users.value.filter((u) => u.role === 'super_admin').length === 1
+// the only active 舞會總副召 or 開發者 left
+function isLastOfRole(user) {
+  if (user.pending || !PROTECTED_ROLES.includes(user.role)) return false
+  return users.value.filter((u) => !u.pending && u.role === user.role).length === 1
 }
 
 onMounted(async () => {
@@ -477,13 +515,14 @@ function closeDeleteAllModal() {
 // Firestore batches accept at most 500 writes
 const BATCH_SIZE = 450
 
-// Removes every manager / admin account and invite. Super admins (including
-// yourself) are kept so the system can never be left without one.
+// Removes every manager / admin account and invite. Super admins and
+// developers (including yourself) are kept so the system can never be left
+// without one.
 async function deleteAllUsers() {
   if (deleteAllConfirmText.value !== 'DELETE ALL') return
   deletingAll.value = true
 
-  const targets = users.value.filter((u) => u.role !== 'super_admin' && u.id !== auth.user?.uid)
+  const targets = users.value.filter((u) => !PROTECTED_ROLES.includes(u.role) && u.id !== auth.user?.uid)
   const deletedIds = new Set()
 
   try {
@@ -496,7 +535,7 @@ async function deleteAllUsers() {
     }
 
     showDeleteAllModal.value = false
-    toast.show(`已刪除 ${deletedIds.size} 位使用者的資料（系統管理員已保留）`)
+    toast.show(`已刪除 ${deletedIds.size} 位使用者的資料（舞會總副召與開發者已保留）`)
   } catch {
     toast.show(`刪除中斷：已刪除 ${deletedIds.size} / ${targets.length} 位`)
   } finally {

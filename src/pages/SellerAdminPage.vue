@@ -66,7 +66,7 @@
         </div>
         <p class="panel-copy">
           開放後，名單上的學弟登入就會在選單看到「登記賣票」；登記不受票種販售時段與每人限購限制，但不會超過票券總量
-          <template v-if="!auth.isSuperAdmin">只有系統管理員可以修改</template>
+          <template v-if="!auth.isSuperAdmin">只有舞會總副召可以修改</template>
         </p>
 
         <div class="settings-grid">

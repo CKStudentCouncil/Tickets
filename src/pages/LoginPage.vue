@@ -97,7 +97,7 @@ const SIGN_IN_OPTIONS = [
   { mode: 'any', title: '使用其他 Google 帳號登入', hint: '友校學生、家長、老師與校外人士' }
 ]
 
-const STAFF_ROLES = ['manager', 'admin', 'super_admin']
+const STAFF_ROLES = ['manager', 'admin', 'super_admin', 'developer']
 
 // Google refuses to sign in inside app webviews (disallowed_useragent)
 const IN_APP_BROWSERS = [

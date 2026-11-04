@@ -44,7 +44,8 @@ const ORDER = {
 const staff = {
   manager: { uid: 'manager-uid', email: 'manager@example.com' },
   admin: { uid: 'admin-uid', email: 'admin@example.com' },
-  superAdmin: { uid: 'super-uid', email: 'super@example.com' }
+  superAdmin: { uid: 'super-uid', email: 'super@example.com' },
+  developer: { uid: 'developer-uid', email: 'developer@example.com' }
 }
 
 const as = ({ uid, email }, verified = true) =>
@@ -69,6 +70,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', staff.manager.uid), { email: staff.manager.email, role: 'manager' })
     await setDoc(doc(db, 'users', staff.admin.uid), { email: staff.admin.email, role: 'admin' })
     await setDoc(doc(db, 'users', staff.superAdmin.uid), { email: staff.superAdmin.email, role: 'super_admin' })
+    await setDoc(doc(db, 'users', staff.developer.uid), { email: staff.developer.email, role: 'developer' })
     await setDoc(doc(db, 'orders', ORDER_ID), ORDER)
     await setDoc(doc(db, 'settings', 'ticketTypes'), { types: [] })
     await setDoc(doc(db, 'ticketSales', 'campus_ticket'), { sold: 1 })
@@ -334,6 +336,70 @@ describe('pendingUsers (PARTY-7)', () => {
     await assertFails(setDoc(doc(as(staff.superAdmin), 'pendingUsers', 'y@example.com'), invite))
     await assertFails(setDoc(doc(as(staff.superAdmin), 'pendingUsers', 'x@example.com'), { ...invite, role: 'owner' }))
     await assertSucceeds(setDoc(doc(as(staff.superAdmin), 'pendingUsers', 'x@example.com'), invite))
+  })
+})
+
+describe('developers', () => {
+  const devInvite = { email: 'dev2@example.com', name: '開發者', role: 'developer' }
+  const seedDevInvite = () =>
+    env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'pendingUsers', devInvite.email), devInvite))
+
+  test('developers have super admin access', async () => {
+    const db = as(staff.developer)
+    await assertSucceeds(getDocs(collection(db, 'users')))
+    await assertSucceeds(getDocs(collection(db, 'pendingUsers')))
+    await assertSucceeds(updateDoc(doc(db, 'users', staff.manager.uid), { role: 'admin' }))
+    await assertSucceeds(setDoc(doc(db, 'pendingUsers', 'x@example.com'), { email: 'x@example.com', role: 'super_admin' }))
+  })
+
+  test('only developers can invite or make developers', async () => {
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'pendingUsers', devInvite.email), devInvite))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'users', staff.manager.uid), { role: 'developer' }))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'pendingUsers', 'invitee@example.com'), { role: 'developer' }))
+    await assertFails(updateDoc(doc(as(staff.superAdmin), 'users', staff.superAdmin.uid), { role: 'developer' }))
+    await assertSucceeds(setDoc(doc(as(staff.developer), 'pendingUsers', devInvite.email), devInvite))
+    await assertSucceeds(updateDoc(doc(as(staff.developer), 'users', staff.manager.uid), { role: 'developer' }))
+  })
+
+  test('super admins cannot delete or demote a developer, or their invite', async () => {
+    await seedDevInvite()
+    const db = as(staff.superAdmin)
+    await assertFails(deleteDoc(doc(db, 'users', staff.developer.uid)))
+    await assertFails(updateDoc(doc(db, 'users', staff.developer.uid), { role: 'manager' }))
+    await assertFails(setDoc(doc(db, 'users', staff.developer.uid), { email: staff.developer.email, role: 'manager' }))
+    await assertFails(deleteDoc(doc(db, 'pendingUsers', devInvite.email)))
+    await assertFails(updateDoc(doc(db, 'pendingUsers', devInvite.email), { role: 'manager' }))
+  })
+
+  test('developers can demote or delete other developers and their invites', async () => {
+    await seedDevInvite()
+    const other = { uid: 'developer2-uid', email: 'developer2@example.com' }
+    await env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'users', other.uid), { email: other.email, role: 'developer' }))
+    const db = as(staff.developer)
+    await assertSucceeds(updateDoc(doc(db, 'users', other.uid), { role: 'super_admin' }))
+    await assertSucceeds(deleteDoc(doc(db, 'users', other.uid)))
+    await assertSucceeds(deleteDoc(doc(db, 'pendingUsers', devInvite.email)))
+  })
+
+  test('an invited developer activates with the developer role', async () => {
+    await seedDevInvite()
+    const invitee = { uid: 'dev2-uid', email: devInvite.email }
+    const db = as(invitee)
+    const batch = writeBatch(db)
+    batch.set(doc(db, 'users', invitee.uid), {
+      email: invitee.email, displayName: 'D', photoURL: '', name: devInvite.name, role: 'developer',
+      uid: invitee.uid, createdAt: 'now', updatedAt: 'now'
+    })
+    batch.delete(doc(db, 'pendingUsers', devInvite.email))
+    await assertSucceeds(batch.commit())
+  })
+
+  test('super admins can still delete managers, admins and invites', async () => {
+    const db = as(staff.superAdmin)
+    await assertSucceeds(deleteDoc(doc(db, 'users', staff.manager.uid)))
+    await assertSucceeds(deleteDoc(doc(db, 'pendingUsers', 'invitee@example.com')))
   })
 })
 

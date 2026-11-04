@@ -187,9 +187,9 @@ Clients cannot write `surveyResponses` or the party survey's responses directly 
 
 ## Staff Accounts
 
-The first super admin must be created by hand: in the Firebase console add `users/{uid}` with `role: "super_admin"`, using the uid shown under Authentication.
+The first developer must be created by hand: in the Firebase console add `users/{uid}` with `role: "developer"`, using the uid shown under Authentication.
 
-A super admin invites staff on `/admin/account` (stored as `pendingUsers/{email}`). The invited person then signs in with Google on `/login` using that email, which activates the account with the invited role. (`/admin/login` still redirects to `/login`.) Anyone else who signs in is a buyer and has no `users` document.
+Super admins (shown as 舞會總副召) and developers (開發者) have the same access, except that only developers can invite other developers or change or delete a developer. A super admin or developer invites staff on `/admin/account` (stored as `pendingUsers/{email}`). The invited person then signs in with Google on `/login` using that email, which activates the account with the invited role. (`/admin/login` still redirects to `/login`.) Anyone else who signs in is a buyer and has no `users` document.
 
 ## Deployment
 

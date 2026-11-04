@@ -30,10 +30,11 @@ service cloud.firestore {
       return /databases/$(database)/documents/pendingUsers/$(email);
     }
 
-    // manager = 1, admin = 2, super_admin = 3, anyone else = 0
+    // manager = 1, admin = 2, super_admin (舞會總副召) = 3, developer = 4,
+    // anyone else = 0. Developers can do everything super admins can.
     function roleRank() {
       return signedIn() && exists(userPath(request.auth.uid))
-        ? { 'manager': 1, 'admin': 2, 'super_admin': 3 }
+        ? { 'manager': 1, 'admin': 2, 'super_admin': 3, 'developer': 4 }
             .get(get(userPath(request.auth.uid)).data.get('role', ''), 0)
         : 0;
     }
@@ -50,8 +51,24 @@ service cloud.firestore {
       return roleRank() >= 3;
     }
 
+    function isDeveloper() {
+      return roleRank() >= 4;
+    }
+
     function isStaffRole(role) {
-      return role in ['manager', 'admin', 'super_admin'];
+      return role in ['manager', 'admin', 'super_admin', 'developer'];
+    }
+
+    // Super admins manage staff accounts and invites, but only developers
+    // may grant the developer role or touch an account or invite that has
+    // it, so a super admin can never remove or demote a developer.
+    function canGrantRole(role) {
+      return isSuperAdmin() && isStaffRole(role) && (role != 'developer' || isDeveloper());
+    }
+
+    function canManageExisting() {
+      return isSuperAdmin()
+        && (resource == null || resource.data.get('role', '') != 'developer' || isDeveloper());
     }
 
     function signedInEmail() {
@@ -79,7 +96,7 @@ service cloud.firestore {
       // An invited staff member activates their own account on first login.
       // The role must be exactly the one in their invite, and the invite must
       // be deleted in the same batch so it can never be used twice.
-      allow create: if (isSuperAdmin() && isStaffRole(request.resource.data.role)) || (
+      allow create: if canGrantRole(request.resource.data.role) || (
         signedIn()
         && request.auth.uid == userId
         && request.auth.token.email_verified == true
@@ -95,13 +112,13 @@ service cloud.firestore {
       );
 
       // Staff may refresh their own profile, never their role.
-      allow update: if (isSuperAdmin() && isStaffRole(request.resource.data.role)) || (
+      allow update: if (canManageExisting() && canGrantRole(request.resource.data.role)) || (
         signedIn()
         && request.auth.uid == userId
         && onlyChanges(['email', 'displayName', 'photoURL', 'updatedAt'])
       );
 
-      allow delete: if isSuperAdmin();
+      allow delete: if canManageExisting();
     }
 
     // Invites, keyed by lower-case email. Only super admins can list them;
@@ -114,13 +131,13 @@ service cloud.firestore {
       );
       allow list: if isSuperAdmin();
 
-      allow create, update: if isSuperAdmin()
+      allow create, update: if canManageExisting()
+        && canGrantRole(request.resource.data.role)
         && email == email.lower()
-        && request.resource.data.email == email
-        && isStaffRole(request.resource.data.role);
+        && request.resource.data.email == email;
 
       // the invitee may only consume their own invite while activating
-      allow delete: if isSuperAdmin() || (
+      allow delete: if canManageExisting() || (
         signedIn()
         && signedInEmail() == email
         && !exists(userPath(request.auth.uid))

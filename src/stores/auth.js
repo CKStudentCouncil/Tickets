@@ -7,7 +7,10 @@ import { isEduAccount as isEduEmail, isSchoolAccount as isSchoolEmail } from 'sr
 import { isOnSellerList } from 'src/services/sellerService'
 import { isOnOfficerList } from 'src/services/guestService'
 
-const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3 }
+// super_admin is shown as 舞會總副召; developer can do everything a
+// super_admin can, and only developers may add or remove developers.
+// Keep in sync with functions/lib/constants.js and firestore.rules
+const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3, developer: 4 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -20,6 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isManager = computed(() => hasRole('manager'))
   const isAdmin = computed(() => hasRole('admin'))
   const isSuperAdmin = computed(() => hasRole('super_admin'))
+  const isDeveloper = computed(() => hasRole('developer'))
   const isLoggedIn = computed(() => !!user.value)
   // on the 學弟登記賣票 list (sellers/{email}), kept by super admins
   const isSeller = computed(() => user.value?.isSeller === true)
@@ -113,6 +117,7 @@ export const useAuthStore = defineStore('auth', () => {
     isManager,
     isAdmin,
     isSuperAdmin,
+    isDeveloper,
     isLoggedIn,
     isSeller,
     isOfficer,
