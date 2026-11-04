@@ -22,3 +22,10 @@ test('orders without such a type, or made before, need no check', () => {
   assert.equal(getIdCheck({}), null)
   assert.equal(getIdCheck(null), null)
 })
+
+test('建中 students who bought with their school account show their 建中 student ID', () => {
+  const order = { school: '建國中學', customerEmail: 'a@gl.ck.tp.edu.tw', buyerType: 'student', items: [{ quantity: 1 }] }
+  assert.deepEqual(getIdCheck(order), { student: true, campus: true })
+  assert.equal(getIdCheck({ ...order, customerEmail: 'a@gmail.com' }), null)
+  assert.equal(getIdCheck({ ...order, school: '北一女中' }), null)
+})
