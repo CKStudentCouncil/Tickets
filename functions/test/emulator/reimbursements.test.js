@@ -45,7 +45,7 @@ const rejection = async (promise) => {
 
 /* ---------- a fake Google Drive ---------- */
 
-const drive = { files: new Map(), nextId: 0, uploads: 0, failUpload: null, tokenError: null }
+const drive = { files: new Map(), nextId: 0, uploads: 0, failUpload: null, failShare: false, tokenError: null }
 const realFetch = globalThis.fetch
 
 function parseUpload(body, contentType) {
@@ -92,6 +92,15 @@ globalThis.fetch = async (input, init = {}) => {
     drive.files.set(id, { ...metadata, content, trashed: false })
     return Response.json({ id, webViewLink: `https://drive.google.com/file/d/${id}/view` })
   }
+  if (method === 'POST' && /^\/drive\/v3\/files\/[^/]+\/permissions$/.test(url.pathname)) {
+    const id = decodeURIComponent(url.pathname.split('/')[4])
+    if (!live(id)) return Response.json({ error: { message: 'File not found' } }, { status: 404 })
+    // as a Workspace that does not allow sharing outside it answers
+    if (drive.failShare) return Response.json({ error: { message: 'publishOutNotPermitted' } }, { status: 403 })
+    const file = drive.files.get(id)
+    file.permissions = [...(file.permissions || []), JSON.parse(init.body)]
+    return Response.json({ id: 'anyoneWithLink' })
+  }
   if (method === 'PATCH' && url.pathname.startsWith('/drive/v3/files/')) {
     const id = decodeURIComponent(url.pathname.split('/').pop())
     if (!live(id)) return Response.json({ error: { message: 'File not found' } }, { status: 404 })
@@ -111,7 +120,7 @@ after(() => {
 
 beforeEach(async () => {
   Object.assign(process.env, { DRIVE_CLIENT_ID: 'client', DRIVE_CLIENT_SECRET: 'secret', DRIVE_REFRESH_TOKEN: 'refresh' })
-  Object.assign(drive, { files: new Map(), uploads: 0, failUpload: null, tokenError: null })
+  Object.assign(drive, { files: new Map(), uploads: 0, failUpload: null, failShare: false, tokenError: null })
   const response = await realFetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`, { method: 'DELETE' })
   assert.ok(response.ok)
   const batch = db.batch()
@@ -150,6 +159,10 @@ describe('submitReimbursement', () => {
     assert.match(files[0].name, /^\d{8}_林小明_NT\$1200_reimbu_1\.jpg$/)
     assert.match(files[1].description, /申請人：admin@example\.com/)
     assert.equal(saved.invoices[0].url, `https://drive.google.com/file/d/${saved.invoices[0].fileId}/view`)
+    // each invoice opens for anyone with its link; the folder stays private
+    const linkViewer = { type: 'anyone', role: 'reader', allowFileDiscovery: false }
+    assert.deepEqual(files.map((file) => file.permissions), [[linkViewer], [linkViewer]])
+    assert.equal(folder.permissions, undefined)
   })
 
   test('later claims use the same folder; a retried claim is saved and uploaded once', async () => {
@@ -177,6 +190,14 @@ describe('submitReimbursement', () => {
 
   test('a failed upload trashes what went up and saves nothing', async () => {
     drive.failUpload = (n) => n === 2
+    assert.equal(await rejection(callSubmit(claim(), as(STAFF.admin))), 'unavailable')
+    assert.equal((await db.collection('reimbursements').get()).size, 0)
+    const { folderId } = (await db.doc('reimbursementFolders/2026').get()).data()
+    assert.equal(invoicesIn(folderId).length, 0)
+  })
+
+  test('an invoice that cannot be shared by link trashes what went up and saves nothing', async () => {
+    drive.failShare = true
     assert.equal(await rejection(callSubmit(claim(), as(STAFF.admin))), 'unavailable')
     assert.equal((await db.collection('reimbursements').get()).size, 0)
     const { folderId } = (await db.doc('reimbursementFolders/2026').get()).data()
