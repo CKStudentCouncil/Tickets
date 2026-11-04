@@ -12,8 +12,8 @@ export function submitSurveyResponse(response, turnstileToken = '') {
 }
 
 // surveyResponses, readable by staff (firestore.rules); the sales report
-// counts its 得知管道 answers
+// counts its 得知管道 answers, and 清除所有訂單 backs them up
 export async function fetchSurveyResponses() {
   const snapshot = await getDocs(collection(db, 'surveyResponses'))
-  return snapshot.docs.map((item) => item.data())
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
 }

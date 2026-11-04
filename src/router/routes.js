@@ -232,6 +232,13 @@ const routes = [
         component: () => import('pages/AnalyticsPage.vue')
       },
       {
+        // 歷年資料: each year's archived orders, surveys, 報帳 and 學弟賣票, as
+        // Excel, long after 清除所有訂單
+        path: 'history',
+        name: 'super-admin-history',
+        component: () => import('pages/HistoryPage.vue')
+      },
+      {
         // 公關票: the officers and their quotas, and sends by name and email
         path: 'guests',
         name: 'super-admin-guests',

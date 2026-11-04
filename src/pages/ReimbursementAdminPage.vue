@@ -20,8 +20,14 @@
     <div class="page-heading">
       <br />
       <p class="eyebrow">系統管理</p>
-      <h1>報帳管理</h1>
+      <h1>{{ pastYear ? `${viewYear} 年報帳` : '報帳管理' }}</h1>
     </div>
+
+    <p v-if="pastYear" class="year-note" role="status">
+      正在查看 {{ viewYear }} 年：訂單是清除所有訂單時封存的資料，學弟賣票是當年登記的
+      <router-link :to="{ name: 'super-admin-history' }">歷年資料</router-link>
+      <router-link :to="{ name: 'super-admin-reimbursements' }">回到 {{ PARTY_YEAR }} 年</router-link>
+    </p>
 
     <p v-if="loading" class="empty">載入中...</p>
 
@@ -33,7 +39,7 @@
     <template v-else>
       <div class="panel">
         <div class="notify-header">
-          <h2>{{ PARTY_YEAR }} 舞會利潤</h2>
+          <h2>{{ viewYear }} 舞會利潤</h2>
           <div class="ticket-type-header-actions">
             <button type="button" class="btn-outline" :disabled="loading" @click="load">重新整理</button>
           </div>
@@ -222,7 +228,7 @@
           <h2>報帳紀錄</h2>
         </div>
         <p class="panel-copy">
-          在「狀態」改為核准、撥款或退回；刪除只用於清掉重複或測試的報帳，它的發票會移到雲端硬碟的垃圾桶；發票存在 {{ INVOICE_DRIVE_OWNER }} 雲端硬碟的「{{ INVOICE_FOLDER }}」資料夾，要用該帳號或資料夾分享給的帳號開啟
+          在「狀態」改為核准、撥款或退回；刪除只用於清掉重複或測試的報帳，它的發票會移到雲端硬碟的垃圾桶；發票存在 {{ INVOICE_DRIVE_OWNER }} 雲端硬碟的「{{ INVOICE_FOLDER }}」資料夾，有連結的人都能開啟
         </p>
 
         <div class="filters">
@@ -307,9 +313,17 @@
                   <template v-else>—</template>
                 </td>
                 <td>
-                  <button type="button" class="btn-outline danger btn-small" :disabled="busyIds.has(claim.id)" @click="remove(claim)">
+                  <!-- a past year's claims are records: deleting one would trash its invoices -->
+                  <button
+                    v-if="!pastYear"
+                    type="button"
+                    class="btn-outline danger btn-small"
+                    :disabled="busyIds.has(claim.id)"
+                    @click="remove(claim)"
+                  >
                     刪除
                   </button>
+                  <template v-else>—</template>
                 </td>
               </tr>
             </tbody>
@@ -322,6 +336,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import {
@@ -332,6 +347,8 @@ import {
   UNCATEGORIZED
 } from 'src/data/reimbursements'
 import { fetchEveryOrder } from 'src/services/orderService'
+import { fetchYearOrders } from 'src/services/archiveService'
+import { taiwanYearOf, yearFromQuery } from 'src/utils/historyData'
 import { fetchAllRegistrations } from 'src/services/sellerService'
 import { PARTY_YEAR } from 'src/services/partySurveyService'
 import {
@@ -349,6 +366,12 @@ import { formatDateTime, getTaiwanDateKey } from 'src/utils/datetime'
 const auth = useAuthStore()
 const toast = useToastStore()
 
+// ?year= (from 歷年資料) shows an earlier party: its claims, the orders
+// 清除所有訂單 archived and the 學弟賣票 registered that year. The page is
+// remade when the address changes.
+const viewYear = yearFromQuery(useRoute().query.year) ?? PARTY_YEAR
+const pastYear = viewYear !== PARTY_YEAR
+
 const loading = ref(true)
 const loadError = ref(false)
 const claims = ref([])
@@ -361,7 +384,7 @@ const statusFilter = ref('all')
 const busyIds = reactive(new Set())
 
 // made by submitReimbursement (FOLDER_NAME in functions/lib/reimbursements.js)
-const INVOICE_FOLDER = `CK Party Night 報帳發票 ${PARTY_YEAR}`
+const INVOICE_FOLDER = `CK Party Night 報帳發票 ${viewYear}`
 
 const money = (amount) => `${amount < 0 ? '−' : ''}NT$ ${Math.abs(amount).toLocaleString()}`
 
@@ -374,7 +397,7 @@ const profit = computed(() => calculateProfit({
 /* ---------- 收支表 (utils/partyStatement.js) ---------- */
 
 const STATEMENT_ORGANIZATION = '臺北市立建國高級中學班聯會'
-const statementTitle = `${PARTY_YEAR} CK Party Night 收支表`
+const statementTitle = `${viewYear} CK Party Night 收支表`
 const statementBasis = ref('realized')
 const statementSheet = ref(null)
 const exporting = ref(false)
@@ -397,7 +420,7 @@ const levelOf = (row) => row.codes.findIndex((code) => code !== '')
 // as the 總預算表 prints amounts: no currency, blank where none
 const figure = (amount) => (amount === null ? '' : `${amount < 0 ? '−' : ''}${Math.abs(amount).toLocaleString()}`)
 const exportName = (extension) =>
-  `${PARTY_YEAR}舞會收支表_${STATEMENT_BASES[statementBasis.value].label}_${getTaiwanDateKey(loadedAt.value)}.${extension}`
+  `${viewYear}舞會收支表_${STATEMENT_BASES[statementBasis.value].label}_${getTaiwanDateKey(loadedAt.value)}.${extension}`
 
 async function exportExcel() {
   exporting.value = true
@@ -449,13 +472,15 @@ async function load() {
 
   try {
     const [all, everyOrder, sellerRegistrations] = await Promise.all([
-      fetchReimbursements(),
-      fetchEveryOrder(),
+      fetchReimbursements(viewYear),
+      pastYear ? fetchYearOrders(viewYear) : fetchEveryOrder(),
       fetchAllRegistrations()
     ])
     claims.value = all
     orders.value = everyOrder
-    registrations.value = sellerRegistrations
+    registrations.value = pastYear
+      ? sellerRegistrations.filter((registration) => taiwanYearOf(registration.createdAt) === viewYear)
+      : sellerRegistrations
     loadedAt.value = new Date()
   } catch (error) {
     console.error('Load reimbursements error:', error)

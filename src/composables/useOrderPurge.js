@@ -2,35 +2,46 @@ import { computed, onScopeDispose, ref, watch } from 'vue'
 import { PURGE_CONFIRM_PHRASE } from 'src/config/app'
 import { countAllOrders, createRequestId, fetchEveryOrder } from 'src/services/orderService'
 import { fetchUnfinishedPurge, purgeOrders, subscribePurge } from 'src/services/archiveService'
+import { fetchSurveyResponses } from 'src/services/surveyService'
+import { fetchEveryPartySurvey, fetchPartySurveyResponses } from 'src/services/partySurveyService'
+import { fetchEveryReimbursement } from 'src/services/reimbursementService'
+import { fetchAllRegistrations, fetchSellers } from 'src/services/sellerService'
 import { backupFileName, buildOrderBackup } from 'src/utils/orderBackup'
+import { downloadWorkbook } from 'src/utils/backupDownload'
 
 // The call may have stopped while the server keeps purging (functions/lib/
 // orderPurge.js): follow its progress rather than report a failure
 const MAY_STILL_RUN = ['functions/deadline-exceeded', 'functions/unavailable', 'functions/internal']
 
-async function downloadBackup(orders, exportedBy) {
-  const [excelModule, saverModule] = await Promise.all([import('exceljs'), import('file-saver')])
-  const ExcelJS = excelModule.default
-  const saveAs = saverModule.saveAs || saverModule.default.saveAs || saverModule.default
+// Saved in the backup with the orders; the purge deletes none of them
+async function fetchOtherData() {
+  const [surveyResponses, surveys, reimbursements, sellers, sellerRegistrations] = await Promise.all([
+    fetchSurveyResponses(),
+    fetchEveryPartySurvey(),
+    fetchEveryReimbursement(),
+    fetchSellers(),
+    fetchAllRegistrations()
+  ])
+  const partySurveys = await Promise.all(surveys.map(async (survey) => ({
+    year: Number(survey.id),
+    survey,
+    responses: await fetchPartySurveyResponses(survey.id)
+  })))
+  return { surveyResponses, partySurveys, reimbursements, sellers, sellerRegistrations }
+}
+
+async function downloadBackup(orders, others, exportedBy) {
   const exportedAt = new Date()
-  const workbook = new ExcelJS.Workbook()
-  workbook.created = exportedAt
-
-  buildOrderBackup(orders, { exportedAt, exportedBy }).forEach(({ name, columns, rows }) => {
-    const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 1 }] })
-    sheet.columns = columns
-    sheet.addRows(rows)
-    sheet.getRow(1).font = { bold: true }
-  })
-
-  const buffer = await workbook.xlsx.writeBuffer()
-  if (!buffer?.byteLength) throw new Error('empty workbook')
-  saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-    backupFileName(orders.length, exportedAt))
+  await downloadWorkbook(
+    buildOrderBackup(orders, { ...others, exportedAt, exportedBy }),
+    backupFileName(orders.length, exportedAt),
+    { createdAt: exportedAt }
+  )
 }
 
 // 清除所有訂單 on /admin (super admins): this browser downloads the Excel
-// backup of every order, then purgeOrders archives exactly those orders to
+// backup of every order, with the surveys, 舞會滿意度調查, 報帳 and 學弟賣票
+// records (which stay), then purgeOrders archives exactly those orders to
 // salesArchives, deletes them with their stock release and writes
 // systemLogs. Nothing is deleted unless the backup and the archive succeed.
 export function useOrderPurge({ showToast, staffName }) {
@@ -238,26 +249,30 @@ export function useOrderPurge({ showToast, staffName }) {
     purgeId = createRequestId()
     phase.value = 'running'
     error.value = ''
-    backup.value = { status: 'running', loaded: 0, message: '讀取所有訂單中…' }
+    backup.value = { status: 'running', loaded: 0, message: '讀取所有訂單、問卷、報帳與學弟賣票資料中…' }
     let orders
     try {
-      orders = await fetchEveryOrder({
-        onProgress: (loaded) => { backup.value = { ...backup.value, loaded, message: `已讀取 ${loaded} 筆訂單…` } }
-      })
+      const [everyOrder, others] = await Promise.all([
+        fetchEveryOrder({
+          onProgress: (loaded) => { backup.value = { ...backup.value, loaded, message: `已讀取 ${loaded} 筆訂單…` } }
+        }),
+        fetchOtherData()
+      ])
+      orders = everyOrder
       if (!orders.length) {
         reset()
         error.value = '目前沒有任何訂單，不需要清除'
         return
       }
-      backup.value = { ...backup.value, message: `產生 ${orders.length} 筆訂單的 Excel…` }
-      await downloadBackup(orders, staffName())
+      backup.value = { ...backup.value, message: `產生 ${orders.length} 筆訂單與其他資料的 Excel…` }
+      await downloadBackup(orders, others, staffName())
     } catch (backupError) {
       console.error('Purge backup error:', backupError)
       backup.value = { ...backup.value, status: 'failed', message: 'Excel 備份失敗' }
       fail('Excel 備份失敗，已停止清除，沒有刪除任何訂單；請重試')
       return
     }
-    backup.value = { status: 'done', loaded: orders.length, message: `已下載 ${orders.length} 筆訂單的備份` }
+    backup.value = { status: 'done', loaded: orders.length, message: `已下載 ${orders.length} 筆訂單，以及問卷、舞會滿意度調查、報帳與學弟賣票資料的備份` }
     showToast('Excel 備份已下載')
 
     // 2–4. archive, delete and log on the server, for exactly these orders

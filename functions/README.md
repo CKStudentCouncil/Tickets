@@ -69,7 +69,7 @@ functions/
 | `revokeOfficerInvite` | callable | the link's officer, or a super admin (council links: super admins only) | Deletes an unclaimed link and its note and gives its tickets back to the quota; a claimed one cannot be revoked |
 | `claimOfficerInvite` | callable | signed-in, verified accounts | Claims an open link: creates the order for the caller's name and account email (`userId` the caller, `inviteId` the link) and marks the link claimed. The same account claiming again gets the same order; links of an officer since removed no longer work |
 | `releaseOfficerQuota` | `orders/{id}` deleted | — | Gives a deleted officer ticket's tickets back to that officer's quota (once, via `officerReleases/{orderId}`) |
-| `submitReimbursement` | callable | admin+ | 報帳: checks the claim (name, whole NT$ 1–1,000,000, a 科目 from `REIMBURSEMENT_CATEGORIES`, optional note, the party year) and 1–5 invoices (JPEG, PNG, WEBP or PDF, each checked by its first bytes, 7 MB together). Uploads the invoices to the council's Google Drive (see below), then creates `reimbursements/{requestId}` as `pending` with each file's Drive id and link. A failed upload trashes what went up and saves nothing; a retried call with the same `requestId` returns the same claim. A grant that no longer works returns `failed-precondition` |
+| `submitReimbursement` | callable | admin+ | 報帳: checks the claim (name, whole NT$ 1–1,000,000, a 科目 from `REIMBURSEMENT_CATEGORIES`, optional note, the party year) and 1–5 invoices (JPEG, PNG, WEBP or PDF, each checked by its first bytes, 7 MB together). Uploads the invoices to the council's Google Drive (see below), each viewable by anyone with its link, then creates `reimbursements/{requestId}` as `pending` with each file's Drive id and link. A failed upload trashes what went up and saves nothing; a retried call with the same `requestId` returns the same claim. A grant that no longer works returns `failed-precondition` |
 | `trashReimbursementInvoices` | `reimbursements/{id}` deleted | — | Moves a withdrawn or deleted claim's invoices to the Drive's trash, where they can be restored for 30 days |
 | `uploadLineupImage` | callable | super admin | Resizes an image to WebP and stores it under `lineup/` |
 | `deleteLineupImage` | callable | super admin | Deletes an image under `lineup/` |
@@ -174,7 +174,7 @@ Set it up once, before the next functions deploy (which fails while any of the t
    ```bash
    firebase deploy -P cksc-ticket --only firestore:rules,functions:submitReimbursement,functions:trashReimbursementInvoices
    ```
-6. After the first claim, share the folder with whoever reviews the claims. 報帳管理 links each invoice to Drive, and only accounts with access to the folder can open it.
+6. Nothing to share by hand: each invoice is set to *Anyone with the link* (viewer, not searchable) when it is uploaded, so 報帳管理 and the backups link to files any reviewer can open, signed in or not. The folder itself stays private. If the `gl.ck.tp.edu.tw` Workspace does not allow sharing outside the organisation, the upload fails and claims fail with 「發票上傳失敗」 (the function logs show Drive's 403); the Workspace admin must allow link sharing (Admin console → Apps → Google Workspace → Drive and Docs → Sharing settings).
 
 Whoever made the OAuth client does not matter: the account that signs in at step 4 is the one the functions act as, and it owns the invoices. If that grant stops working (password reset, the app removed from the account), claims fail with 「雲端硬碟的授權失效了」; repeat step 4 and redeploy the two functions.
 

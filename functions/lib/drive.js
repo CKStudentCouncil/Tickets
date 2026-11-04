@@ -128,6 +128,18 @@ export async function uploadFile({ name, contentType, content, folderId, descrip
   })
 }
 
+// Anyone with the file's link can view it, signed in or not; it does not
+// show up in anyone's Drive search
+export const LINK_VIEWER = { type: 'anyone', role: 'reader', allowFileDiscovery: false }
+
+export async function shareByLink(fileId) {
+  await call(`${API}/files/${encodeURIComponent(fileId)}/permissions?fields=id`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(LINK_VIEWER)
+  })
+}
+
 // To the Drive's trash, where the owner can still restore it for 30 days.
 // One already gone counts as done.
 export async function trashFile(fileId) {

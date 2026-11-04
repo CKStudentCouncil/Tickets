@@ -482,7 +482,7 @@
           <p class="danger-eyebrow">Danger zone</p>
           <h2 id="purge-title">清除所有訂單</h2>
           <p class="panel-copy">
-            活動結束、準備新一年度時使用；系統會先下載 Excel 完整備份，再把訂單封存到 Firestore 的 salesArchives（銷售報表的歷年比較），兩者都成功後才刪除訂單、退回庫存與購買額度，並寫入系統紀錄
+            活動結束、準備新一年度時使用；系統會先下載 Excel 完整備份（訂單、問卷、舞會滿意度調查、報帳與學弟賣票），再把訂單封存到 Firestore 的 salesArchives（銷售報表的歷年比較），兩者都成功後才刪除訂單、退回庫存與購買額度，並寫入系統紀錄；問卷、報帳與學弟賣票資料只備份，不會刪除
           </p>
         </div>
         <button type="button" class="btn-outline danger" @click="openPurge">清除所有訂單…</button>
@@ -515,12 +515,12 @@
           </p>
           <p v-if="!purgeResuming && orderCountError" class="purge-error" role="alert">{{ orderCountError }}</p>
           <ol class="purge-steps">
-            <li>下載 Excel 完整備份（含所有欄位）</li>
+            <li>下載 Excel 完整備份：訂單的所有欄位，以及問卷、舞會滿意度調查、報帳（含發票連結）與學弟賣票資料</li>
             <li>封存到 Firestore 的 salesArchives，保留年度摘要與原始訂單</li>
             <li>以上都成功後才刪除訂單，並退回庫存與每人購買額度</li>
             <li>把這次清除寫入 systemLogs</li>
           </ol>
-          <p class="panel-copy">只會刪除備份中的訂單；開始後才送出的新訂單會保留</p>
+          <p class="panel-copy">只會刪除備份中的訂單；開始後才送出的新訂單會保留；問卷、報帳與學弟賣票資料只備份，不會刪除</p>
           <label class="field purge-confirm">
             <span>請輸入 <code>{{ PURGE_CONFIRM_PHRASE }}</code> 確認</span>
             <input
@@ -590,6 +590,7 @@
             <p v-if="purgeRun?.missingCount">另有 <span class="num">{{ purgeRun.missingCount }}</span> 筆在清除前已被刪除，未列入封存</p>
             <p v-if="purgeRemaining">目前還有 <span class="num">{{ purgeRemaining }}</span> 筆在備份之後才送出的訂單，沒有被清除</p>
             <router-link :to="{ name: 'super-admin-analytics' }" class="purge-link">前往銷售報表查看歷年比較</router-link>
+            <router-link :to="{ name: 'super-admin-history' }" class="purge-link">前往歷年資料，日後隨時下載這一年的資料</router-link>
           </div>
           <p v-if="purgeError" class="purge-error" role="alert">{{ purgeError }}</p>
 

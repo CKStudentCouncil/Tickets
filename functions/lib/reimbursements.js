@@ -4,14 +4,15 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { db, HttpsError } from './common.js'
 import { REGION, ROLE_RANK } from './constants.js'
 import { isValidRequestId } from './orderValidation.js'
-import { DRIVE_SECRETS, createFolder, findFolder, trashFile, uploadFile } from './drive.js'
+import { DRIVE_SECRETS, createFolder, findFolder, shareByLink, trashFile, uploadFile } from './drive.js'
 import { getTaiwanDateKey } from './time.js'
 
 // 報帳 (/admin/reimburse). An admin or super admin claims back what they
 // spent on the party: the name of whoever spent it (who is paid), a whole
 // NT$ amount, an optional note, and photos or PDFs of the invoices. The
 // invoices go to the council's Google Drive (drive.js), into a folder per
-// party year, and only then is the claim saved, so every claim has them.
+// party year, each viewable by anyone with its link, and only then is the
+// claim saved, so every claim has them.
 // Super admins review the claims on /super_admin/reimbursements (the status
 // and review fields, written by the client under firestore.rules).
 // Deleting a claim moves its invoices to the Drive's trash.
@@ -178,6 +179,8 @@ export const submitReimbursement = functions
           size: invoice.content.length,
           url: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`
         })
+        // after the push, so a failure here trashes this file with the rest
+        await shareByLink(file.id)
       }
     } catch (error) {
       console.error('[submitReimbursement] Drive upload failed:', error)

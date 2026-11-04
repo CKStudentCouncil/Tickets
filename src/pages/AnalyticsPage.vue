@@ -8,12 +8,18 @@
     <p>載入中...</p>
   </div>
 
+  <div v-else-if="pastError" class="state-screen">
+    <p>{{ pastError }}</p>
+    <button type="button" class="btn" @click="$router.push({ name: 'super-admin-history' })">回到歷年資料</button>
+  </div>
+
   <div v-else ref="pageRoot" class="analytics-page" :class="{ exporting }">
     <div class="page-heading" :class="partClass(0)">
       <p class="eyebrow">後台管理</p>
       <div class="heading-row">
-        <h1>銷售報表</h1>
+        <h1>{{ pastYear ? `${pastYear} 年銷售報表` : '銷售報表' }}</h1>
         <p v-if="exporting" class="live-status">匯出時間　<span class="num">{{ exportStamp }}</span></p>
+        <p v-else-if="pastYear" class="live-status">{{ pastSource }}</p>
         <p v-else class="live-status" :class="{ offline: liveError }" role="status">
           <span class="live-dot" aria-hidden="true" />
           <template v-if="liveError">即時連線中斷，請重新整理頁面</template>
@@ -29,6 +35,14 @@
     </p>
 
     <div v-if="!exporting" class="filter-row">
+      <label v-if="archivedYears.length" class="compare-select">
+        <span>年度</span>
+        <select v-model="yearChoice" @change="showYear(yearChoice)">
+          <option :value="null">今年（即時）</option>
+          <option v-for="year in archivedYears" :key="year" :value="year">{{ year }} 年</option>
+        </select>
+      </label>
+
       <label v-if="archives.length" class="compare-select">
         <span>比較</span>
         <select v-model="compareYear">
@@ -55,6 +69,7 @@
           匯出 PDF
         </button>
         <button
+          v-if="!pastYear"
           type="button"
           class="btn-outline"
           :aria-expanded="importOpen"
@@ -123,7 +138,7 @@
       </div>
     </div>
 
-    <div v-else-if="!archives.length && !exporting" class="panel hint-panel">
+    <div v-else-if="!archives.length && !exporting && !pastYear" class="panel hint-panel">
       <p class="panel-copy">
         還沒有往年資料，目前只顯示今年的數據；按「匯入往年資料」選擇往年的訂單 Excel，或在活動結束後於後台「清除所有訂單」，之後就能逐年比較
       </p>
@@ -175,7 +190,7 @@
           <p class="eyebrow">期間分析</p>
           <div v-if="!exporting" class="segmented small" role="group" aria-label="分析期間">
             <button
-              v-for="option in PERIODS"
+              v-for="option in periodOptions"
               :key="option.key"
               type="button"
               :class="{ active: periodKey === option.key }"
@@ -270,6 +285,7 @@
         </div>
         <div class="stack">
           <ChartCard
+            v-if="!pastYear"
             title="各票種售罄時間"
             :subtitle="`${current.year} 年各限量票種從開賣到賣出最後一張所花的時間；已售張數含未付款訂單與學弟登記賣票，不含已刪除的訂單`"
             :table="sellOutTable"
@@ -678,6 +694,7 @@
 
 <script setup>
 import { computed, nextTick, provide, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import BarList from 'src/components/analytics/BarList.vue'
 import ChartCard from 'src/components/analytics/ChartCard.vue'
 import ColumnChart from 'src/components/analytics/ColumnChart.vue'
@@ -690,6 +707,7 @@ import { STREET_SCHOOL } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { downloadElementPartsAsPdf } from 'src/utils/pdf'
+import { yearFromQuery } from 'src/utils/historyData'
 import {
   PERIODS,
   WEEKDAY_LABELS,
@@ -783,8 +801,17 @@ const ARROWS = { up: '▲', down: '▼', flat: '－' }
 const CHANGE_WORDS = { up: '成長', down: '減少', flat: '' }
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => String(hour))
 
+// The window labels for a past year, whose "now" is the end of its sale
+const PAST_PERIOD_LABELS = { today: '最後一天', '7d': '最後 7 天', '30d': '最後 30 天', month: '最後一個月' }
+
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const {
+  pastYear,
+  pastError,
+  pastArchive,
+  archivedYears,
   now,
   loading,
   liveError,
@@ -805,7 +832,19 @@ const {
   readImportFile,
   cancelImport,
   confirmImport
-} = useSalesAnalytics()
+} = useSalesAnalytics({ year: yearFromQuery(route.query.year) })
+
+// ?year= picks an archived year; the page is remade for the new address
+const yearChoice = ref(pastYear)
+function showYear(value) {
+  const year = yearFromQuery(value)
+  router.push({ name: 'super-admin-analytics', query: year ? { year: String(year) } : {} })
+}
+
+// where a past year's numbers come from
+const pastSource = computed(() => (pastArchive.value?.source === 'import'
+  ? `${pastYear} 年匯入的資料（無購買者資料）`
+  : `${pastYear} 年清除訂單時封存的資料`))
 
 const slotMetricKey = ref('orders')
 const groupMetricKey = ref('tickets')
@@ -874,14 +913,20 @@ function shortDate(isoDate) {
 const periodNote = computed(() => {
   const cur = current.value
   const parts = [
-    cur.elapsed < 0
-      ? `今年 ${shortDate(cur.openDate)} 開賣，尚未開始`
-      : `今年 ${shortDate(cur.openDate)} 開賣，今天是第 ${cur.days} 天`
+    pastYear
+      ? `${cur.year} 年 ${shortDate(cur.openDate)}–${shortDate(cur.closeDate)} 銷售，共 ${cur.days} 天`
+      : cur.elapsed < 0
+        ? `今年 ${shortDate(cur.openDate)} 開賣，尚未開始`
+        : `今年 ${shortDate(cur.openDate)} 開賣，今天是第 ${cur.days} 天`
   ]
   const prev = previous.value
   if (prev) {
     parts.push(`比較 ${prev.year} 年（${shortDate(prev.openDate)}–${shortDate(prev.closeDate)}，共 ${prev.days} 天）`)
-    if (report.value.sameTime) parts.push(`同期：${prev.year} 年只算到開賣第 ${Math.max(1, cur.days)} 天 ${formatClock(new Date(), true)}`)
+    if (report.value.sameTime) {
+      parts.push(pastYear
+        ? `同期：${prev.year} 年只算到開賣第 ${cur.days} 天`
+        : `同期：${prev.year} 年只算到開賣第 ${Math.max(1, cur.days)} 天 ${formatClock(new Date(), true)}`)
+    }
   }
   return parts.join('　·　')
 })
@@ -1148,7 +1193,11 @@ function describePortfolio(point) {
 
 // ---- 期間分析: a window of this year's sale against the one before it ----
 
-const periodKey = ref('7d')
+// a past year opens on its whole sale
+const periodKey = ref(pastYear ? 'all' : '7d')
+const periodOptions = computed(() => (pastYear
+  ? PERIODS.map((option) => ({ ...option, label: PAST_PERIOD_LABELS[option.key] || option.label }))
+  : PERIODS))
 const periodMetricKey = ref('revenue')
 // null: whatever suits the window's length
 const periodGranularityChoice = ref(null)
@@ -1168,7 +1217,7 @@ const periodRangeNote = computed(() => {
   const text = formatPeriod(range, now.value.getTime()) || '—'
   return range.previous
     ? `${text}，對照${periodComparison.value} ${formatPeriod(range.previous, now.value.getTime())}`
-    : `${text}，今年的所有訂單`
+    : `${text}，${pastYear ? `${pastYear} 年` : '今年'}的所有訂單`
 })
 
 // Each tile against the window before; the average order value also
@@ -1491,7 +1540,8 @@ async function exportPdf() {
   exportStamp.value = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })
   exporting.value = true
   try {
-    await downloadElementPartsAsPdf(pageRoot.value, `銷售報表_${taipeiDate(Date.now())}.pdf`, EXPORT_PARTS, async (part) => {
+    const name = pastYear ? `${pastYear}年銷售報表` : `銷售報表_${taipeiDate(Date.now())}`
+    await downloadElementPartsAsPdf(pageRoot.value, `${name}.pdf`, EXPORT_PARTS, async (part) => {
       exportPart.value = part
       await nextTick()
       for (let i = 0; i < 3; i++) await nextFrame()

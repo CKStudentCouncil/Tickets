@@ -62,6 +62,12 @@ export async function fetchReimbursements(year = PARTY_YEAR) {
   return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
 }
 
+// Every year's claims, for the backup before 清除所有訂單
+export async function fetchEveryReimbursement() {
+  const snapshot = await getDocs(reimbursementsRef())
+  return snapshot.docs.map(toItem)
+}
+
 // The 科目 alone (firestore.rules): correcting it is not a review
 export function setReimbursementCategory(id, category) {
   return updateDoc(reimbursementRef(id), { category })

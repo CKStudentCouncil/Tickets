@@ -1,6 +1,7 @@
-import { collection, doc, documentId, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { collection, doc, documentId, getCountFromServer, getDoc, getDocs, limit, onSnapshot, orderBy, query, startAfter, where } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from 'src/boot/firebase'
+import { archiveNamesOf, ordersFromSaleRows } from 'src/utils/historyData'
 
 // 清除所有訂單 (functions/lib/orderPurge.js). A run may take the function's
 // full 9 minutes; it keeps going on the server if this page stops waiting.
@@ -37,6 +38,36 @@ export async function fetchSalesArchives() {
 export async function fetchArchiveRows(year) {
   const snapshot = await getDocs(query(collection(db, 'salesArchives', String(year), 'rows'), orderBy(documentId())))
   return snapshot.docs.flatMap((item) => item.data().rows || [])
+}
+
+// salesArchives/{year}/archivedOrders: the orders 清除所有訂單 deleted, each
+// as it was then (with an `archive` field), for 歷年資料
+export async function fetchArchivedOrders(year, { onProgress } = {}) {
+  const orders = []
+  let cursor = null
+  for (;;) {
+    const snapshot = await getDocs(query(collection(db, 'salesArchives', String(year), 'archivedOrders'),
+      orderBy(documentId()), ...(cursor ? [startAfter(cursor)] : []), limit(500)))
+    orders.push(...snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
+    onProgress?.(orders.length)
+    if (snapshot.docs.length < 500) return orders
+    cursor = snapshot.docs.at(-1)
+  }
+}
+
+// A past year's orders for its 收支表 (/super_admin/reimbursements?year=):
+// those archived, or for a year imported from Excel its sale rows as orders
+export async function fetchYearOrders(year) {
+  const snapshot = await getDoc(doc(db, 'salesArchives', String(year)))
+  if (snapshot.exists() && snapshot.data().source === 'import') {
+    return ordersFromSaleRows(await fetchArchiveRows(year), archiveNamesOf(snapshot.data()))
+  }
+  return fetchArchivedOrders(year)
+}
+
+export async function countArchivedOrders(year) {
+  const snapshot = await getCountFromServer(collection(db, 'salesArchives', String(year), 'archivedOrders'))
+  return snapshot.data().count
 }
 
 // 匯入往年資料: { openDate, closeDate, rows, names } -> { year, orderCount, revenue }

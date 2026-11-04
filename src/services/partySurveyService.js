@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore'
+import { collection, doc, getCountFromServer, getDoc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from 'src/boot/firebase'
 import { EVENT_DATE } from 'src/config/app'
@@ -29,6 +29,16 @@ export async function fetchPartySurveyYears() {
   return snapshot.docs.map((item) => Number(item.id)).filter(Number.isInteger).sort((a, b) => b - a)
 }
 
+// every year's survey document with its id (the year), latest first, for
+// the backup before 清除所有訂單
+export async function fetchEveryPartySurvey() {
+  const snapshot = await getDocs(collection(db, 'partySurveys'))
+  return snapshot.docs
+    .filter((item) => Number.isInteger(Number(item.id)))
+    .map((item) => ({ id: item.id, ...item.data() }))
+    .sort((a, b) => Number(b.id) - Number(a.id))
+}
+
 // A plain set replaces the whole document, as the rules only accept these fields.
 export function savePartySurvey(year, { open, sections }, updatedByUid) {
   return setDoc(surveyRef(year), { year, open, sections, updatedAt: serverTimestamp(), updatedByUid })
@@ -37,6 +47,11 @@ export function savePartySurvey(year, { open, sections }, updatedByUid) {
 export async function fetchPartySurveyResponses(year) {
   const snapshot = await getDocs(collection(db, 'partySurveys', String(year), 'responses'))
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
+}
+
+export async function countPartySurveyResponses(year) {
+  const snapshot = await getCountFromServer(collection(db, 'partySurveys', String(year), 'responses'))
+  return snapshot.data().count
 }
 
 // answers: { [question id]: value } (see src/data/partySurveyQuestions.js);

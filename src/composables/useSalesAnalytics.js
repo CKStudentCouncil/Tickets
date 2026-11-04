@@ -6,7 +6,13 @@ import { useToastStore } from 'src/stores/toast'
 import { subscribeAllOrders } from 'src/services/orderService'
 import { fetchTicketTypes, getStockLimit } from 'src/services/ticketTypeService'
 import { fetchAllRegistrations } from 'src/services/sellerService'
-import { fetchArchiveRows, fetchSalesArchives, fetchUnfinishedPurge, importSalesArchive } from 'src/services/archiveService'
+import {
+  fetchArchiveRows,
+  fetchArchivedOrders,
+  fetchSalesArchives,
+  fetchUnfinishedPurge,
+  importSalesArchive
+} from 'src/services/archiveService'
 import { fetchSurveyResponses } from 'src/services/surveyService'
 import {
   archivedSale,
@@ -21,29 +27,46 @@ import {
 } from 'src/utils/salesAnalytics'
 import { readSalesWorkbook, sheetsOf } from 'src/utils/salesImport'
 import { parseDate } from 'src/utils/datetime'
+import { taiwanYearOf } from 'src/utils/historyData'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
 // /super_admin/analytics: this year's orders, live, against an earlier
 // year's sale from salesArchives (written when orders are purged, or
 // imported from an earlier year's Excel export).
-export function useSalesAnalytics() {
+//
+// With `year` (?year=2025, from 歷年資料) it is that archived year's report
+// instead, against the year before it: the orders 清除所有訂單 archived (or
+// the rows imported for it) in place of the live ones, and "now" the end
+// of its sale. The sell-out times need the ticket types as they were, which
+// are not kept, so there are none.
+export function useSalesAnalytics({ year = null } = {}) {
   const shop = useShopStore()
   const toast = useToastStore()
-  // the sale's days move on with the clock
-  const now = useNow(60_000)
+  const live = year === null
+  // salesArchives/{year} of the year shown
+  const pastArchive = shallowRef(null)
+  // why that year cannot be shown
+  const pastError = ref('')
+  // the sale's days move on with the clock; a past sale's have ended
+  const clock = live ? useNow(60_000) : ref(new Date())
+  const now = computed(() => (pastArchive.value
+    ? new Date(taipeiDayStart(pastArchive.value.closeDate) + DAY_MS - 1)
+    : clock.value))
   shop.init()
   const firstTicketSaleAt = ref(null)
   const ticketTypes = shallowRef([])
-  fetchTicketTypes()
-    .then((types) => {
-      ticketTypes.value = types
-      firstTicketSaleAt.value = types
-        .map((type) => parseDate(type.salesStartTime))
-        .filter(Boolean)
-        .sort((a, b) => a - b)[0] || null
-    })
-    .catch((error) => console.error('Sales report ticket types error:', error))
+  if (live) {
+    fetchTicketTypes()
+      .then((types) => {
+        ticketTypes.value = types
+        firstTicketSaleAt.value = types
+          .map((type) => parseDate(type.salesStartTime))
+          .filter(Boolean)
+          .sort((a, b) => a - b)[0] || null
+      })
+      .catch((error) => console.error('Sales report ticket types error:', error))
+  }
 
   const loading = ref(true)
   const liveError = ref(false)
@@ -51,38 +74,42 @@ export function useSalesAnalytics() {
   // replaced whole on every snapshot, so a few thousand orders are not made deeply reactive
   const rows = shallowRef([])
 
-  const unsubscribe = subscribeAllOrders({
-    onData: ({ orders, fromCache }) => {
-      rows.value = orders.map(saleRowOf)
-      loading.value = false
-      if (!fromCache) {
-        updatedAt.value = new Date()
-        liveError.value = false
+  if (live) {
+    const unsubscribe = subscribeAllOrders({
+      onData: ({ orders, fromCache }) => {
+        rows.value = orders.map(saleRowOf)
+        loading.value = false
+        if (!fromCache) {
+          updatedAt.value = new Date()
+          liveError.value = false
+        }
+      },
+      onError: (error) => {
+        console.error('Sales report orders error:', error)
+        liveError.value = true
+        loading.value = false
       }
-    },
-    onError: (error) => {
-      console.error('Sales report orders error:', error)
-      liveError.value = true
-      loading.value = false
-    }
-  })
-  onScopeDispose(unsubscribe)
+    })
+    onScopeDispose(unsubscribe)
+  }
 
   // 學弟登記賣票 take from the same stock as the orders; read once, as there
   // are few and they mostly come before the sale
   const sellerTakes = shallowRef([])
-  fetchAllRegistrations()
-    .then((registrations) => {
-      sellerTakes.value = registrations.map((registration) => ({
-        ticketTypeId: String(registration.ticketTypeId || ''),
-        at: parseDate(registration.createdAt)?.getTime() ?? null,
-        quantity: Number(registration.quantity) || 0
-      }))
-    })
-    .catch((error) => console.error('Sales report seller registrations error:', error))
+  if (live) {
+    fetchAllRegistrations()
+      .then((registrations) => {
+        sellerTakes.value = registrations.map((registration) => ({
+          ticketTypeId: String(registration.ticketTypeId || ''),
+          at: parseDate(registration.createdAt)?.getTime() ?? null,
+          quantity: Number(registration.quantity) || 0
+        }))
+      })
+      .catch((error) => console.error('Sales report seller registrations error:', error))
+  }
 
   // how fast each limited ticket type sold out, live with the orders
-  const sellOuts = computed(() => sellOutTimes(
+  const sellOuts = computed(() => (!live ? [] : sellOutTimes(
     ticketTypes.value
       .map((type) => ({
         id: type.id,
@@ -96,7 +123,7 @@ export function useSalesAnalytics() {
     rows.value,
     sellerTakes.value,
     now.value.getTime()
-  ))
+  )))
 
   /* ---------- the year compared with ---------- */
 
@@ -109,12 +136,15 @@ export function useSalesAnalytics() {
   // a purge that stopped halfway: its orders are archived and still live
   const unfinishedPurge = ref(null)
 
-  const current = computed(() => currentSale({
-    openAt: firstTicketSaleAt.value || shop.openAt,
-    eventDate: EVENT_DATE.replaceAll('/', '-'),
-    now: now.value.getTime(),
-    rows: rows.value
-  }))
+  const current = computed(() => (pastArchive.value
+    // a past sale has ended: elapsed only tells it from one not begun
+    ? { ...archivedSale(pastArchive.value, rows.value), elapsed: Infinity }
+    : currentSale({
+      openAt: firstTicketSaleAt.value || shop.openAt,
+      eventDate: EVENT_DATE.replaceAll('/', '-'),
+      now: now.value.getTime(),
+      rows: rows.value
+    })))
 
   // only the latest load may set the rows or end the loading state, so a
   // slower earlier one (or a cleared comparison) never leaves it stuck
@@ -137,25 +167,59 @@ export function useSalesAnalytics() {
   }
   watch(compareYear, loadPreviousRows)
 
-  // `select` picks that year; otherwise the latest year before this one
-  async function loadArchives(select) {
+  // every archived year, for picking which year the report shows
+  const archivedYears = ref([])
+  const archivesOf = (summaries) => summaries
+    .filter((item) => item.openDate && item.closeDate)
+    .map((item) => ({ ...item, year: Number(item.year ?? item.id) }))
+    .sort((a, b) => b.year - a.year)
+
+  // `select` picks that year; otherwise the latest year before the one
+  // shown (any year for this year's live sale). `summaries`: already read.
+  async function loadArchives(select, summaries = null) {
     try {
-      const [summaries, purge] = await Promise.all([fetchSalesArchives(), fetchUnfinishedPurge()])
-      archives.value = summaries
-        .filter((item) => item.openDate && item.closeDate)
-        .map((item) => ({ ...item, year: Number(item.year ?? item.id) }))
-        .sort((a, b) => b.year - a.year)
+      const [list, purge] = await Promise.all([summaries ?? fetchSalesArchives(), live ? fetchUnfinishedPurge() : null])
+      const all = archivesOf(list)
+      archivedYears.value = all.map((item) => item.year)
+      // a past year is not compared with itself
+      archives.value = all.filter((item) => item.year !== year)
       unfinishedPurge.value = purge
-      const earlier = archives.value.find((item) => item.year < current.value.year) || archives.value[0]
-      const year = select ?? compareYear.value ?? earlier?.year ?? null
-      if (year === compareYear.value) await loadPreviousRows(year)
-      else compareYear.value = year
+      const earlier = archives.value.find((item) => item.year < current.value.year) || (live ? archives.value[0] : null)
+      const compared = select ?? compareYear.value ?? earlier?.year ?? null
+      if (compared === compareYear.value) await loadPreviousRows(compared)
+      else compareYear.value = compared
     } catch (error) {
       console.error('Sales report archives error:', error)
       toast.show('往年資料載入失敗')
     }
   }
-  loadArchives()
+
+  // A past year: the full archived orders (so repeat buyers and 路宣 count
+  // as they did live), or the rows of a year imported from Excel
+  async function loadPastYear() {
+    try {
+      const summaries = await fetchSalesArchives()
+      const archive = archivesOf(summaries).find((item) => item.year === year)
+      if (!archive) {
+        pastError.value = `${year} 年沒有封存的銷售資料；清除所有訂單或匯入往年資料後才有`
+        return
+      }
+      rows.value = archive.source === 'import'
+        ? rowsFromArchive(await fetchArchiveRows(year), archive.byTicketType)
+        : (await fetchArchivedOrders(year)).map(saleRowOf)
+      pastArchive.value = archive
+      updatedAt.value = new Date()
+      await loadArchives(undefined, summaries)
+    } catch (error) {
+      console.error('Sales report past year error:', error)
+      pastError.value = `${year} 年的資料載入失敗，請檢查網路後重新整理`
+    } finally {
+      loading.value = false
+    }
+  }
+
+  if (live) loadArchives()
+  else loadPastYear()
 
   const previous = computed(() => {
     const archive = archives.value.find((item) => item.year === compareYear.value)
@@ -166,13 +230,17 @@ export function useSalesAnalytics() {
     current: current.value,
     previous: previous.value,
     basis: basis.value,
-    now: now.value.getTime()
+    // a past sale is over: `now` (its last moment, so its last day is still
+    // a day of it) is just short of the end the report counts as finished
+    now: pastArchive.value ? now.value.getTime() + 1 : now.value.getTime()
   }))
 
-  // 得知管道 from the user survey; null until read
+  // 得知管道 from the user survey (a past year's: those answered in it); null until read
   const survey = shallowRef(null)
   fetchSurveyResponses()
-    .then((responses) => { survey.value = channelShares(responses) })
+    .then((responses) => {
+      survey.value = channelShares(live ? responses : responses.filter((response) => taiwanYearOf(response.createdAt) === year))
+    })
     .catch((error) => console.error('Sales report survey error:', error))
 
   /* ---------- 匯入往年資料 ---------- */
@@ -251,6 +319,7 @@ export function useSalesAnalytics() {
   }
 
   return {
+    pastYear: year, pastError, pastArchive, archivedYears,
     now, loading, liveError, updatedAt,
     basis, archives, compareYear, archiveLoading, unfinishedPurge,
     current, previous, report, survey, sellOuts,

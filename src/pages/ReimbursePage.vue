@@ -145,7 +145,7 @@
               <strong class="num">NT$ {{ validAmount ? form.amount.toLocaleString() : 0 }}</strong>
             </p>
 
-            <p class="warning"><span aria-hidden="true">!</span> 發票會存到班聯會（{{ INVOICE_DRIVE_OWNER }}）的雲端硬碟；核准後才會撥款</p>
+            <p class="warning"><span aria-hidden="true">!</span> 發票會存到班聯會（{{ INVOICE_DRIVE_OWNER }}）的雲端硬碟，有連結的人都能查看；核准後才會撥款</p>
 
             <p v-if="submitError" class="error" role="alert">{{ submitError }}</p>
 
