@@ -676,9 +676,85 @@ export function periodSeries(rows, period, granularity, reference = period.end) 
   }))
 }
 
+/* ---------- how fast each ticket type sold out ---------- */
+
+// Each limited ticket type ({ id, name, stock, startAt, endAt }, times in ms
+// or null) and how long it took from its sales start to the take that reached
+// its stock. The takes are what createOrder counts against the stock: the
+// orders still there, paid or not, and `extraTakes` ([{ ticketTypeId, at,
+// quantity }], the seller registrations, which share it). A deleted order gave
+// its tickets back, so a type that then sold out again counts until it did.
+// `state`: 'soldOut', 'selling', 'upcoming' or 'ended' (closed, not sold out)
+export function sellOutTimes(types, rows, extraTakes = [], now = Date.now()) {
+  const takes = new Map(types.map((type) => [type.id, []]))
+  rows.forEach((row) => row.items.forEach((item) => {
+    takes.get(item.key)?.push({ at: row.at, quantity: item.quantity })
+  }))
+  extraTakes.forEach((take) => takes.get(take.ticketTypeId)?.push(take))
+
+  return types.map((type) => {
+    const timed = takes.get(type.id).filter((take) => take.at !== null).sort((a, b) => a.at - b.at)
+    const sold = takes.get(type.id).reduce((sum, take) => sum + take.quantity, 0)
+
+    let soldOutAt = null
+    let running = 0
+    for (const take of timed) {
+      running += take.quantity
+      if (running >= type.stock) {
+        soldOutAt = take.at
+        break
+      }
+    }
+
+    const state = sold >= type.stock
+      ? 'soldOut'
+      : type.startAt === null || now < type.startAt
+        ? 'upcoming'
+        : type.endAt !== null && now > type.endAt ? 'ended' : 'selling'
+
+    return {
+      id: type.id,
+      label: type.name,
+      stock: type.stock,
+      sold,
+      startAt: type.startAt,
+      endAt: type.endAt,
+      soldOutAt,
+      // 0 when the seller registrations took it all before the sale opened
+      duration: soldOutAt !== null && type.startAt !== null ? Math.max(0, soldOutAt - type.startAt) : null,
+      state
+    }
+  })
+}
+
 /* ---------- numbers ---------- */
 
 const missing = (n) => n === null || n === undefined || Number.isNaN(n)
+
+// A time taken: "48 秒" under a minute, then "3.2 分鐘", "45 分鐘", "3,060 分鐘"
+export function formatMinutes(ms) {
+  if (missing(ms)) return '—'
+  if (ms < 60_000) return `${Math.floor(ms / 1000)} 秒`
+  const minutes = ms / 60_000
+  return `${minutes < 10 ? (Math.floor(minutes * 10) / 10).toFixed(1) : formatCount(Math.floor(minutes))} 分鐘`
+}
+
+// A long time taken, roughly: "2 小時 5 分", "3 天 4 小時"
+export function formatRoughDuration(ms) {
+  const minutes = Math.floor(ms / 60_000)
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours} 小時 ${minutes % 60} 分` : `${Math.floor(hours / 24)} 天 ${hours % 24} 小時`
+}
+
+// "11/5 12:03" in Taiwan, or "11/5 12:03:12" with seconds; only the time when
+// it is on the same Taiwan day as `sameDayAs`
+export function formatMoment(ms, { seconds = false, sameDayAs = null } = {}) {
+  const date = new Date(ms + TAIPEI_MS)
+  const parts = [date.getUTCHours(), date.getUTCMinutes(), ...(seconds ? [date.getUTCSeconds()] : [])]
+  const time = parts.map(pad).join(':')
+  if (sameDayAs !== null && taipeiDate(ms) === taipeiDate(sameDayAs)) return time
+  return `${date.getUTCMonth() + 1}/${date.getUTCDate()} ${time}`
+}
 
 export const formatCount = (n) => (missing(n) ? '—' : Math.round(n).toLocaleString('zh-TW'))
 export const formatCurrency = (n) => (missing(n) ? '—' : `NT$ ${Math.round(n).toLocaleString('zh-TW')}`)

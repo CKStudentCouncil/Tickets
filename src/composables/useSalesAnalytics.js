@@ -4,7 +4,8 @@ import { useNow } from 'src/composables/useNow'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
 import { subscribeAllOrders } from 'src/services/orderService'
-import { fetchTicketTypes } from 'src/services/ticketTypeService'
+import { fetchTicketTypes, getStockLimit } from 'src/services/ticketTypeService'
+import { fetchAllRegistrations } from 'src/services/sellerService'
 import { fetchArchiveRows, fetchSalesArchives, fetchUnfinishedPurge, importSalesArchive } from 'src/services/archiveService'
 import { fetchSurveyResponses } from 'src/services/surveyService'
 import {
@@ -14,6 +15,7 @@ import {
   currentSale,
   rowsFromArchive,
   saleRowOf,
+  sellOutTimes,
   taipeiDate,
   taipeiDayStart
 } from 'src/utils/salesAnalytics'
@@ -32,8 +34,10 @@ export function useSalesAnalytics() {
   const now = useNow(60_000)
   shop.init()
   const firstTicketSaleAt = ref(null)
+  const ticketTypes = shallowRef([])
   fetchTicketTypes()
     .then((types) => {
+      ticketTypes.value = types
       firstTicketSaleAt.value = types
         .map((type) => parseDate(type.salesStartTime))
         .filter(Boolean)
@@ -63,6 +67,36 @@ export function useSalesAnalytics() {
     }
   })
   onScopeDispose(unsubscribe)
+
+  // 學弟登記賣票 take from the same stock as the orders; read once, as there
+  // are few and they mostly come before the sale
+  const sellerTakes = shallowRef([])
+  fetchAllRegistrations()
+    .then((registrations) => {
+      sellerTakes.value = registrations.map((registration) => ({
+        ticketTypeId: String(registration.ticketTypeId || ''),
+        at: parseDate(registration.createdAt)?.getTime() ?? null,
+        quantity: Number(registration.quantity) || 0
+      }))
+    })
+    .catch((error) => console.error('Sales report seller registrations error:', error))
+
+  // how fast each limited ticket type sold out, live with the orders
+  const sellOuts = computed(() => sellOutTimes(
+    ticketTypes.value
+      .map((type) => ({
+        id: type.id,
+        name: type.name,
+        stock: getStockLimit(type),
+        startAt: parseDate(type.salesStartTime)?.getTime() ?? null,
+        endAt: parseDate(type.salesEndTime)?.getTime() ?? null
+      }))
+      // null: unlimited; 0: no stock set
+      .filter((type) => type.stock),
+    rows.value,
+    sellerTakes.value,
+    now.value.getTime()
+  ))
 
   /* ---------- the year compared with ---------- */
 
@@ -219,7 +253,7 @@ export function useSalesAnalytics() {
   return {
     now, loading, liveError, updatedAt,
     basis, archives, compareYear, archiveLoading, unfinishedPurge,
-    current, previous, report, survey,
+    current, previous, report, survey, sellOuts,
     importDraft, importSummary, importing, readImportFile, cancelImport, confirmImport
   }
 }

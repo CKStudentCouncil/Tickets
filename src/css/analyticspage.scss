@@ -569,6 +569,87 @@
   color: var(--muted);
 }
 
+/* 各票種售罄時間: each type's time to sell out over how much of it is sold */
+.sellout-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 0 32px;
+
+  margin: 0;
+  padding: 0;
+
+  list-style: none;
+}
+
+.sellout-row {
+  min-width: 0;
+  padding: 12px 0 14px;
+
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sellout-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sellout-name {
+  min-width: 0;
+  overflow: hidden;
+
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sellout-value {
+  flex: none;
+
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* as tall as a time, so the bars in a row of the grid line up */
+.sellout-value.pending {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 26px;
+}
+
+.sellout-track {
+  display: block;
+  height: 6px;
+  margin: 10px 0 8px;
+
+  background: var(--line-soft);
+}
+
+/* rounded at the data end, square at the baseline */
+.sellout-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 3px 3px 0;
+
+  transition: width .3s ease;
+}
+
+.sellout-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .period-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 16px;
@@ -716,7 +797,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .report {
+  .report,
+  .sellout-fill {
     transition: none;
   }
 }

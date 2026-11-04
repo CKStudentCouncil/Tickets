@@ -269,6 +269,29 @@
           </div>
         </div>
         <div class="stack">
+          <ChartCard
+            title="各票種售罄時間"
+            :subtitle="`${current.year} 年各限量票種從開賣到賣出最後一張所花的時間；已售張數含未付款訂單與學弟登記賣票，不含已刪除的訂單`"
+            :table="sellOutTable"
+            :empty="!sellOutRows.length"
+          >
+            <ul class="sellout-list">
+              <li v-for="type in sellOutRows" :key="type.id" class="sellout-row">
+                <div class="sellout-head">
+                  <span class="sellout-name">{{ type.label }}</span>
+                  <span class="sellout-value num" :class="{ pending: type.state !== 'soldOut' }">{{ type.value }}</span>
+                </div>
+                <span class="sellout-track" aria-hidden="true">
+                  <span class="sellout-fill" :style="{ width: type.fill, background: palette.current }" />
+                </span>
+                <div class="sellout-meta num">
+                  <span>{{ type.count }}</span>
+                  <span>{{ type.timing }}</span>
+                </div>
+              </li>
+            </ul>
+          </ChartCard>
+
           <template v-for="mode in timelineCards" :key="mode.id">
             <ChartCard
               :title="`${mode.label}營收`"
@@ -676,8 +699,11 @@ import {
   formatCurrency,
   formatDay,
   formatDecimal,
+  formatMinutes,
+  formatMoment,
   formatPercent,
   formatPeriod,
+  formatRoughDuration,
   granularityOptions,
   inRange,
   periodSeries,
@@ -772,6 +798,7 @@ const {
   previous,
   report,
   survey,
+  sellOuts,
   importDraft,
   importSummary,
   importing,
@@ -942,6 +969,32 @@ function timeSeries(metric) {
   }
   return series
 }
+
+// 各票種售罄時間: the time each limited type took to sell out, or where it stands
+const SELL_OUT_VALUES = { selling: '尚未售罄', ended: '未售罄', upcoming: '尚未開賣' }
+const HOUR_MS = 60 * 60 * 1000
+
+function sellOutTiming(type) {
+  const opened = type.startAt === null ? '' : `${formatMoment(type.startAt)} 開賣`
+  if (type.state === 'soldOut') {
+    if (type.soldOutAt === null) return opened
+    if (type.startAt !== null && type.soldOutAt < type.startAt) return '開賣前已由學弟登記賣完'
+    const soldOut = `${formatMoment(type.soldOutAt, { seconds: true, sameDayAs: type.startAt })} 售罄`
+    const rough = type.duration >= HOUR_MS ? `（約 ${formatRoughDuration(type.duration)}）` : ''
+    return [opened, soldOut + rough].filter(Boolean).join('，')
+  }
+  if (type.state === 'selling') return `${opened}，已過 ${formatMinutes(now.value.getTime() - type.startAt)}`
+  if (type.state === 'ended') return type.endAt === null ? opened : `${opened}，${formatMoment(type.endAt)} 結束`
+  return opened || '未設定開賣時間'
+}
+
+const sellOutRows = computed(() => sellOuts.value.map((type) => ({
+  ...type,
+  value: type.state === 'soldOut' ? (type.duration === null ? '已售罄' : formatMinutes(type.duration)) : SELL_OUT_VALUES[type.state],
+  fill: `${Math.min(1, type.sold / type.stock) * 100}%`,
+  count: `已售 ${formatCount(type.sold)} / ${formatCount(type.stock)} 張`,
+  timing: sellOutTiming(type)
+})))
 
 const timelineMode = ref('cumulative')
 
@@ -1304,6 +1357,19 @@ const ticketTypeTable = computed(() => {
     ])
   }
 })
+
+// minutes to one decimal, for reading off exactly
+const sellOutTable = computed(() => ({
+  columns: ['票種', '總張數', '已售', '開賣時間', '售罄時間', '花費分鐘'],
+  rows: sellOutRows.value.map((type) => [
+    type.label,
+    formatCount(type.stock),
+    formatCount(type.sold),
+    type.startAt === null ? '—' : formatMoment(type.startAt),
+    type.soldOutAt === null ? '—' : formatMoment(type.soldOutAt, { seconds: true }),
+    type.duration === null ? type.value : (type.duration / 60_000).toFixed(1)
+  ])
+}))
 
 function periodTableOf({ key, format }) {
   const compared = Boolean(periodRange.value.previous)

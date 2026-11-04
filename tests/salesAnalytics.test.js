@@ -12,8 +12,11 @@ import {
   formatCurrency,
   formatDay,
   formatDecimal,
+  formatMinutes,
+  formatMoment,
   formatPercent,
   formatPeriod,
+  formatRoughDuration,
   gradeOf,
   granularityOptions,
   groupOf,
@@ -25,6 +28,7 @@ import {
   resolvePeriod,
   rowsFromArchive,
   saleRowOf,
+  sellOutTimes,
   summarize,
   taipeiDate,
   taipeiDayStart,
@@ -317,6 +321,48 @@ test('a window is compared with the same part of the window before it', () => {
   assert.equal(formatPeriod(week, NOW), '11/1 – 11/7')
   assert.equal(formatPeriod({ start: at('2025-12-30T00:00:00+08:00'), end: at('2026-01-06T00:00:00+08:00') }, at('2026-01-05T00:00:00+08:00')), '2025/12/30 – 1/5')
   assert.equal(bucketLabels(at('2025-12-01T00:00:00+08:00'), 'month').title, '2025 年 12 月')
+})
+
+test('a ticket type sells out with the order or registration that takes its last ticket', () => {
+  const open = at('2026-11-05T12:00:00+08:00')
+  const item = (key, quantity) => ({ items: [{ ticketTypeId: key, name: key, price: 900, quantity }] })
+  const rows = [
+    // out of order, as the snapshot gives them
+    order('2026-11-05T12:03:12+08:00', item('early', 2)),
+    order('2026-11-05T12:00:40+08:00', item('early', 3)),
+    // a legacy item keeps its ticket type in `id`
+    order('2026-11-05T12:05:00+08:00', { items: [{ id: 'early', name: '早鳥票', price: 900, quantity: 4 }] }),
+    order('2026-11-05T13:00:00+08:00', item('open', 3)),
+    order('2026-11-06T12:00:00+08:00', item('closed', 1))
+  ]
+  const types = [
+    { id: 'early', name: '早鳥票', stock: 5, startAt: open, endAt: null },
+    { id: 'open', name: '一售', stock: 10, startAt: open, endAt: null },
+    { id: 'second', name: '二售', stock: 4, startAt: at('2026-11-10T12:00:00+08:00'), endAt: null },
+    { id: 'later', name: '晚鳥票', stock: 10, startAt: at('2026-11-10T12:00:00+08:00'), endAt: null },
+    { id: 'closed', name: '限時票', stock: 10, startAt: open, endAt: at('2026-11-06T23:59:00+08:00') }
+  ]
+  // the seller registrations took all of 二售 before it opened
+  const sellers = [{ ticketTypeId: 'second', at: at('2026-11-03T09:00:00+08:00'), quantity: 4 }]
+
+  const byId = Object.fromEntries(sellOutTimes(types, rows, sellers, NOW).map((type) => [type.id, type]))
+  // 3 at 12:00:40, then 2 at 12:03:12 reach the 5; the later 4 still count as sold
+  assert.equal(byId.early.state, 'soldOut')
+  assert.equal(byId.early.sold, 9)
+  assert.equal(byId.early.soldOutAt, at('2026-11-05T12:03:12+08:00'))
+  assert.equal(byId.early.duration, 192_000)
+  assert.deepEqual([byId.open.state, byId.open.sold, byId.open.duration], ['selling', 3, null])
+  assert.deepEqual([byId.second.state, byId.second.duration], ['soldOut', 0])
+  assert.deepEqual([byId.later.state, byId.later.sold], ['upcoming', 0])
+  assert.equal(byId.closed.state, 'ended')
+
+  assert.deepEqual([30_500, 192_000, 2_700_000, 183_600_000].map(formatMinutes), ['30 秒', '3.2 分鐘', '45 分鐘', '3,060 分鐘'])
+  assert.equal(formatMinutes(null), '—')
+  assert.equal(formatRoughDuration(7_500_000), '2 小時 5 分')
+  assert.equal(formatRoughDuration(183_600_000), '2 天 3 小時')
+  assert.equal(formatMoment(open), '11/5 12:00')
+  assert.equal(formatMoment(at('2026-11-05T12:03:12+08:00'), { seconds: true, sameDayAs: open }), '12:03:12')
+  assert.equal(formatMoment(at('2026-11-06T00:30:05+08:00'), { seconds: true, sameDayAs: open }), '11/6 00:30:05')
 })
 
 test('numbers are formatted for tiles, tables and axes', () => {
