@@ -14,7 +14,8 @@ export const getBucket = () => getStorage().bucket()
 
 export const HttpsError = functions.https.HttpsError
 
-// Staff role rank of an account: manager 1, admin 2, super_admin 3, else 0
+// Staff role rank of an account: manager 1, admin 2, super_admin 3,
+// developer 4, else 0
 export async function getRoleRank(uid) {
   const userDoc = await db.collection('users').doc(uid).get()
   const role = userDoc.exists ? userDoc.data()?.role : null
