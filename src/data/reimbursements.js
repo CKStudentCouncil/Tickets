@@ -17,7 +17,7 @@ export const INVOICE_DRIVE_OWNER = 'ckhssc@gl.ck.tp.edu.tw'
 // 科目: what a claim was spent on. The claimant picks one, super admins may
 // change it; the 收支表 on /super_admin/reimbursements groups the expenses by
 // it, in this order. Keep in sync with functions/lib/reimbursements.js.
-export const REIMBURSEMENT_CATEGORIES = ['場地', '音響燈光', '舞台演出', '場佈道具', '宣傳印刷', '票務', '餐飲', '其他']
+export const REIMBURSEMENT_CATEGORIES = ['場地', '廠商', '場佈', '文書', '票務', '餐食', '其他']
 // claims made before 科目 existed
 export const UNCATEGORIZED = '未分類'
 
