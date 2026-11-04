@@ -11,7 +11,8 @@
 //   q          { [ticketTypeId]: quantity } exactly as the order asks
 //   held       true when the Worker took the tickets from the counts in
 //              Redis (its hold is named by rid); false when Redis gave no
-//              answer and the buyer goes to the shards as without the gate
+//              answer and the Worker runs with REDIS_FAIL_OPEN: the buyer
+//              goes to the shards as without the gate
 //   miss       { [ticketTypeId]: generation } the types the gate had no count
 //              for: createOrder sets those counts from its look at the shards
 //   iat, exp   seconds; a pass lives PASS_TTL_S

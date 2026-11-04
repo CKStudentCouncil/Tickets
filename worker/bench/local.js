@@ -138,9 +138,10 @@ try {
 
   console.log(`  throughput      ${(BUYERS / seconds).toFixed(0)} checkouts/s (${seconds.toFixed(2)} s for all)`)
   console.log(`  passes          ${admitted.length} of ${STOCK} tickets, the last after ${((lastAdmit - t0) / 1000).toFixed(2)} s`)
-  if (unheld.length) console.log(`                  ${unheld.length} of them not held: Redis gave no answer within 800 ms`)
+  if (unheld.length) console.log(`                  ${unheld.length} of them not held (REDIS_FAIL_OPEN)`)
   console.log(`  售完            ${turned.length}, ${cached.length} of them from the isolate memory`)
-  console.log(`  other answers   ${other.length}`)
+  console.log(`  busy (503)      ${other.filter((r) => r.status === 503).length}, to be tried again by the storefront`)
+  console.log(`  other answers   ${other.filter((r) => r.status !== 503).length}`)
   console.log(`  Redis calls     ${evalCalls} for ${BUYERS} checkouts`)
   console.log(`  latency, pass   ${latencies(admitted)}`)
   console.log(`  latency, 售完   ${latencies(turned)}`)

@@ -4,7 +4,7 @@
 import { after, before, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { forgetSoldOut, handle } from '../src/index.js'
+import { forgetSoldOut, handle, redisInflight } from '../src/index.js'
 import { resetKeyCache } from '../src/firebaseAuth.js'
 import { JWKS_URL, PROJECT_ID, createIssuer } from './idTokens.js'
 import { hasRedisServer, startUpstash } from '../../functions/test/redis/upstash.js'
@@ -133,9 +133,21 @@ describe('the pass', () => {
     assert.equal(await upstash.redis.call(['EXISTS', holdKey(rid(1))]), 0)
   })
 
-  test('still signs a pass, not held, when Redis gives no answer', async () => {
+  test('answers busy (503) when Redis gives no answer in time, not a pass', async () => {
+    const unreachable = { ...env, UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:1', REDIS_WAIT_MS: '300' }
+    const started = Date.now()
+    const result = await ask('a', { small: 1 }, rid(1), { envOverride: unreachable })
+    assert.equal(result.status, 503)
+    assert.equal(result.body.error, 'busy')
+    assert.ok(Number(result.headers.get('Retry-After')) >= 1)
+    assert.ok(Date.now() - started < 1000, 'gives up within REDIS_WAIT_MS')
+    // not set up at all: busy at once
+    assert.equal((await ask('a', { small: 1 }, rid(1), { envOverride: { ...env, UPSTASH_REDIS_REST_URL: 'none' } })).status, 503)
+  })
+
+  test('with REDIS_FAIL_OPEN, signs a pass not held instead', async () => {
     const result = await ask('a', { small: 1 }, rid(1), {
-      envOverride: { ...env, UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:1' }
+      envOverride: { ...env, UPSTASH_REDIS_REST_URL: 'http://127.0.0.1:1', REDIS_WAIT_MS: '200', REDIS_FAIL_OPEN: 'true' }
     })
     assert.equal(result.status, 200)
     assert.equal((await verifyGatePass(result.body.pass, SECRET)).held, false)
@@ -184,6 +196,54 @@ describe('the sold-out memory', () => {
     const off = { ...env, SOLD_OUT_CACHE_MS: '0' }
     await call(t0, 'd', 4, off)
     assert.equal((await call(t0 + 1, 'e', 5, off)).cached, undefined)
+  })
+})
+
+describe('a rush', () => {
+  // Redis calls answered after `delayMs`; the first `failures` get no answer
+  const slowRedis = ({ delayMs = 0, failures = 0 } = {}) => {
+    let calls = 0
+    let most = 0
+    const wrapped = async (url, init) => {
+      if (String(url) !== upstash.url) return fetchImpl(url, init)
+      calls++
+      most = Math.max(most, redisInflight())
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      if (calls <= failures) throw new Error('no answer')
+      return fetchImpl(url, init)
+    }
+    return { wrapped, stats: () => ({ calls, most }) }
+  }
+  const askWith = async (wrapped, uid, quantities, requestId, envOverride = env) => {
+    const response = await handle(new Request('https://gate.test/pass', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await issuer.sign(uid)}` },
+      body: JSON.stringify({ requestId, quantities })
+    }), envOverride, { fetchImpl: wrapped })
+    return { status: response.status, body: await response.json() }
+  }
+
+  test('keeps at most REDIS_MAX_INFLIGHT calls at once; the others wait, then hear 售完 from memory', async () => {
+    await upstash.redis.call(['SET', gateKey('small'), 1])
+    const redisSlow = slowRedis({ delayMs: 40 })
+    const limited = { ...env, REDIS_MAX_INFLIGHT: '2' }
+    const results = await Promise.all(Array.from({ length: 30 }, (_, i) =>
+      askWith(redisSlow.wrapped, `rush-${i}`, { small: 1 }, rid(i), limited)))
+    assert.equal(results.filter((r) => r.status === 200).length, 1)
+    assert.equal(results.filter((r) => r.status === 409).length, 29)
+    const { calls, most } = redisSlow.stats()
+    assert.ok(most <= 2, `${most} calls at once`)
+    assert.ok(calls < 10, `${calls} Redis calls for 30 checkouts`)
+    assert.equal(await left('small'), 0)
+  })
+
+  test('tries a call that got no answer again, within the wait', async () => {
+    await upstash.redis.call(['SET', gateKey('small'), 5])
+    const flaky = slowRedis({ failures: 2 })
+    const result = await askWith(flaky.wrapped, 'a', { small: 1 }, rid(1))
+    assert.equal(result.status, 200)
+    assert.equal(flaky.stats().calls, 3)
+    assert.equal(await left('small'), 4)
   })
 })
 

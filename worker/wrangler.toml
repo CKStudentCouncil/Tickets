@@ -12,6 +12,14 @@ FIREBASE_PROJECT_ID = "cksc-ticket"
 ALLOWED_ORIGINS = "https://tickets.cksc.tw"
 # How long an isolate turns a type away without asking Redis after Redis did
 SOLD_OUT_CACHE_MS = "1000"
+# Redis calls one isolate makes at once; the other checkouts wait their turn
+REDIS_MAX_INFLIGHT = "50"
+# How long a checkout waits for Redis in all (turn and retries) before 503
+REDIS_WAIT_MS = "3000"
+# "true": when Redis gives no answer, sign a pass not held (createOrder reads
+# the shards) instead of 503. For a Redis outage only: Cloud Functions then
+# takes the whole rush
+REDIS_FAIL_OPEN = "false"
 
 # Secrets (wrangler secret put <NAME>):
 #   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN  the same database as createOrder
