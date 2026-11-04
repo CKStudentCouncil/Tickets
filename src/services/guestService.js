@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -9,7 +10,8 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where
+  where,
+  writeBatch
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from 'src/boot/firebase'
@@ -25,23 +27,36 @@ import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 //   officerInviteNotes/{id}    { note }: what the link is for, for its officer
 //                              and super admins only
 //   orders/{id}                the tickets, NT$0 orders with complimentary: true
+// 登記連結: super admins share one link with a group; each person signs up on
+// /join/{id}, super admins approve or reject them here, then send the
+// approved ones their ticket.
+//   guestSignupLinks/{id}      { title, quantity (per person), open }
+//   guestSignupLinks/{id}/signups/{uid}
+//                              { name, email, note, status: 'pending' |
+//                              'approved' | 'rejected' | 'sent', orderId }
 
 const callables = {
   sendGuestInvitation: httpsCallable(functions, 'sendGuestInvitation'),
   sendOfficerTicket: httpsCallable(functions, 'sendOfficerTicket'),
   createOfficerInvite: httpsCallable(functions, 'createOfficerInvite'),
   revokeOfficerInvite: httpsCallable(functions, 'revokeOfficerInvite'),
-  claimOfficerInvite: httpsCallable(functions, 'claimOfficerInvite')
+  claimOfficerInvite: httpsCallable(functions, 'claimOfficerInvite'),
+  createGuestSignupLink: httpsCallable(functions, 'createGuestSignupLink'),
+  submitGuestSignup: httpsCallable(functions, 'submitGuestSignup'),
+  sendGuestSignupTicket: httpsCallable(functions, 'sendGuestSignupTicket')
 }
 
 const officerRef = (email) => doc(db, 'officers', email.trim().toLowerCase())
 const inviteRef = (id) => doc(db, 'officerInvites', id)
+const signupLinkRef = (id) => doc(db, 'guestSignupLinks', id)
+const signupRef = (linkId, uid) => doc(db, 'guestSignupLinks', linkId, 'signups', uid)
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const toItem = (snapshot) => ({ id: snapshot.id, ...snapshot.data() })
 
 export const inviteUrl = (id) => `${SITE_URL}/invite/${encodeURIComponent(id)}`
+export const signupUrl = (id) => `${SITE_URL}/join/${encodeURIComponent(id)}`
 
 // Tickets an officer may still give out
 export const remainingOf = (officer) => Math.max(0, (Number(officer?.quota) || 0) - (Number(officer?.used) || 0))
@@ -117,6 +132,23 @@ export async function fetchInvite(id) {
 // returns { id } of the order
 export const claimOfficerInvite = (inviteId, name) => call('claimOfficerInvite', { inviteId, name })
 
+/* ---------- guests with a sign-up link ---------- */
+
+// null when the link is unknown (mistyped)
+export async function fetchSignupLink(id) {
+  const snapshot = await getDoc(signupLinkRef(id))
+  return snapshot.exists() ? toItem(snapshot) : null
+}
+
+// The signed-in guest's sign-up on a link, or null before they sign up
+export async function fetchMySignup(linkId, uid) {
+  const snapshot = await getDoc(signupRef(linkId, uid))
+  return snapshot.exists() ? toItem(snapshot) : null
+}
+
+// { linkId, name, note }; signing up again while pending changes it
+export const submitGuestSignup = (input) => call('submitGuestSignup', input)
+
 /* ---------- super admins ---------- */
 
 export async function fetchOfficers() {
@@ -159,3 +191,40 @@ export async function fetchGuestTickets() {
 
 // { requestId, quantity, name, email }; returns { id } of its order
 export const sendGuestInvitation = (input) => call('sendGuestInvitation', input)
+
+/* ---------- 登記連結 (super admins) ---------- */
+
+export async function fetchSignupLinks() {
+  const snapshot = await getDocs(collection(db, 'guestSignupLinks'))
+  return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
+}
+
+// Every link's sign-ups; `key` tells apart one guest's sign-ups on two links
+export async function fetchAllSignups() {
+  const snapshot = await getDocs(collectionGroup(db, 'signups'))
+  return snapshot.docs
+    .map((d) => ({ ...d.data(), key: d.ref.path, linkId: d.ref.parent.parent.id, uid: d.id }))
+    .sort(byCreatedAtDesc)
+}
+
+// { requestId, title, quantity }; returns { id } of the link
+export const createSignupLink = (input) => call('createGuestSignupLink', input)
+
+// closes a link to new sign-ups, or opens it again
+export const setSignupLinkOpen = (id, open) => updateDoc(signupLinkRef(id), { open })
+
+// Sets the review of sign-ups ({ linkId, uid }) to 'pending', 'approved' or
+// 'rejected'. All or none: one sent meanwhile fails the whole batch.
+export async function reviewSignups(signups, status, reviewerUid) {
+  for (let start = 0; start < signups.length; start += 500) {
+    const batch = writeBatch(db)
+    for (const { linkId, uid } of signups.slice(start, start + 500)) {
+      batch.update(signupRef(linkId, uid), { status, reviewedAt: serverTimestamp(), reviewedByUid: reviewerUid })
+    }
+    await batch.commit()
+  }
+}
+
+// Sends an approved sign-up its ticket; returns { id } of the order. Sending
+// one already sent returns the same order.
+export const sendSignupTicket = ({ linkId, uid }) => call('sendGuestSignupTicket', { linkId, uid })

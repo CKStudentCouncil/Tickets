@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { randomBytes } from 'node:crypto'
 
 import { db, HttpsError, assertRole, getRoleRank } from './common.js'
-import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE, REGION, ROLE_RANK } from './constants.js'
+import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE, MAX_SIGNUP_NOTE, MAX_SIGNUP_TITLE, REGION, ROLE_RANK } from './constants.js'
 import { getBuyerAccount } from './orders.js'
 import { generateOrderId, isValidRequestId } from './orderValidation.js'
 import { getTaiwanDateKey } from './time.js'
@@ -46,8 +46,24 @@ import { getTaiwanDateKey } from './time.js'
 //   officerReleases/{orderId}       marks a deleted officer ticket whose
 //                                   tickets went back to the quota
 //
+// 登記連結 (sign-up links): a super admin makes one link for a group; each
+// person opens it, signs in and signs up with their name; super admins
+// approve or reject each sign-up and then send the approved ones their
+// ticket, in the council's name and outside any quota.
+//   guestSignupLinks/{linkId}       { title, quantity (tickets per person),
+//                                   open, createdByUid, createdAt }; the random
+//                                   id is the secret in the link, and whoever
+//                                   holds it reads it (title included)
+//   guestSignupLinks/{linkId}/signups/{uid}
+//                                   { linkId, uid, name, email, note, status:
+//                                   'pending' | 'approved' | 'rejected' |
+//                                   'sent', createdAt, updatedAt } and, once
+//                                   sent, orderId, sentAt, sentByUid
+//
 // Every document here is written only by these functions, except the
-// officers' name and quota.
+// officers' name and quota, a sign-up link's `open` and a sign-up's review
+// (pending, approved or rejected), which super admins write
+// (firestore.rules).
 
 // 公關票 order ids start with this instead of a school code
 export const GUEST_ORDER_PREFIX = 'PR'
@@ -67,6 +83,10 @@ const inviteRef = (id) => db.doc(`officerInvites/${id}`)
 const requestRef = (id) => db.doc(`invitationRequests/${id}`)
 const releaseRef = (orderId) => db.doc(`officerReleases/${orderId}`)
 const noteRef = (inviteId) => db.doc(`officerInviteNotes/${inviteId}`)
+const signupLinkRef = (id) => db.doc(`guestSignupLinks/${id}`)
+const signupRef = (linkId, uid) => db.doc(`guestSignupLinks/${linkId}/signups/${uid}`)
+// Firebase Auth uids: never a path separator
+const UID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 
 export const newInviteId = () => randomBytes(18).toString('base64url')
 
@@ -141,11 +161,39 @@ export function sanitizeClaimInput(data) {
   return { inviteId: sanitizeInviteId(data), name: sanitizeName(data) }
 }
 
+// { requestId, title, quantity }: `quantity` is each person's tickets
+export function sanitizeSignupLinkInput(data) {
+  const requestId = checkRequestId(data)
+  const quantity = sanitizeQuantity(data)
+  const title = cleanString(data?.title, MAX_SIGNUP_TITLE)
+  if (!title) throw new HttpsError('invalid-argument', '請填寫連結名稱')
+  return { requestId, title, quantity }
+}
+
+export function sanitizeLinkId(data) {
+  const linkId = String(data?.linkId ?? '')
+  if (!INVITE_ID_PATTERN.test(linkId)) throw new HttpsError('not-found', '這個登記連結無效或已失效')
+  return linkId
+}
+
+// A guest's sign-up: { linkId, name, note }
+export function sanitizeSignupInput(data) {
+  return { linkId: sanitizeLinkId(data), name: sanitizeName(data), note: cleanString(data?.note, MAX_SIGNUP_NOTE) }
+}
+
+// The sign-up a super admin sends: { linkId, uid }
+export function sanitizeSignupRef(data) {
+  const linkId = sanitizeLinkId(data)
+  const uid = String(data?.uid ?? '')
+  if (!UID_PATTERN.test(uid)) throw new HttpsError('not-found', '找不到這筆登記')
+  return { linkId, uid }
+}
+
 // The order of a 公關票, shaped like a checkout's (orders.js) so every
 // order view, export and the sales report read it as one. `officer` is who
 // gave it out ({ email, name, since }), null when a super admin sent it
-// directly.
-export function guestOrderOf({ guest, quantity, userId, invitedByUid, ticketCode, officer = null, inviteId = null }) {
+// directly. `signupLinkId` is the sign-up link a guest came through.
+export function guestOrderOf({ guest, quantity, userId, invitedByUid, ticketCode, officer = null, inviteId = null, signupLinkId = null }) {
   return {
     customerName: guest.name,
     customerEmail: guest.email,
@@ -162,6 +210,7 @@ export function guestOrderOf({ guest, quantity, userId, invitedByUid, ticketCode
     officerName: officer?.name || null,
     officerSince: officer?.since || null,
     inviteId,
+    ...(signupLinkId ? { signupLinkId } : {}),
     // whoever claimed an invite reads it under 已購門票, as a buyer would
     userId,
     invitedByUid,
@@ -423,6 +472,107 @@ export const claimOfficerInvite = functions
         orderId: orderRef.id,
         claimedByUid: account.uid,
         claimedAt: FieldValue.serverTimestamp()
+      })
+      return { id: orderRef.id }
+    })
+  })
+
+// A super admin makes a sign-up link for a group: `title` names it (whoever
+// signs up sees it) and `quantity` is each person's tickets. It starts open.
+// A retried call with the same requestId returns the same link.
+export const createGuestSignupLink = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    await assertRole(context, 'super_admin')
+    const { requestId, title, quantity } = sanitizeSignupLinkInput(data)
+    const uid = context.auth.uid
+    const ref = signupLinkRef(newInviteId())
+
+    try {
+      return await db.runTransaction(async (tx) => {
+        const earlier = replayed(await tx.get(requestRef(requestId)), 'signup-link', uid)
+        if (earlier) return { id: earlier.linkId }
+
+        tx.create(ref, { title, quantity, open: true, createdByUid: uid, createdAt: FieldValue.serverTimestamp() })
+        tx.create(requestRef(requestId), {
+          kind: 'signup-link',
+          linkId: ref.id,
+          createdByUid: uid,
+          createdAt: FieldValue.serverTimestamp()
+        })
+        return { id: ref.id }
+      })
+    } catch (error) {
+      if (error instanceof HttpsError) throw error
+      console.error('[createGuestSignupLink] unexpected error:', error)
+      throw new HttpsError('internal', '產生連結失敗，請稍後再試')
+    }
+  })
+
+// A guest opens a sign-up link, signs in and signs up with their name and
+// an optional note for the review; the ticket will go to their account
+// email. They may change it while it waits for review and the link is open;
+// once reviewed it stays as it is.
+export const submitGuestSignup = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    const account = getBuyerAccount(context)
+    const { linkId, name, note } = sanitizeSignupInput(data)
+    const ref = signupRef(linkId, account.uid)
+
+    try {
+      return await db.runTransaction(async (tx) => {
+        const [link, signup] = await tx.getAll(signupLinkRef(linkId), ref)
+        if (!link.exists) throw new HttpsError('not-found', '這個登記連結無效或已失效')
+        if (signup.exists && signup.data().status !== 'pending') {
+          throw new HttpsError('failed-precondition', '你的登記已經審核過，無法再修改')
+        }
+        if (link.data().open !== true) throw new HttpsError('failed-precondition', '這個連結已經停止登記')
+
+        const fields = { name, email: account.email, note, updatedAt: FieldValue.serverTimestamp() }
+        if (signup.exists) tx.update(ref, fields)
+        else tx.create(ref, { linkId, uid: account.uid, ...fields, status: 'pending', createdAt: FieldValue.serverTimestamp() })
+        return { status: 'pending' }
+      })
+    } catch (error) {
+      if (error instanceof HttpsError) throw error
+      console.error('[submitGuestSignup] unexpected error:', error)
+      throw new HttpsError('internal', '登記失敗，請稍後再試')
+    }
+  })
+
+// A super admin sends an approved sign-up its ticket, in the council's name
+// and outside any quota: the order goes to the guest's name and account
+// email, they own it (已購門票), and the sign-up is marked sent. Sending one
+// already sent returns the same ticket, so a lost response is safe to retry.
+export const sendGuestSignupTicket = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    await assertRole(context, 'super_admin')
+    const { linkId, uid } = sanitizeSignupRef(data)
+    const ref = signupRef(linkId, uid)
+
+    return withNewOrder('sendGuestSignupTicket', async (orderRef, tx) => {
+      const [link, signup] = await tx.getAll(signupLinkRef(linkId), ref)
+      if (!signup.exists) throw new HttpsError('not-found', '找不到這筆登記')
+      const { status, orderId, name, email } = signup.data()
+      if (status === 'sent') return { id: orderId }
+      if (status !== 'approved') throw new HttpsError('failed-precondition', '只能寄給已核准的登記')
+      if (!link.exists) throw new HttpsError('not-found', '這個登記連結無效或已失效')
+
+      tx.create(orderRef, guestOrderOf({
+        guest: { name, email },
+        quantity: link.data().quantity,
+        userId: uid,
+        invitedByUid: context.auth.uid,
+        ticketCode: newTicketCode(),
+        signupLinkId: linkId
+      }))
+      tx.update(ref, {
+        status: 'sent',
+        orderId: orderRef.id,
+        sentAt: FieldValue.serverTimestamp(),
+        sentByUid: context.auth.uid
       })
       return { id: orderRef.id }
     })

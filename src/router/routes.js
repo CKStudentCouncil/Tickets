@@ -104,6 +104,15 @@ const routes = [
         meta: { requiresAuth: true }
       },
       {
+        // 公關票登記連結: one link for a group; each person signs up and gets
+        // a ticket once a super admin approves and sends it. Open before the
+        // shop is.
+        path: 'join/:id',
+        name: 'guest-signup',
+        component: () => import('pages/GuestSignupPage.vue'),
+        meta: { requiresAuth: true }
+      },
+      {
         path: 'comingsoon',
         name: 'comingsoon',
         component: () => import('pages/ComingSoonPage.vue')

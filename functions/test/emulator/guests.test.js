@@ -14,6 +14,9 @@ const callRevokeInvite = fft.wrap(functions.revokeOfficerInvite)
 const callClaimInvite = fft.wrap(functions.claimOfficerInvite)
 const callRelease = fft.wrap(functions.releaseOfficerQuota)
 const callPrepare = fft.wrap(functions.prepareOrderNotification)
+const callCreateSignupLink = fft.wrap(functions.createGuestSignupLink)
+const callSignUp = fft.wrap(functions.submitGuestSignup)
+const callSendSignup = fft.wrap(functions.sendGuestSignupTicket)
 
 const SUPER = { uid: 'super-uid', email: 'super@example.com' }
 const ADMIN = { uid: 'admin-uid', email: 'admin@example.com' }
@@ -366,6 +369,136 @@ describe('council invite links (super admins, outside any quota)', () => {
     assert.equal((await callCreateInvite(request, as(SUPER))).id, first.id)
     assert.equal((await db.collection('officerInvites').get()).size, 1)
     await assert.rejects(callSend(send({ requestId: request.requestId }), as(SUPER)), { code: 'invalid-argument' })
+  })
+})
+
+describe('sign-up links (登記連結)', () => {
+  const linkInput = (extra = {}) => ({ requestId: nextRequestId(), title: '熱舞社校友', quantity: 2, ...extra })
+  const linkOf = async (id) => (await db.doc(`guestSignupLinks/${id}`).get()).data()
+  const signupOf = async (linkId, uid = GUEST.uid) => (await db.doc(`guestSignupLinks/${linkId}/signups/${uid}`).get()).data()
+  // what a super admin's review does on GuestAdminPage.vue (firestore.rules allow it)
+  const reviewAs = (linkId, uid, status) => db.doc(`guestSignupLinks/${linkId}/signups/${uid}`).update({ status })
+
+  test('a super admin makes an open link; a retry returns the same one', async () => {
+    const request = linkInput()
+    const { id } = await callCreateSignupLink(request, as(SUPER))
+
+    assert.match(id, /^[A-Za-z0-9_-]{24}$/)
+    const link = await linkOf(id)
+    assert.equal(link.title, '熱舞社校友')
+    assert.equal(link.quantity, 2)
+    assert.equal(link.open, true)
+    assert.equal(link.createdByUid, SUPER.uid)
+
+    assert.equal((await callCreateSignupLink(request, as(SUPER))).id, id)
+    assert.equal((await db.collection('guestSignupLinks').get()).size, 1)
+    // its request id is no other call's retry key
+    await assert.rejects(callSend(send({ requestId: request.requestId }), as(SUPER)), { code: 'invalid-argument' })
+  })
+
+  test('only super admins make links', async () => {
+    for (const who of [ADMIN, OFFICER, STRANGER]) {
+      await assert.rejects(callCreateSignupLink(linkInput(), as(who)), { code: 'permission-denied' })
+    }
+    await assert.rejects(callCreateSignupLink(linkInput(), {}), { code: 'unauthenticated' })
+    assert.equal((await db.collection('guestSignupLinks').get()).size, 0)
+  })
+
+  test('guests sign up pending with their account email, and may change it until it is reviewed', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    assert.deepEqual(await callSignUp({ linkId, name: ' 陳小華 ', note: '熱舞社 80 屆' }, as(GUEST)), { status: 'pending' })
+
+    let signup = await signupOf(linkId)
+    assert.equal(signup.status, 'pending')
+    assert.equal(signup.name, '陳小華')
+    assert.equal(signup.email, 'guest@example.com')
+    assert.equal(signup.note, '熱舞社 80 屆')
+    assert.equal(signup.uid, GUEST.uid)
+    assert.equal(signup.linkId, linkId)
+    // nothing is sent yet
+    assert.equal((await db.collection('orders').get()).size, 0)
+
+    // signing up again changes the same sign-up
+    await callSignUp({ linkId, name: '陳大華' }, as(GUEST))
+    signup = await signupOf(linkId)
+    assert.equal(signup.name, '陳大華')
+    assert.equal(signup.note, '')
+    assert.equal((await db.collection(`guestSignupLinks/${linkId}/signups`).get()).size, 1)
+
+    await reviewAs(linkId, GUEST.uid, 'rejected')
+    await assert.rejects(callSignUp({ linkId, name: '陳小華' }, as(GUEST)), { code: 'failed-precondition' })
+    assert.equal((await signupOf(linkId)).status, 'rejected')
+  })
+
+  test('a closed or unknown link takes no sign-ups, nor unverified accounts', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    await assert.rejects(callSignUp({ linkId, name: '陳小華' }, as(GUEST, false)), { code: 'failed-precondition' })
+    await assert.rejects(callSignUp({ linkId, name: '陳小華' }, {}), { code: 'unauthenticated' })
+    await assert.rejects(callSignUp({ linkId: 'ZyXwVuTsRqPoNmLkJiHgFeDc', name: '陳小華' }, as(GUEST)), { code: 'not-found' })
+
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+    await db.doc(`guestSignupLinks/${linkId}`).update({ open: false })
+    await assert.rejects(callSignUp({ linkId, name: '王' }, as(STRANGER)), { code: 'failed-precondition', message: '這個連結已經停止登記' })
+    // nor changes to those already in
+    await assert.rejects(callSignUp({ linkId, name: '陳大華' }, as(GUEST)), { code: 'failed-precondition' })
+    assert.equal((await signupOf(linkId)).name, '陳小華')
+  })
+
+  test('an approved sign-up is sent its ticket once, in the council\'s name, owned by the guest', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput({ quantity: 3 }), as(SUPER))
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+
+    // not before it is approved
+    await assert.rejects(callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER)), { code: 'failed-precondition' })
+    await reviewAs(linkId, GUEST.uid, 'approved')
+
+    const { id } = await callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER))
+    assert.match(id, /^PR\d{8}/)
+    const order = await orderOf(id)
+    assert.equal(order.complimentary, true)
+    assert.equal(order.customerName, '陳小華')
+    assert.equal(order.customerEmail, 'guest@example.com')
+    assert.equal(order.userId, GUEST.uid)
+    assert.equal(order.invitedByUid, SUPER.uid)
+    assert.equal(order.officerEmail, null)
+    assert.equal(order.signupLinkId, linkId)
+    assert.equal(order.items[0].quantity, 3)
+    assert.equal(order.emailStatus, 'pending')
+
+    const signup = await signupOf(linkId)
+    assert.equal(signup.status, 'sent')
+    assert.equal(signup.orderId, id)
+    assert.equal(signup.sentByUid, SUPER.uid)
+
+    // a retry (a lost response) returns the same ticket
+    assert.equal((await callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER))).id, id)
+    assert.equal((await db.collection('orders').get()).size, 1)
+    // and a sent sign-up can no longer be changed by the guest
+    await assert.rejects(callSignUp({ linkId, name: '陳大華' }, as(GUEST)), { code: 'failed-precondition' })
+    assert.equal((await officerOf()).used, 0)
+  })
+
+  test('simultaneous sends of one sign-up make one ticket', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+    await reviewAs(linkId, GUEST.uid, 'approved')
+
+    const results = await Promise.all(Array.from({ length: 3 }, () => callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER))))
+    assert.equal(new Set(results.map((r) => r.id)).size, 1)
+    assert.equal((await db.collection('orders').get()).size, 1)
+  })
+
+  test('only super admins send, and only sign-ups that exist', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+    await reviewAs(linkId, GUEST.uid, 'approved')
+
+    for (const who of [ADMIN, OFFICER, GUEST]) {
+      await assert.rejects(callSendSignup({ linkId, uid: GUEST.uid }, as(who)), { code: 'permission-denied' })
+    }
+    await assert.rejects(callSendSignup({ linkId, uid: STRANGER.uid }, as(SUPER)), { code: 'not-found' })
+    await assert.rejects(callSendSignup({ linkId, uid: '../x' }, as(SUPER)), { code: 'not-found' })
+    assert.equal((await db.collection('orders').get()).size, 0)
   })
 })
 

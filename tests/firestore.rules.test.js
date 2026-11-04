@@ -10,6 +10,7 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -951,6 +952,93 @@ describe('公關票 (officers, officerInvites)', () => {
     // the old /guest registrations are gone
     await assertFails(setDoc(doc(as(other), 'guestRegistrations', other.uid), { name: '陳小華', email: other.email }))
     await assertFails(getDocs(collection(as(staff.superAdmin), 'guestRegistrations')))
+  })
+})
+
+describe('公關票登記連結 (guestSignupLinks and their sign-ups)', () => {
+  const guest = { uid: 'guest-uid', email: 'guest@example.com' }
+  const other = { uid: 'other-uid', email: 'other@example.com' }
+  const LINK_ID = 'AbCdEfGhIjKlMnOpQrStUvWx'
+  const linkDoc = (db) => doc(db, 'guestSignupLinks', LINK_ID)
+  const signupDoc = (db, uid = guest.uid) => doc(db, 'guestSignupLinks', LINK_ID, 'signups', uid)
+  // what GuestAdminPage.vue writes for a review (reviewSignups)
+  const review = (status, who = staff.superAdmin) => ({ status, reviewedAt: serverTimestamp(), reviewedByUid: who.uid })
+  const seedSignup = (fields = {}) =>
+    env.withSecurityRulesDisabled((context) => setDoc(signupDoc(context.firestore()), {
+      linkId: LINK_ID, uid: guest.uid, name: '陳小華', email: guest.email, note: '', status: 'pending', createdAt: Timestamp.now(), ...fields
+    }))
+
+  beforeEach(() => env.withSecurityRulesDisabled((context) =>
+    setDoc(linkDoc(context.firestore()), { title: '熱舞社校友', quantity: 1, open: true, createdByUid: staff.superAdmin.uid, createdAt: Timestamp.now() })
+  ))
+
+  test('a link is read by whoever holds it, listed by super admins, and only opened or closed by them', async () => {
+    await assertFails(getDoc(linkDoc(anon())))
+    await assertSucceeds(getDoc(linkDoc(as(guest))))
+    await assertFails(getDocs(collection(as(guest), 'guestSignupLinks')))
+    await assertFails(getDocs(collection(as(staff.admin), 'guestSignupLinks')))
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'guestSignupLinks')))
+
+    await assertSucceeds(updateDoc(linkDoc(as(staff.superAdmin)), { open: false }))
+    await assertFails(updateDoc(linkDoc(as(staff.superAdmin)), { open: 'yes' }))
+    await assertFails(updateDoc(linkDoc(as(staff.superAdmin)), { quantity: 10 }))
+    await assertFails(updateDoc(linkDoc(as(staff.superAdmin)), { title: '改' }))
+    for (const who of [guest, staff.admin]) {
+      await assertFails(updateDoc(linkDoc(as(who)), { open: true }))
+    }
+    // only createGuestSignupLink makes them; nobody deletes them
+    await assertFails(setDoc(doc(as(staff.superAdmin), 'guestSignupLinks', 'NewNewNewNewNewNewNewNewN'), { title: 'x', quantity: 1, open: true }))
+    await assertFails(deleteDoc(linkDoc(as(staff.superAdmin))))
+  })
+
+  test('a guest reads their own sign-up, also before signing up; nobody else but super admins', async () => {
+    // not signed up yet: the page asks, and learns there is none
+    await assertSucceeds(getDoc(signupDoc(as(guest))))
+    await seedSignup()
+    await assertSucceeds(getDoc(signupDoc(as(guest))))
+    await assertFails(getDoc(signupDoc(as(other), guest.uid)))
+    await assertFails(getDoc(signupDoc(as(staff.admin), guest.uid)))
+    await assertFails(getDoc(signupDoc(anon(), guest.uid)))
+    await assertSucceeds(getDoc(signupDoc(as(staff.superAdmin), guest.uid)))
+
+    await assertFails(getDocs(collection(as(guest), 'guestSignupLinks', LINK_ID, 'signups')))
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'guestSignupLinks', LINK_ID, 'signups')))
+    await assertFails(getDocs(collectionGroup(as(guest), 'signups')))
+    await assertFails(getDocs(collectionGroup(as(staff.admin), 'signups')))
+    await assertSucceeds(getDocs(collectionGroup(as(staff.superAdmin), 'signups')))
+  })
+
+  test('only submitGuestSignup makes or changes a sign-up', async () => {
+    const fields = { linkId: LINK_ID, uid: guest.uid, name: '陳小華', email: guest.email, note: '', status: 'pending', createdAt: serverTimestamp() }
+    await assertFails(setDoc(signupDoc(as(guest)), fields))
+    await assertFails(setDoc(signupDoc(as(guest)), { ...fields, status: 'approved' }))
+    await assertFails(setDoc(signupDoc(as(staff.superAdmin)), fields))
+    await seedSignup()
+    await assertFails(updateDoc(signupDoc(as(guest)), { name: '陳大華' }))
+    await assertFails(updateDoc(signupDoc(as(guest)), review('approved', guest)))
+    await assertFails(deleteDoc(signupDoc(as(guest))))
+  })
+
+  test('super admins approve, reject or reopen a sign-up, but never send it or change it once sent', async () => {
+    await seedSignup()
+    const mine = signupDoc(as(staff.superAdmin))
+    await assertSucceeds(updateDoc(mine, review('approved')))
+    await assertSucceeds(updateDoc(mine, review('pending')))
+    await assertSucceeds(updateDoc(mine, review('rejected')))
+    await assertSucceeds(updateDoc(mine, review('approved')))
+
+    // sending makes an order: sendGuestSignupTicket only
+    await assertFails(updateDoc(mine, review('sent')))
+    await assertFails(updateDoc(mine, { ...review('approved'), orderId: 'PR20261026K7Q2MX' }))
+    await assertFails(updateDoc(mine, { ...review('approved'), name: '改名' }))
+    await assertFails(updateDoc(mine, { status: 'approved', reviewedAt: Timestamp.fromMillis(0), reviewedByUid: staff.superAdmin.uid }))
+    await assertFails(updateDoc(mine, review('approved', staff.admin)))
+    await assertFails(updateDoc(signupDoc(as(staff.admin)), review('rejected', staff.admin)))
+    await assertFails(deleteDoc(mine))
+
+    await seedSignup({ status: 'sent', orderId: 'PR20261026K7Q2MX' })
+    await assertFails(updateDoc(mine, review('rejected')))
+    await assertFails(updateDoc(mine, review('pending')))
   })
 })
 

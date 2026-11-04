@@ -13,6 +13,20 @@ export const MAX_OFFICER_QUOTA = 500
 // admins read
 export const MAX_INVITE_NOTE = 100
 
+// 公關票登記連結: characters in a sign-up link's name (shown to whoever signs
+// up) and in what a guest writes about themselves for the review. Keep in
+// sync with functions/lib/constants.js
+export const MAX_SIGNUP_TITLE = 50
+export const MAX_SIGNUP_NOTE = 100
+
+// A sign-up's review status (guestSignupLinks/{id}/signups/{uid})
+export const SIGNUP_STATUS = {
+  pending: '待審核',
+  approved: '已核准',
+  rejected: '未通過',
+  sent: '已寄出'
+}
+
 // How a guest invited before the officer quotas knew the council, kept on
 // their order: "建班大學長・80 屆 主席" / "親友・副主席 鄭詠齊不存在的女朋友".
 // Keep in sync with functions/lib/constants.js

@@ -10,6 +10,10 @@ import {
   sanitizeGuestInput,
   sanitizeInviteId,
   sanitizeInviteInput,
+  sanitizeLinkId,
+  sanitizeSignupInput,
+  sanitizeSignupLinkInput,
+  sanitizeSignupRef,
   ticketCountOf
 } from '../../lib/guests.js'
 import { includesGuests } from '../../lib/notifications.js'
@@ -78,6 +82,42 @@ test('invite ids are random, link-safe and checked before any read', () => {
   assert.equal(code(() => sanitizeClaimInput({ inviteId: id, name: ' ' })), 'invalid-argument')
 })
 
+test('a sign-up link takes a request id, a name and each person\'s tickets', () => {
+  assert.deepEqual(sanitizeSignupLinkInput({ requestId: REQUEST_ID, title: ' 熱舞社校友 ', quantity: 2 }), {
+    requestId: REQUEST_ID,
+    title: '熱舞社校友',
+    quantity: 2
+  })
+  assert.equal(sanitizeSignupLinkInput({ requestId: REQUEST_ID, title: 'x'.repeat(80) }).title.length, 50)
+  assert.equal(sanitizeSignupLinkInput({ requestId: REQUEST_ID, title: '校友' }).quantity, 1)
+  for (const data of [
+    { requestId: REQUEST_ID, title: '  ' },
+    { requestId: REQUEST_ID },
+    { requestId: REQUEST_ID, title: '校友', quantity: 11 },
+    { title: '校友' }
+  ]) {
+    assert.equal(code(() => sanitizeSignupLinkInput(data)), 'invalid-argument', JSON.stringify(data))
+  }
+})
+
+test('a sign-up keeps the trimmed name and note; its link and uid are checked before any read', () => {
+  const linkId = newInviteId()
+  assert.equal(sanitizeLinkId({ linkId }), linkId)
+  for (const bad of [undefined, '', 'short', '../orders/PR20261026K7Q2MX', `${linkId}x`]) {
+    assert.equal(code(() => sanitizeLinkId({ linkId: bad })), 'not-found', String(bad))
+  }
+
+  assert.deepEqual(sanitizeSignupInput({ linkId, name: ' 陳小華 ', note: ' 熱舞社 80 屆 ' }), { linkId, name: '陳小華', note: '熱舞社 80 屆' })
+  assert.equal(sanitizeSignupInput({ linkId, name: '陳' }).note, '')
+  assert.equal(sanitizeSignupInput({ linkId, name: '陳', note: 'x'.repeat(150) }).note.length, 100)
+  assert.equal(code(() => sanitizeSignupInput({ linkId, name: ' ' })), 'invalid-argument')
+
+  assert.deepEqual(sanitizeSignupRef({ linkId, uid: 'guest-uid' }), { linkId, uid: 'guest-uid' })
+  for (const uid of [undefined, '', 'a/b', '..', 'x'.repeat(129)]) {
+    assert.equal(code(() => sanitizeSignupRef({ linkId, uid })), 'not-found', String(uid))
+  }
+})
+
 test('what an officer may still give out', () => {
   assert.equal(remainingOf({ quota: 10, used: 3 }), 7)
   assert.equal(remainingOf({ quota: 10 }), 10)
@@ -115,6 +155,15 @@ test('a ticket a super admin sends names no officer', () => {
   const order = guestOrderOf({ guest: { name: '王', email: 'a@b.co' }, quantity: 1, userId: null, invitedByUid: 'u', ticketCode: 'c' })
   assert.equal(order.officerEmail, null)
   assert.equal(order.officerName, null)
+})
+
+test('a ticket sent through a sign-up link names the link, and others carry no such field', () => {
+  const base = { guest: { name: '王', email: 'a@b.co' }, quantity: 1, userId: 'guest-uid', invitedByUid: 'u', ticketCode: 'c' }
+  const order = guestOrderOf({ ...base, signupLinkId: 'AbCdEfGhIjKlMnOpQrStUvWx' })
+  assert.equal(order.signupLinkId, 'AbCdEfGhIjKlMnOpQrStUvWx')
+  assert.equal(order.officerEmail, null)
+  assert.equal(order.userId, 'guest-uid')
+  assert.equal(Object.hasOwn(guestOrderOf(base), 'signupLinkId'), false)
 })
 
 test('公關票 order ids are valid order ids', () => {

@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, STREET_SCHOOL, guestRelationText } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, MAX_SIGNUP_TITLE, MAX_SIGNUP_NOTE, STREET_SCHOOL, guestRelationText } from '../../lib/constants.js'
 import { MAX_TICKETS_PER_ORDER } from '../../lib/orderValidation.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
@@ -92,6 +92,8 @@ test('公關票 limits and relation text match src/data/guests.js', async () => 
   assert.equal(guests.MAX_GUEST_TICKETS, MAX_GUEST_TICKETS)
   assert.equal(guests.MAX_OFFICER_QUOTA, MAX_OFFICER_QUOTA)
   assert.equal(guests.MAX_INVITE_NOTE, MAX_INVITE_NOTE)
+  assert.equal(guests.MAX_SIGNUP_TITLE, MAX_SIGNUP_TITLE)
+  assert.equal(guests.MAX_SIGNUP_NOTE, MAX_SIGNUP_NOTE)
   for (const guest of [
     { relation: 'alumni', relationDetail: '78 屆' },
     { relation: 'friend', relationDetail: ' 王小明 ' },

@@ -432,6 +432,38 @@ service cloud.firestore {
       );
     }
 
+    // 登記連結, made only by createGuestSignupLink. The random id is the
+    // secret in the link, so any signed-in account holding it reads it (its
+    // title and tickets per person); super admins list them and close or
+    // reopen them.
+    match /guestSignupLinks/{linkId} {
+      allow get: if signedIn();
+      allow list: if isSuperAdmin();
+      allow update: if isSuperAdmin()
+        && onlyChanges(['open'])
+        && request.resource.data.open is bool;
+
+      // Each account's sign-up, keyed by its uid: created and changed (while
+      // pending) only by submitGuestSignup, marked sent only by
+      // sendGuestSignupTicket. The guest reads their own by its path, so
+      // also before signing up. Super admins review it (pending, approved or
+      // rejected), never once it is sent.
+      match /signups/{uid} {
+        allow get: if isSuperAdmin() || (signedIn() && request.auth.uid == uid);
+        allow update: if isSuperAdmin()
+          && onlyChanges(['status', 'reviewedAt', 'reviewedByUid'])
+          && resource.data.status in ['pending', 'approved', 'rejected']
+          && request.resource.data.status in ['pending', 'approved', 'rejected']
+          && request.resource.data.reviewedAt == request.time
+          && request.resource.data.reviewedByUid == request.auth.uid;
+      }
+    }
+
+    // every link's sign-ups at once (a collection group query)
+    match /{path=**}/signups/{uid} {
+      allow list: if isSuperAdmin();
+    }
+
     // =========================
     // 路宣登記 (functions/lib/streetSales.js)
     // =========================

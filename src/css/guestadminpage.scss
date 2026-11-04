@@ -320,3 +320,71 @@ td.note-cell {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* ---------- 登記連結 and the review ---------- */
+.pending-count { color: var(--ember); }
+
+.signup-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+
+  .source-filter {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+}
+
+.signup-batch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 4px 0 12px;
+
+  .btn,
+  .btn-outline { min-height: 44px; }
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.warning-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid rgba(228, 164, 104, 0.5);
+  color: var(--ember);
+  font-size: 11px;
+}
+
+// pending keeps the plain .status look
+.status.signup-approved {
+  border-color: rgba(228, 164, 104, 0.5);
+  color: var(--ember);
+}
+
+.status.signup-sent {
+  border-color: var(--ember);
+  background: var(--ember);
+  color: #16110a;
+  font-weight: 700;
+}
+
+.status.signup-rejected {
+  border-color: rgba(226, 100, 90, 0.4);
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .signup-batch {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+// in a table narrower than its content, wrapping notes would be squeezed to
+// a few characters a line
+.signup-table td.note-cell { min-width: 9em; }

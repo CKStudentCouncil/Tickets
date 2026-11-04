@@ -9,11 +9,14 @@ export { purgeOrders } from './lib/orderPurge.js'
 export { importSalesArchive } from './lib/salesArchive.js'
 export {
   claimOfficerInvite,
+  createGuestSignupLink,
   createOfficerInvite,
   releaseOfficerQuota,
   revokeOfficerInvite,
   sendGuestInvitation,
-  sendOfficerTicket
+  sendGuestSignupTicket,
+  sendOfficerTicket,
+  submitGuestSignup
 } from './lib/guests.js'
 export { submitPartySurvey } from './lib/partySurvey.js'
 export { submitSurvey } from './lib/survey.js'

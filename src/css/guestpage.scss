@@ -224,6 +224,14 @@
 }
 
 /* ---------- status and form ---------- */
+// a sign-up waiting for review shows its status above the form (GuestSignupPage.vue)
+.guest-main {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+
 .status-card,
 .guest-form {
   padding: clamp(24px, 4vw, 38px);

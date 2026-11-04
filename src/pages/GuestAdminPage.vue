@@ -5,7 +5,7 @@
       <p class="eyebrow">後台管理</p>
       <h1>公關票</h1>
       <p class="page-intro">
-        幫幹部設定公關票額度，幹部在自己的頁面直接寄票或產生邀請連結；每張公關票附 QR Code 的邀請信約一分鐘內寄出，不佔票券庫存、不會收到繳費通知
+        幫幹部設定公關票額度，幹部在自己的頁面直接寄票或產生邀請連結；也能用登記連結讓一群人登記，審核後再寄出；每張公關票附 QR Code 的邀請信約一分鐘內寄出，不佔票券庫存、不會收到繳費通知
       </p>
     </div>
 
@@ -296,6 +296,200 @@
         </div>
       </section>
 
+      <section class="panel" aria-labelledby="signup-links-title">
+        <div class="notify-header">
+          <h2 id="signup-links-title">登記連結</h2>
+        </div>
+        <p class="panel-copy">
+          產生一條可以分享給一群人的連結：每個人用 Google 帳號登入、填上姓名登記，在下方「登記審核」核准後再寄出公關票；以班聯會名義寄出，不佔任何幹部的額度
+        </p>
+
+        <div v-if="createdSignupLink" class="new-link" role="status">
+          <p class="new-link-label">
+            新的登記連結・{{ createdSignupLink.title }}・每人 <span class="num">{{ createdSignupLink.quantity }}</span> 張
+          </p>
+          <div class="share-link">
+            <span class="mono">{{ signupUrl(createdSignupLink.id) }}</span>
+            <button type="button" class="btn" @click="copyText(signupUrl(createdSignupLink.id), '已複製登記連結')">複製連結</button>
+            <button type="button" class="btn-outline" @click="createdSignupLink = null">完成</button>
+          </div>
+        </div>
+
+        <form v-else class="send-form" @submit.prevent="createSignup">
+          <div class="form-grid">
+            <label class="field">
+              <span>名稱（登記的人會看到）</span>
+              <input
+                v-model="signupTitle"
+                type="text"
+                :maxlength="MAX_SIGNUP_TITLE"
+                autocomplete="off"
+                placeholder="例：歷屆大學長"
+                :disabled="creatingSignup"
+                required
+              >
+            </label>
+            <div class="field">
+              <span>每人張數</span>
+              <QuantityStepper v-model="signupQuantity" :max="MAX_GUEST_TICKETS" :disabled="creatingSignup" />
+            </div>
+          </div>
+          <p v-if="signupLinkError" class="error" role="alert">{{ signupLinkError }}</p>
+          <button type="submit" class="btn" :disabled="creatingSignup || !signupLinkValid">
+            {{ creatingSignup ? '產生中...' : '產生登記連結' }}
+          </button>
+        </form>
+
+        <h3 class="sub-heading">所有登記連結 <span class="num">{{ signupLinks.length }}</span></h3>
+        <p v-if="signupLinks.length === 0" class="empty">還沒有登記連結</p>
+        <div v-else class="table-wrap">
+          <table class="signup-table">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>每人</th>
+                <th>登記</th>
+                <th>狀態</th>
+                <th>產生時間</th>
+                <th>連結</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in signupLinks" :key="item.id">
+                <td class="strong note-cell">{{ item.title }}</td>
+                <td><span class="num">{{ item.quantity }}</span> 張</td>
+                <td>
+                  <span class="num">{{ signupsOf(item.id).length }}</span> 人<span v-if="pendingOf(item.id)" class="pending-count">・待審核 <span class="num">{{ pendingOf(item.id) }}</span></span>
+                </td>
+                <td>
+                  <span class="status" :class="{ on: item.open }">{{ item.open ? '登記中' : '已停止' }}</span>
+                </td>
+                <td class="num">{{ formatDateTime(item.createdAt) }}</td>
+                <td>
+                  <button type="button" class="btn-outline btn-small" @click="copyText(signupUrl(item.id), '已複製登記連結')">複製</button>
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    class="btn-outline btn-small"
+                    :disabled="linkBusyIds.has(item.id)"
+                    @click="toggleSignupLink(item)"
+                  >
+                    {{ item.open ? '停止登記' : '重新開放' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="signups-title">
+        <div class="notify-header">
+          <h2 id="signups-title">登記審核</h2>
+          <div class="ticket-type-header-actions">
+            <button type="button" class="btn-outline" :disabled="refreshing" @click="load(false)">
+              {{ refreshing ? '更新中...' : '重新整理' }}
+            </button>
+          </div>
+        </div>
+        <p class="panel-copy">
+          逐一核准或不通過登記的人；按「寄出公關票」後，邀請信約一分鐘內寄到他們登入的 Email；寄出前都可以改變審核結果
+        </p>
+
+        <p class="ledger-summary">
+          <span v-for="(label, key) in SIGNUP_STATUS" :key="key">{{ label }} <strong class="num">{{ signupCounts[key] }}</strong></span>
+        </p>
+
+        <div class="signup-filters">
+          <label class="field source-filter">
+            <span>登記連結</span>
+            <select v-model="signupLinkFilter" class="select-field">
+              <option value="">全部</option>
+              <option v-for="item in signupLinks" :key="item.id" :value="item.id">{{ item.title }}</option>
+            </select>
+          </label>
+          <label class="field source-filter">
+            <span>狀態</span>
+            <select v-model="signupStatusFilter" class="select-field">
+              <option value="">全部</option>
+              <option v-for="(label, key) in SIGNUP_STATUS" :key="key" :value="key">{{ label }}</option>
+            </select>
+          </label>
+        </div>
+
+        <div v-if="linkPending.length || linkApproved.length || sendProgress" class="signup-batch">
+          <button
+            v-if="linkPending.length"
+            type="button"
+            class="btn-outline"
+            :disabled="batchBusy"
+            @click="approveAll"
+          >
+            {{ approvingAll ? '核准中...' : `核准全部待審核（${linkPending.length} 位）` }}
+          </button>
+          <button
+            v-if="linkApproved.length || sendProgress"
+            type="button"
+            class="btn"
+            :disabled="batchBusy"
+            @click="sendApproved"
+          >
+            {{ sendProgress ? `寄出中 ${sendProgress.done}/${sendProgress.total}...` : `寄出公關票（${linkApproved.length} 位已核准，共 ${ticketsFor(linkApproved)} 張）` }}
+          </button>
+        </div>
+
+        <p v-if="signups.length === 0" class="empty">還沒有人登記</p>
+        <p v-else-if="shownSignups.length === 0" class="empty">沒有符合的登記</p>
+        <div v-else class="table-wrap">
+          <table class="signup-table">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>Email</th>
+                <th>備註</th>
+                <th>登記連結</th>
+                <th>登記時間</th>
+                <th>狀態</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in shownSignups" :key="item.key">
+                <td class="strong">{{ item.name }}</td>
+                <td>
+                  <span class="mono">{{ item.email }}</span>
+                  <span v-if="item.status !== 'sent' && ticketFor(item.email)" class="warning-tag">已收過公關票</span>
+                </td>
+                <td class="note-cell">{{ item.note || '—' }}</td>
+                <td class="note-cell">{{ linkById[item.linkId]?.title || '—' }}</td>
+                <td class="num">{{ formatDateTime(item.createdAt) }}</td>
+                <td>
+                  <span class="status" :class="`signup-${item.status}`">{{ SIGNUP_STATUS[item.status] || item.status }}</span>
+                </td>
+                <td :class="{ mono: item.status === 'sent' }">
+                  <div v-if="item.status !== 'sent'" class="row-actions">
+                    <template v-if="item.status === 'pending'">
+                      <button type="button" class="btn btn-small" :disabled="rowBusy(item)" @click="review([item], 'approved')">核准</button>
+                      <button type="button" class="btn-outline btn-small danger" :disabled="rowBusy(item)" @click="review([item], 'rejected')">不通過</button>
+                    </template>
+                    <template v-else-if="item.status === 'approved'">
+                      <button type="button" class="btn btn-small" :disabled="rowBusy(item)" @click="sendOne(item)">
+                        {{ signupBusy.has(item.key) ? '寄出中...' : '寄出' }}
+                      </button>
+                      <button type="button" class="btn-outline btn-small" :disabled="rowBusy(item)" @click="review([item], 'pending')">取消核准</button>
+                    </template>
+                    <button v-else type="button" class="btn-outline btn-small" :disabled="rowBusy(item)" @click="review([item], 'pending')">重新審核</button>
+                  </div>
+                  <router-link v-else-if="item.orderId" :to="{ name: 'admin-order-detail', params: { id: item.orderId } }">{{ item.orderId }}</router-link>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="panel" aria-labelledby="ledger-title">
         <div class="notify-header">
           <h2 id="ledger-title">已寄出的公關票</h2>
@@ -337,7 +531,7 @@
               <tr v-for="ticket in shownTickets" :key="ticket.id">
                 <td class="strong">{{ ticket.customerName }}</td>
                 <td>
-                  {{ guestSourceText(ticket) }}<span v-if="ticket.inviteId" class="via">・連結<template v-if="notes[ticket.inviteId]">（{{ notes[ticket.inviteId] }}）</template></span>
+                  {{ guestSourceText(ticket) }}<span v-if="ticket.inviteId" class="via">・連結<template v-if="notes[ticket.inviteId]">（{{ notes[ticket.inviteId] }}）</template></span><span v-else-if="ticket.signupLinkId" class="via">・登記<template v-if="linkById[ticket.signupLinkId]">（{{ linkById[ticket.signupLinkId].title }}）</template></span>
                 </td>
                 <td class="num">{{ quantityOf(ticket) }}</td>
                 <td>
@@ -360,29 +554,45 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import QuantityStepper from 'src/components/QuantityStepper.vue'
 import { SITE_URL } from 'src/config/app'
-import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE, MAX_OFFICER_QUOTA, guestSourceText } from 'src/data/guests'
+import {
+  MAX_GUEST_TICKETS,
+  MAX_INVITE_NOTE,
+  MAX_OFFICER_QUOTA,
+  MAX_SIGNUP_TITLE,
+  SIGNUP_STATUS,
+  guestSourceText
+} from 'src/data/guests'
 import {
   addOfficer,
   createCouncilInvite,
+  createSignupLink,
   deleteOfficer,
   fetchAllInviteNotes,
   fetchAllInvites,
+  fetchAllSignups,
   fetchGuestTickets,
   fetchOfficers,
+  fetchSignupLinks,
   inviteUrl,
   quantityOf,
   remainingOf,
+  reviewSignups,
   revokeOfficerInvite,
   sendGuestInvitation,
+  sendSignupTicket,
+  setSignupLinkOpen,
+  signupUrl,
   updateOfficer
 } from 'src/services/guestService'
 import { createRequestId } from 'src/services/orderService'
 import { formatDateTime } from 'src/utils/datetime'
 import { EMAIL_STATUS } from 'src/utils/orderBackup'
 
+const auth = useAuthStore()
 const toast = useToastStore()
 
 const OFFICER_PAGE_URL = `${SITE_URL}/officer`
@@ -432,6 +642,51 @@ const revokingIds = reactive(new Set())
 const validInviteQuantity = computed(
   () => Number.isInteger(inviteQuantity.value) && inviteQuantity.value >= 1 && inviteQuantity.value <= MAX_GUEST_TICKETS
 )
+
+// 登記連結: one link for a group, whose sign-ups wait for review here
+const signupLinks = ref([])
+// every link's sign-ups, each with `key` (its path), linkId and uid
+const signups = ref([])
+const signupTitle = ref('')
+const signupQuantity = ref(1)
+const creatingSignup = ref(false)
+const signupLinkError = ref('')
+// the link just made, shown until it is copied
+const createdSignupLink = ref(null)
+// links being closed or reopened
+const linkBusyIds = reactive(new Set())
+const signupLinkValid = computed(
+  () =>
+    signupTitle.value.trim() !== '' &&
+    Number.isInteger(signupQuantity.value) && signupQuantity.value >= 1 && signupQuantity.value <= MAX_GUEST_TICKETS
+)
+const linkById = computed(() => Object.fromEntries(signupLinks.value.map((item) => [item.id, item])))
+const signupsOf = (linkId) => signups.value.filter((item) => item.linkId === linkId)
+const pendingOf = (linkId) => signupsOf(linkId).filter((item) => item.status === 'pending').length
+
+// the review: by link, then by status
+const signupLinkFilter = ref('')
+const signupStatusFilter = ref('')
+// sign-ups being reviewed or sent, by key
+const signupBusy = reactive(new Set())
+const approvingAll = ref(false)
+// { done, total } while approved sign-ups are being sent
+const sendProgress = ref(null)
+const batchBusy = computed(() => approvingAll.value || sendProgress.value !== null)
+const rowBusy = (item) => batchBusy.value || signupBusy.has(item.key)
+
+const linkSignups = computed(() => (signupLinkFilter.value ? signupsOf(signupLinkFilter.value) : signups.value))
+const shownSignups = computed(() =>
+  signupStatusFilter.value ? linkSignups.value.filter((item) => item.status === signupStatusFilter.value) : linkSignups.value
+)
+const signupCounts = computed(() => {
+  const counts = Object.fromEntries(Object.keys(SIGNUP_STATUS).map((key) => [key, 0]))
+  for (const item of linkSignups.value) if (item.status in counts) counts[item.status]++
+  return counts
+})
+const linkPending = computed(() => linkSignups.value.filter((item) => item.status === 'pending'))
+const linkApproved = computed(() => linkSignups.value.filter((item) => item.status === 'approved'))
+const ticketsFor = (items) => items.reduce((sum, item) => sum + (Number(linkById.value[item.linkId]?.quantity) || 0), 0)
 
 const validQuota = (quota, min = 0) => Number.isInteger(quota) && quota >= min && quota <= MAX_OFFICER_QUOTA
 
@@ -493,16 +748,20 @@ async function load(showLoading = true) {
   loadError.value = false
 
   try {
-    const [officerList, inviteList, sent, noteMap] = await Promise.all([
+    const [officerList, inviteList, sent, noteMap, linkList, signupList] = await Promise.all([
       fetchOfficers(),
       fetchAllInvites(),
       fetchGuestTickets(),
-      fetchAllInviteNotes()
+      fetchAllInviteNotes(),
+      fetchSignupLinks(),
+      fetchAllSignups()
     ])
     officers.value = officerList
     invites.value = inviteList
     notes.value = noteMap
     tickets.value = sent
+    signupLinks.value = linkList
+    signups.value = signupList
   } catch (error) {
     console.error('Load guests error:', error)
     if (showLoading) loadError.value = true
@@ -677,6 +936,139 @@ async function revoke(invite) {
     revokingIds.delete(invite.id)
     await load(false)
   }
+}
+
+/* ---------- 登記連結 ---------- */
+
+async function createSignup() {
+  if (!signupLinkValid.value || creatingSignup.value) return
+
+  creatingSignup.value = true
+  signupLinkError.value = ''
+  const input = { title: signupTitle.value.trim(), quantity: signupQuantity.value }
+  const key = JSON.stringify({ signupLink: input })
+  if (pending?.key !== key) pending = { key, requestId: createRequestId() }
+
+  try {
+    const { id } = await createSignupLink({ ...input, requestId: pending.requestId })
+    pending = null
+    createdSignupLink.value = { id, ...input }
+    signupTitle.value = ''
+    signupQuantity.value = 1
+    await load(false)
+  } catch (error) {
+    console.error('Create sign-up link error:', error)
+    if (REFUSALS.includes(error?.code)) {
+      pending = null
+      signupLinkError.value = error.message
+    } else {
+      signupLinkError.value = '產生失敗，請稍後再試（再按一次不會重複產生）'
+    }
+  } finally {
+    creatingSignup.value = false
+  }
+}
+
+// closing keeps the sign-ups so far, for review and sending
+async function toggleSignupLink(item) {
+  const open = !item.open
+  linkBusyIds.add(item.id)
+  try {
+    await setSignupLinkOpen(item.id, open)
+    item.open = open
+    toast.show(open ? `已重新開放「${item.title}」登記` : `已停止「${item.title}」登記，已登記的人仍可審核與寄出`)
+  } catch (error) {
+    console.error('Toggle sign-up link error:', error)
+    toast.show('更新失敗，請稍後再試')
+  } finally {
+    linkBusyIds.delete(item.id)
+  }
+}
+
+function reviewedText(items, status) {
+  const who = items.length > 1 ? `${items.length} 位` : items[0].name
+  return { approved: `已核准 ${who}`, rejected: `已將 ${who} 設為不通過`, pending: `已將 ${who} 改回待審核` }[status]
+}
+
+// `status`: 'approved', 'rejected' or back to 'pending'
+async function review(items, status) {
+  items.forEach((item) => signupBusy.add(item.key))
+  try {
+    await reviewSignups(items, status, auth.user.uid)
+    items.forEach((item) => { item.status = status })
+    toast.show(reviewedText(items, status))
+  } catch (error) {
+    console.error('Review sign-ups error:', error)
+    // the rules refuse a sign-up sent meanwhile
+    toast.show('更新失敗：登記狀態可能已經變更，已重新整理')
+    await load(false)
+  } finally {
+    items.forEach((item) => signupBusy.delete(item.key))
+  }
+}
+
+async function approveAll() {
+  const items = [...linkPending.value]
+  if (items.length === 0 || batchBusy.value) return
+  if (!window.confirm(`確定要核准全部 ${items.length} 位待審核的登記嗎？`)) return
+
+  approvingAll.value = true
+  try {
+    await review(items, 'approved')
+  } finally {
+    approvingAll.value = false
+  }
+}
+
+// Sends each sign-up its ticket, a few at a time. Each call is safe to
+// repeat: a sign-up already sent returns its order.
+async function sendSignups(items) {
+  sendProgress.value = { done: 0, total: items.length }
+  const queue = [...items]
+  const failures = []
+
+  const worker = async () => {
+    while (queue.length) {
+      const item = queue.shift()
+      signupBusy.add(item.key)
+      try {
+        const { id } = await sendSignupTicket(item)
+        Object.assign(item, { status: 'sent', orderId: id })
+      } catch (error) {
+        console.error('Send sign-up ticket error:', error)
+        failures.push(error)
+      } finally {
+        signupBusy.delete(item.key)
+        sendProgress.value.done++
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker))
+  sendProgress.value = null
+
+  const sent = items.length - failures.length
+  if (failures.length === 0) {
+    toast.show(`已寄出 ${sent} 位的公關票，邀請信約一分鐘內寄到`, 6000)
+  } else {
+    const reason = REFUSALS.includes(failures[0]?.code) ? failures[0].message : '請稍後再試（再按一次不會重複寄送）'
+    toast.show(`已寄出 ${sent} 位，${failures.length} 位失敗：${reason}`, 8000)
+  }
+  // the ledger below shows the new tickets
+  await load(false)
+}
+
+function sendOne(item) {
+  if (batchBusy.value || signupBusy.has(item.key)) return
+  const quantity = Number(linkById.value[item.linkId]?.quantity) || 0
+  if (!window.confirm(`確定要寄出 ${quantity} 張公關票給 ${item.name}（${item.email}）嗎？`)) return
+  sendSignups([item])
+}
+
+function sendApproved() {
+  const items = [...linkApproved.value]
+  if (items.length === 0 || batchBusy.value) return
+  if (!window.confirm(`確定要寄出公關票給 ${items.length} 位已核准的登記者嗎？共 ${ticketsFor(items)} 張，邀請信會寄到他們登入的 Email`)) return
+  sendSignups(items)
 }
 
 async function copyText(text, message) {
