@@ -7,7 +7,7 @@
           <span class="live-badge" :class="{ off: !connected }"><i />{{ connected ? '接收中' : '未連線' }}</span>
         </div>
         <h1>電腦接收掃描</h1>
-        <p class="lead">手機只負責掃描；掃到的票券會在這台電腦上開啟，在這裡核對並領票</p>
+        <p class="lead">使用系統內建相機掃描本頁QR Code，手機作為條碼掃描器；掃到的票券會在這台電腦上開啟，在這裡核對並領票</p>
       </header>
 
       <div class="desk-grid">
