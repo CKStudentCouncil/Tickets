@@ -98,36 +98,53 @@
 
       <div class="panel">
         <div class="notify-header">
-          <h2>業績排行</h2>
+          <h2>
+            <button
+              type="button"
+              class="collapse-toggle"
+              :aria-expanded="showLeaderboard"
+              aria-controls="seller-leaderboard"
+              @click="showLeaderboard = !showLeaderboard"
+            >
+              <span class="chevron" :class="{ open: showLeaderboard }" aria-hidden="true">▸</span>
+              業績排行
+            </button>
+          </h2>
+          <button type="button" class="btn-outline btn-small" @click="showLeaderboard = !showLeaderboard">
+            {{ showLeaderboard ? '收合' : '展開' }}
+          </button>
         </div>
-        <p class="panel-copy">依登記張數排序；金額以登記當時的票價計算</p>
 
-        <p v-if="leaderboard.length === 0" class="empty">還沒有人登記</p>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>姓名</th>
-                <th>Email</th>
-                <th>登記張數</th>
-                <th>已領票</th>
-                <th>已交款</th>
-                <th>應交金額</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, index) in leaderboard" :key="row.email">
-                <td class="num">{{ index + 1 }}</td>
-                <td>{{ row.name }}</td>
-                <td class="mono">{{ row.email }}</td>
-                <td class="num">{{ row.quantity }}</td>
-                <td class="num">{{ row.pickedUp }}</td>
-                <td class="num">{{ row.paid }}</td>
-                <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-show="showLeaderboard" id="seller-leaderboard">
+          <p class="panel-copy">依登記張數排序；金額以登記當時的票價計算</p>
+
+          <p v-if="leaderboard.length === 0" class="empty">還沒有人登記</p>
+          <div v-else class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>姓名</th>
+                  <th>Email</th>
+                  <th>登記張數</th>
+                  <th>已領票</th>
+                  <th>已交款</th>
+                  <th>應交金額</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, index) in leaderboard" :key="row.email">
+                  <td class="num">{{ index + 1 }}</td>
+                  <td>{{ row.name }}</td>
+                  <td class="mono">{{ row.email }}</td>
+                  <td class="num">{{ row.quantity }}</td>
+                  <td class="num">{{ row.pickedUp }}</td>
+                  <td class="num">{{ row.paid }}</td>
+                  <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -377,6 +394,8 @@ const registrations = ref([])
 const sellers = ref([])
 const pickups = ref([])
 const searchTerm = ref('')
+// 業績排行 starts folded
+const showLeaderboard = ref(false)
 // registrations with a write in flight
 const busyIds = reactive(new Set())
 // sellers (by email) and pickups (by id) with a write in flight

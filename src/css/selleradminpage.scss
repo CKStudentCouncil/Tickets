@@ -220,3 +220,22 @@ td.over {
     padding: 6px 10px 6px 0;
   }
 }
+
+.collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chevron {
+  display: inline-block;
+  transition: transform 0.2s ease;
+
+  &.open { transform: rotate(90deg); }
+}
