@@ -49,7 +49,8 @@
         <div class="stats">
           <div class="stat"><strong class="num">{{ total }} / {{ savedProgram.goal }}</strong><span>已登記 / 目標</span></div>
           <div class="stat"><strong class="num">{{ leaderboard.length }}</strong><span>有登記的人數</span></div>
-          <div class="stat"><strong class="num">{{ deliveredCount }}</strong><span>已拿票張數</span></div>
+          <div class="stat"><strong class="num">{{ pickedUpCount }}</strong><span>已領票張數</span></div>
+          <div class="stat"><strong class="num">{{ Math.max(0, total - pickedUpCount) }}</strong><span>尚未領票張數</span></div>
           <div class="stat"><strong class="num">NT$ {{ paidAmount.toLocaleString() }}</strong><span>已交款金額</span></div>
           <div class="stat"><strong class="num">NT$ {{ unpaidAmount.toLocaleString() }}</strong><span>尚未交款金額</span></div>
         </div>
@@ -110,7 +111,7 @@
                 <th>姓名</th>
                 <th>Email</th>
                 <th>登記張數</th>
-                <th>已拿票</th>
+                <th>已領票</th>
                 <th>已交款</th>
                 <th>應交金額</th>
               </tr>
@@ -121,7 +122,7 @@
                 <td>{{ row.name }}</td>
                 <td class="mono">{{ row.email }}</td>
                 <td class="num">{{ row.quantity }}</td>
-                <td class="num">{{ row.delivered }}</td>
+                <td class="num">{{ row.pickedUp }}</td>
                 <td class="num">{{ row.paid }}</td>
                 <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
               </tr>
@@ -132,10 +133,98 @@
 
       <div class="panel">
         <div class="notify-header">
+          <h2>學弟領票</h2>
+        </div>
+        <p class="panel-copy">
+          學弟每次來拿票時，在「這次領」填張數後按記錄，已領張數會自動累加；記錯了就展開明細刪掉那一筆再重記
+        </p>
+
+        <p v-if="leaderboard.length === 0" class="empty">還沒有人登記</p>
+        <div v-else class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>Email</th>
+                <th>登記張數</th>
+                <th>已領</th>
+                <th>待領</th>
+                <th>這次領</th>
+                <th>明細</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="row in leaderboard" :key="row.email">
+                <tr>
+                  <td>
+                    {{ row.name }}
+                    <span v-if="row.legacyDelivered && row.pickedUp === 0" class="legacy-tag" title="改版前在登記紀錄勾過「已拿票」的張數，請補記實際領票">
+                      舊紀錄勾過已拿票 {{ row.legacyDelivered }} 張
+                    </span>
+                  </td>
+                  <td class="mono">{{ row.email }}</td>
+                  <td class="num">{{ row.quantity }}</td>
+                  <td class="num">{{ row.pickedUp }}</td>
+                  <td class="num" :class="{ over: row.quantity - row.pickedUp < 0 }">{{ row.quantity - row.pickedUp }}</td>
+                  <td>
+                    <form class="inline-form" @submit.prevent="recordPickup(row)">
+                      <input
+                        v-model.number="pickupInputs[row.email]"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        :max="MAX_SELLER_TICKETS"
+                        step="1"
+                        class="qty-input"
+                        :aria-label="`${row.name} 這次領的張數`"
+                        :disabled="busyPickups.has(row.email)"
+                      >
+                      <button type="submit" class="btn btn-small" :disabled="busyPickups.has(row.email) || !pickupInputs[row.email]">
+                        記錄
+                      </button>
+                    </form>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn-outline btn-small"
+                      :disabled="row.pickups.length === 0"
+                      @click="toggleExpanded(row.email)"
+                    >
+                      {{ expanded.has(row.email) ? '收起' : `${row.pickups.length} 筆` }}
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="expanded.has(row.email)" class="detail-row">
+                  <td colspan="7">
+                    <ul class="pickup-list">
+                      <li v-for="pickup in row.pickups" :key="pickup.id">
+                        <span class="num">{{ formatDateTime(pickup.createdAt) }}</span>
+                        <strong class="num">{{ pickup.quantity }} 張</strong>
+                        <button
+                          type="button"
+                          class="btn-outline danger btn-small"
+                          :disabled="busyPickups.has(pickup.id)"
+                          @click="removePickup(row, pickup)"
+                        >
+                          刪除
+                        </button>
+                      </li>
+                    </ul>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="notify-header">
           <h2>登記紀錄</h2>
         </div>
         <p class="panel-copy">
-          學弟拿票、交款後在這裡勾選；學弟不能退票；刪除只用於修正登記錯誤，票會退回庫
+          學弟交款後在這裡勾選；張數可以直接修改，多的會從庫存扣、少的會退回庫存；學弟不能退票，刪除只用於修正登記錯誤，票會全部退回庫存
         </p>
 
         <input v-model="searchTerm" type="search" class="search" placeholder="搜尋姓名或 Email">
@@ -150,7 +239,6 @@
                 <th>Email</th>
                 <th>張數</th>
                 <th>金額</th>
-                <th>已拿票</th>
                 <th>已交款</th>
                 <th>操作</th>
               </tr>
@@ -160,17 +248,35 @@
                 <td class="num">{{ formatDateTime(item.createdAt) }}</td>
                 <td>{{ item.sellerName }}</td>
                 <td class="mono">{{ item.sellerEmail }}</td>
-                <td class="num">{{ item.quantity }}</td>
-                <td class="num">NT$ {{ amountOf(item).toLocaleString() }}</td>
-                <td>
-                  <input
-                    type="checkbox"
-                    :checked="item.delivered"
-                    :disabled="busyIds.has(item.id)"
-                    :aria-label="`${item.sellerName} 已拿票`"
-                    @change="toggle(item, 'delivered', $event.target)"
-                  >
+                <td class="num">
+                  <form v-if="editingId === item.id" class="inline-form" @submit.prevent="saveQuantity(item)">
+                    <input
+                      v-model.number="editQuantity"
+                      type="number"
+                      inputmode="numeric"
+                      min="1"
+                      :max="MAX_SELLER_TICKETS"
+                      step="1"
+                      class="qty-input"
+                      :aria-label="`${item.sellerName} 的登記張數`"
+                      :disabled="busyIds.has(item.id)"
+                    >
+                    <button type="submit" class="btn btn-small" :disabled="busyIds.has(item.id)">
+                      {{ busyIds.has(item.id) ? '儲存中...' : '儲存' }}
+                    </button>
+                    <button type="button" class="btn-outline btn-small" :disabled="busyIds.has(item.id)" @click="editingId = ''">取消</button>
+                  </form>
+                  <span v-else class="qty-cell">
+                    {{ item.quantity }}
+                    <span
+                      v-if="Number.isInteger(item.registeredQuantity) && item.registeredQuantity !== item.quantity"
+                      class="muted-note"
+                      :title="`學弟原本登記 ${item.registeredQuantity} 張`"
+                    >（原 {{ item.registeredQuantity }}）</span>
+                    <button type="button" class="btn-outline btn-small" :disabled="busyIds.has(item.id)" @click="startEdit(item)">修改</button>
+                  </span>
                 </td>
+                <td class="num">NT$ {{ amountOf(item).toLocaleString() }}</td>
                 <td>
                   <input
                     type="checkbox"
@@ -248,16 +354,21 @@ import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import {
+  addPickup,
   addSellers,
+  deletePickup,
   deleteRegistration,
+  fetchAllPickups,
   fetchAllRegistrations,
   fetchSellerProgram,
   fetchSellers,
   fetchSellerTotal,
   removeSeller,
   saveSellerProgram,
-  setRegistrationFlag
+  setRegistrationFlag,
+  updateRegistrationQuantity
 } from 'src/services/sellerService'
+import { MAX_SELLER_TICKETS } from 'src/data/sellerGuide'
 import { formatDateTime } from 'src/utils/datetime'
 
 const auth = useAuthStore()
@@ -272,9 +383,19 @@ const savingProgram = ref(false)
 const total = ref(0)
 const registrations = ref([])
 const sellers = ref([])
+const pickups = ref([])
 const searchTerm = ref('')
 // registrations with a write in flight
 const busyIds = reactive(new Set())
+// sellers (by email) and pickups (by id) with a write in flight
+const busyPickups = reactive(new Set())
+// what the admin typed in 這次領, by seller email
+const pickupInputs = reactive({})
+// sellers whose pickups are shown
+const expanded = reactive(new Set())
+// the registration whose quantity is being edited
+const editingId = ref('')
+const editQuantity = ref(0)
 
 const newSellersText = ref('')
 const newSellersError = ref('')
@@ -289,9 +410,7 @@ const ticketTypeName = (id) => ticketTypes.value.find((type) => type.id === id)?
 const goalPercent = computed(() =>
   savedProgram.value.goal > 0 ? Math.min(100, (total.value / savedProgram.value.goal) * 100) : 0
 )
-const deliveredCount = computed(() =>
-  registrations.value.filter((item) => item.delivered).reduce((sum, item) => sum + item.quantity, 0)
-)
+const pickedUpCount = computed(() => pickups.value.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0))
 const paidAmount = computed(() =>
   registrations.value.filter((item) => item.paid).reduce((sum, item) => sum + amountOf(item), 0)
 )
@@ -301,21 +420,32 @@ const unpaidAmount = computed(() =>
 
 const leaderboard = computed(() => {
   const rows = new Map()
+  const names = new Map(sellers.value.map((seller) => [seller.email, seller.name]))
+  const rowOf = (email, name) => rows.get(email) || rows.set(email, {
+    email,
+    name: name || names.get(email) || email,
+    quantity: 0,
+    pickedUp: 0,
+    pickups: [],
+    legacyDelivered: 0,
+    paid: 0,
+    amount: 0
+  }).get(email)
+
   // newest first, so the name shown is the latest one the seller entered
   registrations.value.forEach((item) => {
-    const row = rows.get(item.sellerEmail) || {
-      email: item.sellerEmail,
-      name: item.sellerName,
-      quantity: 0,
-      delivered: 0,
-      paid: 0,
-      amount: 0
-    }
+    const row = rowOf(item.sellerEmail, item.sellerName)
     row.quantity += item.quantity
-    if (item.delivered) row.delivered += item.quantity
+    // ticked on the registration before pickups were counted
+    if (item.delivered) row.legacyDelivered += item.quantity
     if (item.paid) row.paid += item.quantity
     row.amount += amountOf(item)
-    rows.set(item.sellerEmail, row)
+  })
+  // a seller whose registration was deleted still shows what they picked up
+  pickups.value.forEach((pickup) => {
+    const row = rowOf(pickup.sellerEmail)
+    row.pickedUp += Number(pickup.quantity) || 0
+    row.pickups.push(pickup)
   })
   return [...rows.values()].sort((a, b) => b.quantity - a.quantity)
 })
@@ -337,12 +467,13 @@ async function load() {
   loadError.value = false
 
   try {
-    const [types, program, totalCount, all, list] = await Promise.all([
+    const [types, program, totalCount, all, list, allPickups] = await Promise.all([
       fetchTicketTypes(),
       fetchSellerProgram(),
       fetchSellerTotal(),
       fetchAllRegistrations(),
-      fetchSellers()
+      fetchSellers(),
+      fetchAllPickups()
     ])
     ticketTypes.value = types
     savedProgram.value = program
@@ -350,6 +481,8 @@ async function load() {
     total.value = totalCount
     registrations.value = all
     sellers.value = list
+    pickups.value = allPickups
+    editingId.value = ''
   } catch (error) {
     console.error('Load seller admin error:', error)
     loadError.value = true
@@ -396,6 +529,105 @@ async function toggle(item, key, checkbox) {
     toast.show('更新失敗，請稍後再試')
   } finally {
     busyIds.delete(item.id)
+  }
+}
+
+function startEdit(item) {
+  editingId.value = item.id
+  editQuantity.value = item.quantity
+}
+
+// the server's message says why (not enough left, changed meanwhile, bad input)
+const QUANTITY_REFUSALS = [
+  'functions/invalid-argument',
+  'functions/failed-precondition',
+  'functions/resource-exhausted',
+  'functions/not-found',
+  'functions/permission-denied',
+  'functions/aborted'
+]
+
+async function saveQuantity(item) {
+  const quantity = Number(editQuantity.value)
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_SELLER_TICKETS) {
+    toast.show(`張數必須是 1 到 ${MAX_SELLER_TICKETS} 的整數；要整筆取消請用刪除`)
+    return
+  }
+  if (quantity === item.quantity) {
+    editingId.value = ''
+    return
+  }
+
+  const delta = quantity - item.quantity
+  const change = delta > 0 ? `多扣 ${delta} 張庫存` : `退回 ${-delta} 張到庫存`
+  if (!window.confirm(`確定把 ${item.sellerName} 這筆登記從 ${item.quantity} 張改成 ${quantity} 張嗎？會${change}。`)) return
+
+  busyIds.add(item.id)
+  try {
+    await updateRegistrationQuantity(item.id, quantity, item.quantity)
+    if (!Number.isInteger(item.registeredQuantity)) item.registeredQuantity = item.quantity
+    item.quantity = quantity
+    total.value = Math.max(0, total.value + delta)
+    editingId.value = ''
+    toast.show(`已改成 ${quantity} 張`)
+  } catch (error) {
+    console.error('Update seller registration quantity error:', error)
+    // someone else changed it: show what is saved now
+    const saved = error?.details?.quantity
+    if (Number.isInteger(saved)) {
+      total.value = Math.max(0, total.value + saved - item.quantity)
+      item.quantity = saved
+      editQuantity.value = saved
+    }
+    toast.show(QUANTITY_REFUSALS.includes(error?.code) && error.message ? error.message : '修改失敗，請重新整理後確認張數')
+  } finally {
+    busyIds.delete(item.id)
+  }
+}
+
+function toggleExpanded(email) {
+  if (expanded.has(email)) expanded.delete(email)
+  else expanded.add(email)
+}
+
+async function recordPickup(row) {
+  const quantity = Number(pickupInputs[row.email])
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_SELLER_TICKETS) {
+    toast.show(`張數必須是 1 到 ${MAX_SELLER_TICKETS} 的整數`)
+    return
+  }
+  const remaining = row.quantity - row.pickedUp
+  if (quantity > remaining &&
+    !window.confirm(`${row.name} 只剩 ${Math.max(0, remaining)} 張待領，這次記 ${quantity} 張會超過登記張數，確定嗎？`)) return
+
+  busyPickups.add(row.email)
+  try {
+    const pickup = await addPickup(row.email, quantity, auth.user.uid)
+    pickups.value = [pickup, ...pickups.value]
+    delete pickupInputs[row.email]
+    toast.show(`已記錄 ${row.name} 領 ${quantity} 張，共領 ${row.pickedUp + quantity} 張`)
+  } catch (error) {
+    console.error('Record seller pickup error:', error)
+    toast.show('記錄失敗，請稍後再試')
+  } finally {
+    busyPickups.delete(row.email)
+  }
+}
+
+async function removePickup(row, pickup) {
+  if (!window.confirm(`確定要刪除 ${row.name} 在 ${formatDateTime(pickup.createdAt)} 領 ${pickup.quantity} 張的紀錄嗎？`)) return
+
+  busyPickups.add(pickup.id)
+  try {
+    await deletePickup(pickup.id)
+    pickups.value = pickups.value.filter((p) => p.id !== pickup.id)
+    if (row.pickups.length <= 1) expanded.delete(row.email)
+    toast.show('已刪除領票紀錄')
+  } catch (error) {
+    console.error('Delete seller pickup error:', error)
+    toast.show('刪除失敗，請稍後再試')
+  } finally {
+    busyPickups.delete(pickup.id)
   }
 }
 

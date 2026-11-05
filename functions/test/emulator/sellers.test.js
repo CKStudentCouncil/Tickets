@@ -9,6 +9,7 @@ assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 const callRegister = fft.wrap(functions.registerSellerTickets)
 const callRelease = fft.wrap(functions.releaseSellerStock)
+const callUpdateQuantity = fft.wrap(functions.updateSellerRegistrationQuantity)
 // createOrder is a 2nd gen callable: one request carries the data and the auth
 const wrappedCreate = fft.wrap(functions.createOrder)
 const callCreate = (data, context = {}) => wrappedCreate({ data, ...context })
@@ -23,6 +24,9 @@ const SELLER = 's1001@gl.ck.tp.edu.tw'
 const as = (email, { uid = `uid-${email}`, verified = true } = {}) => ({
   auth: { uid, token: { email, email_verified: verified } }
 })
+
+const ADMIN = as('admin@example.com')
+const MANAGER = as('manager@example.com')
 
 let requestCount = 0
 const register = (quantity, extra = {}) => ({
@@ -44,6 +48,8 @@ beforeEach(async () => {
   batch.set(db.doc('settings/shop'), { openAt: new Date(Date.now() - HOUR) })
   batch.set(db.doc('settings/sellerProgram'), { enabled: true, ticketTypeId: 'second', goal: 750 })
   batch.set(db.doc(`sellers/${SELLER}`), { email: SELLER, name: '王小明' })
+  batch.set(db.doc(`users/${ADMIN.auth.uid}`), { role: 'admin' })
+  batch.set(db.doc(`users/${MANAGER.auth.uid}`), { role: 'manager' })
   await batch.commit()
 })
 
@@ -153,5 +159,85 @@ describe('releaseSellerStock', () => {
     await assert.rejects(callRegister(request, as(SELLER)), { code: 'failed-precondition' })
     assert.equal(await soldOf('second'), 0)
     assert.equal(await total(), 0)
+  })
+})
+
+describe('updateSellerRegistrationQuantity', () => {
+  const change = (id, quantity, expectedQuantity) => ({ registrationId: id, quantity, expectedQuantity })
+  const saved = async (id) => (await db.doc(`sellerRegistrations/${id}`).get()).data()
+  const allocated = (registration) =>
+    Object.values(registration.stockShards.second).reduce((sum, n) => sum + n, 0)
+
+  test('more tickets are taken from the stock and added to the total', async () => {
+    const { id } = await callRegister(register(3), as(SELLER))
+    const result = await callUpdateQuantity(change(id, 7, 3), ADMIN)
+
+    assert.deepEqual(result, { quantity: 7, delta: 4 })
+    assert.equal(await soldOf('second'), 7)
+    assert.equal(await total(), 7)
+    const registration = await saved(id)
+    assert.equal(registration.quantity, 7)
+    assert.equal(registration.registeredQuantity, 3)
+    assert.equal(registration.quantityUpdatedByUid, ADMIN.auth.uid)
+    assert.equal(allocated(registration), 7)
+  })
+
+  test('fewer tickets go back to the stock, and deleting it later gives back the rest', async () => {
+    const { id } = await callRegister(register(8), as(SELLER))
+    await callUpdateQuantity(change(id, 2, 8), ADMIN)
+
+    assert.equal(await soldOf('second'), 2)
+    assert.equal(await total(), 2)
+    const registration = await saved(id)
+    assert.equal(registration.registeredQuantity, 8)
+    assert.equal(allocated(registration), 2)
+
+    // a second edit keeps what the seller first registered
+    await callUpdateQuantity(change(id, 5, 2), ADMIN)
+    assert.equal((await saved(id)).registeredQuantity, 8)
+    assert.equal(await soldOf('second'), 5)
+
+    const snap = await db.doc(`sellerRegistrations/${id}`).get()
+    await snap.ref.delete()
+    await callRelease(snap, { params: { registrationId: id } })
+    assert.equal(await soldOf('second'), 0)
+    assert.equal(await total(), 0)
+  })
+
+  test('never takes more than the stock left', async () => {
+    const { id } = await callRegister(register(6), as(SELLER))
+    await callRegister(register(3), as(SELLER))
+
+    await assert.rejects(callUpdateQuantity(change(id, 8, 6), ADMIN), { code: 'resource-exhausted' })
+    assert.equal((await saved(id)).quantity, 6)
+    assert.equal(await soldOf('second'), 9)
+    await callUpdateQuantity(change(id, 7, 6), ADMIN)
+    assert.equal(await soldOf('second'), 10)
+  })
+
+  test('is refused when someone changed it meanwhile, telling what is saved', async () => {
+    const { id } = await callRegister(register(4), as(SELLER))
+    await callUpdateQuantity(change(id, 5, 4), ADMIN)
+
+    await assert.rejects(callUpdateQuantity(change(id, 2, 4), ADMIN), (error) => {
+      assert.equal(error.code, 'failed-precondition')
+      assert.deepEqual(error.details, { quantity: 5 })
+      return true
+    })
+    assert.equal(await soldOf('second'), 5)
+  })
+
+  test('only admins may change it, and only to a positive quantity', async () => {
+    const { id } = await callRegister(register(4), as(SELLER))
+
+    await assert.rejects(callUpdateQuantity(change(id, 5, 4), {}), { code: 'unauthenticated' })
+    await assert.rejects(callUpdateQuantity(change(id, 5, 4), as(SELLER)), { code: 'permission-denied' })
+    await assert.rejects(callUpdateQuantity(change(id, 5, 4), MANAGER), { code: 'permission-denied' })
+    for (const bad of [change(id, 0, 4), change(id, -1, 4), change(id, 1.5, 4), change(id, 201, 4), change('short', 5, 4), change(id, 5, null)]) {
+      await assert.rejects(callUpdateQuantity(bad, ADMIN), { code: 'invalid-argument' })
+    }
+    await assert.rejects(callUpdateQuantity(change('missing-registration-01', 5, 4), ADMIN), { code: 'not-found' })
+    assert.equal(await soldOf('second'), 4)
+    assert.equal(await total(), 4)
   })
 })

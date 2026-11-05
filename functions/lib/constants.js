@@ -58,7 +58,8 @@ export const BUYER_TYPES = { STUDENT: 'student', PUBLIC: 'public' }
 export const ROLE_RANK = { manager: 1, admin: 2, super_admin: 3, developer: 4 }
 
 // 學弟登記賣票: tickets one registration may take (a seller sold 120 last
-// year). Keep in sync with src/data/sellerGuide.js
+// year), and one pickup may record (sellerPickups). Keep in sync with
+// src/data/sellerGuide.js and firestore.rules
 export const MAX_SELLER_TICKETS = 200
 
 // 公關票: tickets one send or invite link may carry, and the largest quota

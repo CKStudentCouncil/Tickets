@@ -302,6 +302,9 @@
 .history li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; border-top: 1px solid var(--line); }
 .history li:first-child { border-top: none; padding-top: 0; }
 .history-main { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
+.pickup-summary { margin: 0 0 16px; }
+.pickup-summary strong + span { margin-right: 12px; }
+
 .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .badge { padding: 4px 10px; border: 1px solid var(--line-strong); color: var(--lunar); font-size: 11px; white-space: nowrap; }
 .badge.on { border-color: rgba(228, 164, 104, .5); color: var(--ember); }
