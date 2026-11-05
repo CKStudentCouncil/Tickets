@@ -7,9 +7,9 @@
       <dl class="meta-list">
         <div><dt>甲方</dt><dd>臺北市立建國高級中學班聯會</dd></div>
         <div><dt>乙方</dt><dd>使用本系統訂購建中舞會門票之消費者</dd></div>
-        <div><dt>條款版本</dt><dd class="num">建班政活款字第08111030003號</dd></div>
-        <div><dt>公告日期</dt><dd class="num">中華民國 115 年 11 月 04 日</dd></div>
-        <div><dt>生效日期</dt><dd class="num">中華民國 115 年 11 月 04 日</dd></div>
+        <div><dt>條款版本</dt><dd class="num">建班政活款字第08111030004號</dd></div>
+        <div><dt>公告日期</dt><dd class="num">中華民國 115 年 11 月 05 日</dd></div>
+        <div><dt>生效日期</dt><dd class="num">中華民國 115 年 11 月 05 日</dd></div>
       </dl>
 
       <p class="intro">歡迎您使用臺北市立建國高級中學班聯會建中舞會購票系統（以下簡稱「本系統」）。為保障買賣雙方權益，請您於使用本系統購票前，詳閱本條款及各商品頁面所載之交易資訊；乙方於訂購時勾選同意本條款並完成訂購程序後，即表示乙方已閱讀、瞭解並同意本條款；惟本條款如有違反中華民國法律之強制或禁止規定者，應以法律規定為準。</p>
@@ -84,6 +84,7 @@
             <li>前項異常情形如已影響契約成立或履行，甲方應依法律規定及實際交易情形處理，不得僅以「系統錯誤」為由當然免除法律責任。</li>
             <li>甲方應妥善保存與訂單成立、付款、領票及退款有關之必要交易紀錄。</li>
             <li>如因票券製作無法完成或其他不可歸責於甲方之事由，致甲方無法依訂單提供紙本票券，甲方應儘速通知乙方，並於該事由消滅後盡速履約。</li>
+            <li>甲方對於領票流程、入場流程、驗票流程等程序規定享有最終解釋權，惟不得訂定較本條款嚴格之規定。</li>
           </ol>
         </section>
 
@@ -181,7 +182,7 @@
         </section>
       </div>
 
-      <p class="updated">最後更新：<span class="num">2026 年 11 月 04 日</span></p>
+      <p class="updated">最後更新：<span class="num">2026 年 11 月 05 日</span></p>
 
       <div class="actions">
         <button type="button" class="primary-button" :disabled="downloading" @click="downloadPdf">
