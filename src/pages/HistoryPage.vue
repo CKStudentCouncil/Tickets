@@ -48,6 +48,17 @@
         <p v-if="!years.length" class="empty">還沒有任何資料</p>
       </div>
 
+      <section v-if="years.length > 1" class="panel compare" aria-labelledby="history-compare">
+        <div class="notify-header">
+          <h2 id="history-compare">歷年比較</h2>
+        </div>
+        <p class="panel-copy intro-copy">
+          訂單金額與銷售的圖只算清除訂單時封存或匯入的年份，還沒清除的訂單不算；每張圖都可以按「看表格」看數字
+        </p>
+
+        <YearComparison :years="years" :records="records" />
+      </section>
+
       <section
         v-for="item in years"
         :key="item.year"
@@ -115,6 +126,7 @@
 
 <script setup>
 import { computed, onMounted, ref, shallowRef } from 'vue'
+import YearComparison from 'src/components/analytics/YearComparison.vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { INVOICE_DRIVE_OWNER } from 'src/data/reimbursements'
@@ -265,6 +277,7 @@ onMounted(() => {
 @import 'src/css/selleradminpage.scss';
 
 .intro-copy { margin-bottom: 0; }
+.compare .intro-copy { margin-bottom: 20px; }
 
 a.btn-outline {
   display: inline-flex;

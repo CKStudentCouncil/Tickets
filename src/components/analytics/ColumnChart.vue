@@ -67,7 +67,7 @@
       >{{ labels[i] }}</text>
     </svg>
 
-    <div v-if="active !== null" class="chart-tooltip" :style="tooltipStyle" aria-hidden="true">
+    <div v-if="active !== null" ref="tip" class="chart-tooltip" :style="tooltipStyle" aria-hidden="true">
       <p class="tip-title">{{ tooltipTitle(active) }}</p>
       <p v-for="item in series" :key="item.key" class="tip-row">
         <span class="tip-key" :style="{ background: item.color }" />
@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, onUpdated, ref } from 'vue'
 import { niceTicks } from 'src/utils/salesAnalytics'
 
 // Columns per label, one per series side by side. Every visual property is
@@ -93,7 +93,9 @@ const props = defineProps({
   label: { type: String, required: true },
   format: { type: Function, required: true },
   axisFormat: { type: Function, required: true },
-  tooltipTitle: { type: Function, required: true }
+  tooltipTitle: { type: Function, required: true },
+  // whole-number ticks, for counts such as days
+  integer: { type: Boolean, default: false }
 })
 
 const FONT = "Manrope, 'Noto Sans TC', sans-serif"
@@ -117,7 +119,10 @@ onMounted(() => {
 })
 onBeforeUnmount(() => observer?.disconnect())
 
-const ticks = computed(() => niceTicks(Math.max(0, ...props.series.flatMap((item) => item.values))))
+const ticks = computed(() => niceTicks(
+  Math.max(0, ...props.series.flatMap((item) => item.values.filter((value) => value != null))),
+  { integer: props.integer }
+))
 const left = computed(() => Math.max(...ticks.value.map((tick) => String(props.axisFormat(tick)).length)) * 7 + 14)
 const groupWidth = computed(() => (width.value - left.value - RIGHT) / Math.max(1, props.labels.length))
 const groupX = (i) => left.value + i * groupWidth.value
@@ -153,11 +158,20 @@ const xTicks = computed(() => {
   return props.labels.map((_, i) => i).filter((i) => i % step === 0)
 })
 
+// the tooltip's width as last drawn
+const tip = ref(null)
+const tipWidth = ref(150)
+onUpdated(() => {
+  const drawn = tip.value?.offsetWidth
+  if (drawn && drawn !== tipWidth.value) tipWidth.value = drawn
+})
+
+// beside the column, on the side with more room; on a narrow chart, as far
+// over as it fits rather than past the edge
 const tooltipStyle = computed(() => {
   const px = groupX(active.value) + groupWidth.value / 2
-  return px > width.value * 0.55
-    ? { right: `${width.value - px + 14}px`, top: `${TOP}px` }
-    : { left: `${px + 14}px`, top: `${TOP}px` }
+  const left = px > width.value * 0.55 ? px - 14 - tipWidth.value : px + 14
+  return { left: `${Math.max(0, Math.min(left, width.value - tipWidth.value))}px`, top: `${TOP}px` }
 })
 
 const announcement = computed(() => (fromKeyboard.value && active.value !== null

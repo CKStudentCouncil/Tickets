@@ -103,7 +103,7 @@
       </g>
     </svg>
 
-    <div v-if="active !== null" class="chart-tooltip" :style="tooltipStyle" aria-hidden="true">
+    <div v-if="active !== null" ref="tip" class="chart-tooltip" :style="tooltipStyle" aria-hidden="true">
       <p class="tip-title">{{ tooltipTitle(active) }}</p>
       <p v-for="item in activeRows" :key="item.key" class="tip-row">
         <span class="tip-key" :style="{ background: item.color }" />
@@ -117,7 +117,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, onUpdated, ref, watch } from 'vue'
 import { niceTicks } from 'src/utils/salesAnalytics'
 
 // Lines over the days of a sale. Every visual property is an SVG attribute
@@ -163,8 +163,12 @@ const ticks = computed(() => niceTicks(
   { integer: props.integer }
 ))
 const left = computed(() => Math.max(...ticks.value.map((tick) => String(props.axisFormat(tick)).length)) * 7 + 14)
+// about 11px a CJK character, 6.5px anything narrower
+const textWidth = (text) => [...String(text)].reduce((sum, char) => sum + (char.charCodeAt(0) < 0x2e80 ? 6.5 : 11), 0)
 // room for the line names at their ends
-const right = computed(() => (props.series.length > 1 ? 50 : 14))
+const right = computed(() => (props.series.length > 1
+  ? Math.max(50, ...props.series.map((item) => textWidth(item.label) + 14))
+  : 14))
 const plotWidth = computed(() => Math.max(1, width.value - left.value - right.value))
 
 const x = (i) => (count.value <= 1 ? left.value + plotWidth.value / 2 : left.value + (i * plotWidth.value) / last.value)
@@ -249,11 +253,20 @@ const activeRows = computed(() => (active.value === null ? [] : props.series
 
 const activeDots = computed(() => activeRows.value.map((row) => ({ key: row.key, color: row.color, y: y(row.value) })))
 
+// the tooltip's width as last drawn
+const tip = ref(null)
+const tipWidth = ref(160)
+onUpdated(() => {
+  const drawn = tip.value?.offsetWidth
+  if (drawn && drawn !== tipWidth.value) tipWidth.value = drawn
+})
+
+// beside the crosshair, on the side with more room; on a narrow chart, as
+// far over as it fits rather than past the edge
 const tooltipStyle = computed(() => {
   const px = x(active.value)
-  return px > width.value * 0.55
-    ? { right: `${width.value - px + 14}px`, top: `${TOP}px` }
-    : { left: `${px + 14}px`, top: `${TOP}px` }
+  const left = px > width.value * 0.55 ? px - 14 - tipWidth.value : px + 14
+  return { left: `${Math.max(0, Math.min(left, width.value - tipWidth.value))}px`, top: `${TOP}px` }
 })
 
 const summary = computed(() => {
