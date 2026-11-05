@@ -68,15 +68,24 @@ export function createMailQueue({ db, send, buildMessage, now = Date.now,
     return externalTx ? write(externalTx) : db.runTransaction(write)
   }
 
+  // The document whose email fields follow a job: an order's confirmation
+  // (email*), or a cancelled order's cancellation notice (cancelEmail*)
+  function statusTarget(job) {
+    if (job.cancelledOrderId) return { ref: db.doc(`cancelledOrders/${job.cancelledOrderId}`), prefix: 'cancelEmail' }
+    if (job.orderId) return { ref: db.doc(`orders/${job.orderId}`), prefix: 'email' }
+    return null
+  }
+
   async function updateOrderInTransaction(tx, job, id, patch) {
-    if (!job.orderId) return
-    const ref = db.doc(`orders/${job.orderId}`)
+    const target = statusTarget(job)
+    if (!target) return
+    const { ref, prefix } = target
     const snap = await tx.get(ref)
     // A prior confirmation must not overwrite a newer deliberate resend.
-    if (snap.exists && snap.data().emailJobId === id) tx.update(ref, {
-      emailStatus: patch.status, emailUpdatedAt: FieldValue.serverTimestamp(),
-      emailError: patch.error || FieldValue.delete(),
-      ...(patch.providerMessageId ? { emailProviderMessageId: patch.providerMessageId } : {})
+    if (snap.exists && snap.data()[`${prefix}JobId`] === id) tx.update(ref, {
+      [`${prefix}Status`]: patch.status, [`${prefix}UpdatedAt`]: FieldValue.serverTimestamp(),
+      [`${prefix}Error`]: patch.error || FieldValue.delete(),
+      ...(patch.providerMessageId ? { [`${prefix}ProviderMessageId`]: patch.providerMessageId } : {})
     })
   }
 

@@ -75,7 +75,6 @@ export function generateGuestInvitationHTML(orderId, order) {
   return renderEmail({
     title: '2026 建中舞會 COSMOS 公關票',
     preheader: `${inviter ? `${inviter} ` : ''}誠摯邀請您蒞臨 2026 建中舞會 COSMOS，公關票編號 ${safeOrderId}，共 ${ticketCount} 張`,
-    content,
-    heroCaption: 'Invitation'
+    content
   });
 }

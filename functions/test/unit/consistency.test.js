@@ -152,3 +152,31 @@ test('報帳 limits and 科目 match src/data/reimbursements.js', async () => {
     assert.deepEqual(page[name], server[name], name)
   }
 })
+
+test('取消訂單 reasons, limits and notice counting match src/data/cancellations.js', async () => {
+  const page = await import(srcFile('data/cancellations.js'))
+  const pageUtils = await import(srcFile('utils/cancellations.js'))
+  const server = await import('../../lib/orderCancel.js')
+  for (const name of ['CANCEL_REASONS', 'NOTE_REQUIRED_REASONS', 'PAYMENT_NOTICES_TO_CANCEL', 'PICKUP_NOTICES_TO_CANCEL', 'MAX_CANCEL_ORDERS', 'MAX_CANCEL_NOTE', 'NOTICE_TYPES_COUNTED']) {
+    assert.deepEqual(page[name], server[name], name)
+  }
+  for (const notices of [undefined, {}, { a: { type: 'both' }, b: { type: 'pickup' }, c: { type: 'payment' }, d: { type: 'custom' }, e: null }]) {
+    assert.deepEqual(pageUtils.noticeCountsOf({ notices }), server.noticeCountsOf({ notices }))
+  }
+  // the page offers an order for a reason exactly when the server takes it
+  const cases = [
+    {}, { paid: true }, { delivered: true }, { complimentary: true, paid: true }, { streetSale: true },
+    { notices: { a: { type: 'payment' } } }, { paid: true, notices: { a: { type: 'payment' } } },
+    { notices: { a: { type: 'pickup' }, b: { type: 'both' } } },
+    { paid: true, notices: { a: { type: 'pickup' }, b: { type: 'both' }, c: { type: 'pickup' } } }
+  ]
+  for (const fields of cases) {
+    for (const reason of Object.keys(server.CANCEL_REASONS)) {
+      const order = { finalTotal: 900, ...fields }
+      const pageOk = !pageUtils.cancelBlockOf(order) && !pageUtils.reasonBlockOf(order, reason)
+      let serverOk = true
+      try { server.checkCancellation(order, { reason, refund: 'full' }) } catch { serverOk = false }
+      assert.equal(pageOk, serverOk, `${reason} ${JSON.stringify(fields)}`)
+    }
+  }
+})

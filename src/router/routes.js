@@ -203,6 +203,17 @@ const routes = [
         }
       },*/
       {
+        // 取消與退款 (super admins): cancel orders (one, several picked
+        // together, or 逾期 ones after their notices) and mark refunds handed
+        // back (functions/lib/orderCancel.js)
+        path: 'cancel',
+        name: 'admin-cancel',
+        component: () => import('pages/OrderCancelPage.vue'),
+        meta: {
+          requiresSuperAdmin: true
+        }
+      },
+      {
         // 報帳申請: admins claim back what they spent; super admins review
         // the claims on /super_admin/reimbursements (報帳管理)
         path: 'reimburse',

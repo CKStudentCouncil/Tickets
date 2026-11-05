@@ -70,7 +70,7 @@
     </div>
 
     <div
-      v-else-if="!loadError && orders.length === 0"
+      v-else-if="!loadError && orders.length === 0 && cancelledOrders.length === 0"
       class="no-tickets"
     >
       <div class="no-tickets-copy">
@@ -238,6 +238,29 @@
       </article>
     </div>
 
+    <!-- 取消訂單 (cancelledOrders): no QR code, what is owed back -->
+    <section v-if="cancelledOrders.length > 0" class="cancelled-orders" aria-labelledby="cancelled-title">
+      <p class="state-label"><span /> CANCELLED</p>
+      <h2 id="cancelled-title">已取消的訂單</h2>
+      <ul>
+        <li v-for="order in cancelledOrders" :key="order.id">
+          <router-link :to="{ name: 'order-detail', params: { id: order.id } }" class="cancelled-row">
+            <span class="cancelled-main">
+              <span class="cancelled-items">{{ itemSummary(order) }}</span>
+              <span class="cancelled-meta">
+                ORDER <span class="mono">{{ order.id }}</span> · {{ CANCEL_REASONS[order.cancelReason] || '已取消' }}
+              </span>
+            </span>
+            <span class="cancelled-side">
+              <span class="num">NT$ {{ Number(order.finalTotal || 0).toLocaleString() }}</span>
+              <span v-if="order.paid" class="refund-tag" :class="order.refundStatus">{{ refundText(order) }}</span>
+            </span>
+            <ArrowUpRight :size="16" :stroke-width="1.75" aria-hidden="true" />
+          </router-link>
+        </li>
+      </ul>
+    </section>
+
     <q-dialog
       v-model="showQr"
       transition-show="scale"
@@ -303,7 +326,8 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ArrowRight, ArrowUpRight, Maximize2, Sun, X } from 'lucide-vue-next'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
-import { fetchMyOrders } from 'src/services/orderService'
+import { fetchMyCancelledOrders, fetchMyOrders } from 'src/services/orderService'
+import { CANCEL_REASONS, REFUND_STATUS_LABELS } from 'src/data/cancellations'
 import { useAuthStore } from 'src/stores/auth'
 import { parseDate } from 'src/utils/datetime'
 import { renderOrderQr } from 'src/utils/qrcode'
@@ -349,6 +373,7 @@ const ORDER_TIME = new Intl.DateTimeFormat('zh-TW', {
 const auth = useAuthStore()
 
 const orders = ref([])
+const cancelledOrders = ref([])
 const loading = ref(true)
 const loadError = ref(false)
 const qrError = ref('')
@@ -397,7 +422,16 @@ async function loadOrders() {
   loadError.value = false
 
   try {
-    orders.value = await fetchMyOrders(auth.user.uid)
+    const [mine, cancelled] = await Promise.all([
+      fetchMyOrders(auth.user.uid),
+      // the list of tickets still shows if this one fails
+      fetchMyCancelledOrders(auth.user.uid).catch((error) => {
+        console.error(error)
+        return cancelledOrders.value
+      })
+    ])
+    orders.value = mine
+    cancelledOrders.value = cancelled
   } catch (error) {
     console.error(error)
     loadError.value = true
@@ -468,6 +502,11 @@ function formatOrderTime(value) {
 
   const parts = Object.fromEntries(ORDER_TIME.formatToParts(date).map((part) => [part.type, part.value]))
   return `${parts.year}.${parts.month}.${parts.day} ${parts.hour}:${parts.minute}`
+}
+
+function refundText(order) {
+  const amount = Number(order.refundAmount) || 0
+  return amount ? `${REFUND_STATUS_LABELS[order.refundStatus] || ''} NT$ ${amount.toLocaleString()}` : REFUND_STATUS_LABELS.none
 }
 
 function itemSummary(order) {

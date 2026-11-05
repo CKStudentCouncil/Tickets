@@ -189,12 +189,29 @@ service cloud.firestore {
       // administrators cannot bypass their stale-state / QR checks directly.
       allow update: if false;
 
-      allow delete: if isAdmin();
+      // A paid order is cancelled by a super admin with cancelOrders instead,
+      // which keeps it and its refund in cancelledOrders; 公關票 and 路宣 have
+      // their own records (officer quotas, the street sale).
+      allow delete: if isAdmin() && (
+        resource.data.get('paid', false) != true
+        || resource.data.get('complimentary', false) == true
+        || resource.data.get('streetSale', false) == true
+      );
 
       match /history/{eventId} {
         allow read: if isManager();
         allow create, update, delete: if false;
       }
+    }
+
+    // 取消訂單 (functions/lib/orderCancel.js): written only by cancelOrders and
+    // updateRefundStatus, for super admins. Door staff opening a cancelled
+    // ticket's QR code see that it is cancelled; buyers see their own and what
+    // is owed back.
+    match /cancelledOrders/{orderId} {
+      allow get: if isManager() || isOrderOwner();
+      allow list: if isSuperAdmin() || isOrderOwner();
+      allow create, update, delete: if false;
     }
 
     // Buyers never update or delete orders. ticketSales, buyerPurchases,

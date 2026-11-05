@@ -1,14 +1,115 @@
 <template>
   <div class="detail-page">
-    <div v-if="loading && !order" class="state-screen" role="status">
+    <div v-if="loading && !order && !cancelledOrder" class="state-screen" role="status">
       <p>載入訂單中...</p>
     </div>
 
-    <div v-else-if="loadError && !order" class="state-screen" role="alert">
+    <div v-else-if="loadError && !order && !cancelledOrder" class="state-screen" role="alert">
       <h1>目前無法載入訂單</h1>
       <p>請檢查連線後重試</p>
       <button type="button" class="btn" @click="loadOrder">重新載入</button>
     </div>
+
+    <!-- ---------- cancelled (functions/lib/orderCancel.js) ---------- -->
+    <main v-else-if="!order && cancelledOrder" class="detail-content">
+      <header class="page-heading">
+        <p class="eyebrow">
+          CK PARTY NIGHT · {{ isAdminView ? 'STAFF VIEW' : 'CUSTOMER VIEW' }}
+        </p>
+        <h1>訂單已取消</h1>
+        <p class="heading-meta" style="margin-bottom: 2ch;">
+          ORDER <span class="mono">{{ cancelledOrder.id }}</span>
+        </p>
+        <div class="heading-actions">
+          <button type="button" class="btn-outline" @click="goBack">返回</button>
+          <button
+            v-if="isAdminView"
+            type="button"
+            class="btn"
+            @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
+          >
+            掃描下一張
+          </button>
+        </div>
+      </header>
+
+      <p v-if="isAdminView" class="qr-check danger cancelled-alert" role="alert">
+        ⚠ 此訂單已取消，QR Code 已失效，不得領票
+      </p>
+
+      <section class="panel" :style="isAdminView ? '' : 'border-top: none; margin-top: 0; padding-top: 0;'">
+        <h2>取消資訊</h2>
+        <dl class="info-list">
+          <div>
+            <dt>取消原因</dt>
+            <dd>{{ CANCEL_REASONS[cancelledOrder.cancelReason] || '—' }}</dd>
+          </div>
+          <div v-if="isAdminView && cancelledOrder.cancelNote">
+            <dt>說明</dt>
+            <dd>{{ cancelledOrder.cancelNote }}</dd>
+          </div>
+          <div>
+            <dt>取消時間</dt>
+            <dd class="num">{{ formatDateTime(cancelledOrder.cancelledAt) }}</dd>
+          </div>
+          <div v-if="isAdminView && cancelledOrder.cancelledByName">
+            <dt>取消人員</dt>
+            <dd>{{ cancelledOrder.cancelledByName }}</dd>
+          </div>
+          <div v-if="isAdminView && cancelledOrder.cancelEmailStatus">
+            <dt>取消通知信</dt>
+            <dd>
+              {{ CANCEL_EMAIL_LABELS[cancelledOrder.cancelEmailStatus] || cancelledOrder.cancelEmailStatus }}
+              <span v-if="cancelledOrder.cancelEmailError" class="mono">（{{ cancelledOrder.cancelEmailError }}）</span>
+            </dd>
+          </div>
+          <div>
+            <dt>訂單金額</dt>
+            <dd class="num">NT$ {{ Number(cancelledOrder.finalTotal ?? 0).toLocaleString() }}・{{ cancelledOrder.paid ? '已付款' : '未付款' }}</dd>
+          </div>
+          <div v-if="cancelledOrder.paid">
+            <dt>退款</dt>
+            <dd>
+              {{ REFUND_STATUS_LABELS[cancelledOrder.refundStatus] || '—' }}
+              <span v-if="cancelledOrder.refundAmount" class="num">NT$ {{ Number(cancelledOrder.refundAmount).toLocaleString() }}</span>
+              <span v-if="cancelledOrder.refundStatus === 'done' && cancelledOrder.refundedAt" class="num">・{{ formatDateTime(cancelledOrder.refundedAt) }}</span>
+            </dd>
+          </div>
+        </dl>
+        <p v-if="!isAdminView && cancelledOrder.refundStatus === 'pending'" class="panel-copy">
+          退款將依主辦單位公告之時間、地點及方式辦理；如有疑問請聯繫建國中學班聯會
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>票券明細</h2>
+        <ul v-if="(cancelledOrder.items || []).length" class="product-stats">
+          <li v-for="(item, index) in cancelledOrder.items || []" :key="item.id || index">
+            <span>{{ item.name }}</span>
+            <span class="item-meta">
+              <span class="num">× {{ item.quantity }}</span>
+              <strong class="num">
+                NT$ {{ (Number(item.price || 0) * Number(item.quantity || 0)).toLocaleString() }}
+              </strong>
+            </span>
+          </li>
+        </ul>
+        <dl v-if="isAdminView" class="info-list">
+          <div v-if="cancelledOrder.customerName">
+            <dt>購票人</dt>
+            <dd>{{ cancelledOrder.customerName }}</dd>
+          </div>
+          <div v-if="cancelledOrder.customerEmail">
+            <dt>Email</dt>
+            <dd class="mono">{{ cancelledOrder.customerEmail }}</dd>
+          </div>
+          <div v-if="cancelledOrder.customerPhone">
+            <dt>聯絡電話</dt>
+            <dd class="mono">{{ cancelledOrder.customerPhone }}</dd>
+          </div>
+        </dl>
+      </section>
+    </main>
 
     <div v-else-if="!order" class="state-screen">
       <p class="eyebrow">CK PARTY NIGHT</p>
@@ -135,7 +236,17 @@
         <p v-if="isAdminView && order.deliveryUpdatedByName" class="check-meta">
           最後領票更新：{{ order.deliveryUpdatedByName }} · {{ formatDateTime(order.deliveryUpdatedAt) }}
         </p>
+        <p v-if="isAdminView && order.notices" class="check-meta">
+          已寄通知：繳費 {{ noticeCounts.payment }} 次・領票 {{ noticeCounts.pickup }} 次
+        </p>
+        <div v-if="isAdminView && auth.isSuperAdmin && !cancelBlockOf(order)" class="cancel-row">
+          <button type="button" class="btn-outline cancel-action" :disabled="changingStatus || loading" @click="cancelOpen = true">
+            取消訂單
+          </button>
+        </div>
       </section>
+
+      <CancelOrderDialog v-if="isAdminView && auth.isSuperAdmin" v-model="cancelOpen" :orders="[order]" @cancelled="onCancelled" />
 
       <!-- ---------- QR ---------- -->
       <section class="panel">
@@ -298,7 +409,10 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
 import { guestSourceText } from 'src/data/guests'
-import { fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
+import { fetchCancelledOrder, fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
+import { CANCEL_EMAIL_LABELS, CANCEL_REASONS, REFUND_STATUS_LABELS } from 'src/data/cancellations'
+import { cancelBlockOf, noticeCountsOf } from 'src/utils/cancellations'
+import CancelOrderDialog from 'src/components/CancelOrderDialog.vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useScanDeskStore } from 'src/stores/scanDesk'
 import { useToastStore } from 'src/stores/toast'
@@ -453,6 +567,9 @@ const scanDesk = useScanDeskStore()
 
 const loading = ref(true)
 const order = ref(null)
+// the order when it is no longer in `orders` but in cancelledOrders
+const cancelledOrder = ref(null)
+const cancelOpen = ref(false)
 const qrCanvas = ref(null)
 const loadError = ref(false)
 const qrError = ref('')
@@ -483,6 +600,14 @@ const idCheck = computed(() => getIdCheck(order.value))
 const needsIdCheck = computed(() => !!idCheck.value?.student)
 const identityChecked = ref(false)
 
+const noticeCounts = computed(() => noticeCountsOf(order.value))
+
+function onCancelled({ refundAmount }) {
+  toast.show(refundAmount ? `已取消訂單，待退款 NT$ ${refundAmount.toLocaleString()}` : '已取消訂單')
+  order.value = null
+  loadOrder()
+}
+
 const canCollect = computed(
   () =>
     (qrCheck.value === 'ok' || (auth.isAdmin && !!overrideReason.value.trim())) &&
@@ -497,11 +622,14 @@ async function loadOrder() {
   if (order.value?.id !== id) identityChecked.value = false
 
   try {
-    // staff can read any order, a buyer only their own (firestore.rules)
+    // staff can read any order, a buyer only their own (firestore.rules);
+    // a cancelled one moved to cancelledOrders, where the same holds
     const result = await fetchOrder(id)
+    const cancelled = result ? null : await fetchCancelledOrder(id)
     if (sequence !== loadSequence) return
 
     order.value = result ? { ...result, delivered: Boolean(result.delivered) } : null
+    cancelledOrder.value = cancelled
   } catch (error) {
     console.error('Failed to load order:', error)
     if (sequence !== loadSequence) return
@@ -864,6 +992,7 @@ function goBack() {
 
 watch(orderId, () => {
   order.value = null
+  cancelledOrder.value = null
   statusError.value = ''
   overrideReason.value = ''
   changingStatus.value = false

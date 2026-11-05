@@ -44,11 +44,19 @@ export function generateOrderNotificationHTML({
   const isCustom = knownType === 'custom';
   const showPayment = !isCustom && knownType !== 'pickup';
   const showPickup = !isCustom && knownType !== 'payment';
+  // 繳費暨取票 happens at one time and place: one 時間 row (a notice prepared
+  // with two different times still lists both)
+  const sharedTime = knownType === 'both' && (!paymentTime || !pickupTime || paymentTime === pickupTime)
+    ? paymentTime || pickupTime
+    : null;
 
   const preheaderParts = [];
 
   if (isCustom) {
     preheaderParts.push(escapeHtml(String(message || '').slice(0, 80)));
+  } else if (sharedTime !== null) {
+    preheaderParts.push(`時間：${escapeHtml(sharedTime)}`);
+    preheaderParts.push(`地點：${escapeHtml(location)}`);
   } else {
     if (showPayment) preheaderParts.push(`繳費時間：${escapeHtml(paymentTime)}`);
     if (showPickup) preheaderParts.push(`取票時間：${escapeHtml(pickupTime)}`);
@@ -64,11 +72,13 @@ export function generateOrderNotificationHTML({
             ${escapeHtmlPreserveBreaks(message)}
           </p>`);
   } else {
-    const schedule = [
-      showPayment ? ['繳費時間', escapeHtml(paymentTime)] : null,
-      showPickup ? ['取票時間', escapeHtml(pickupTime)] : null,
-      ['地點', escapeHtml(location)]
-    ].filter(Boolean);
+    const schedule = (sharedTime !== null
+      ? [['時間', escapeHtml(sharedTime)]]
+      : [
+          showPayment ? ['繳費時間', escapeHtml(paymentTime)] : null,
+          showPickup ? ['取票時間', escapeHtml(pickupTime)] : null
+        ]
+    ).concat([['地點', escapeHtml(location)]]).filter(Boolean);
 
     cardRows =
       cardSection(`
@@ -111,7 +121,6 @@ export function generateOrderNotificationHTML({
   return renderEmail({
     title: `${label} - 2026 CK PARTY NIGHT`,
     preheader: preheaderParts.join('，'),
-    content,
-    heroCaption: 'Notification'
+    content
   });
 }

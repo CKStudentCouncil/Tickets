@@ -45,8 +45,9 @@
           </div>
         </div>
         <p class="panel-copy">
-          收入是所有訂單（含路宣；公關票為 NT$0）與學弟賣票的金額，支出是核准的報帳；「目前」只算已收到的款項與已核准、已撥款的報帳，「預估」假設每筆訂單都收到款、待審核的報帳全數核准
+          收入是所有訂單（含路宣；公關票為 NT$0）與學弟賣票的金額，加上取消訂單已付款而未退還的部分；支出是核准的報帳；「目前」只算已收到的款項與已核准、已撥款的報帳，「預估」假設每筆訂單都收到款、待審核的報帳全數核准
         </p>
+        <p v-if="cancelledError" class="panel-copy" role="alert">取消訂單資料載入失敗，以下收入未含取消訂單未退還的款項；請重新整理</p>
 
         <div class="stats">
           <div class="stat">
@@ -80,6 +81,11 @@
                 <td>學弟賣票收入</td>
                 <td class="num">{{ money(profit.sellers.realized) }}</td>
                 <td class="num">{{ money(profit.sellers.projected) }}</td>
+              </tr>
+              <tr v-if="profit.cancelled.realized">
+                <td>取消訂單未退還款項</td>
+                <td class="num">{{ money(profit.cancelled.realized) }}</td>
+                <td class="num">{{ money(profit.cancelled.projected) }}</td>
               </tr>
               <tr class="subtotal">
                 <td>收入合計</td>
@@ -346,7 +352,7 @@ import {
   REIMBURSEMENT_STATUS_LABELS,
   UNCATEGORIZED
 } from 'src/data/reimbursements'
-import { fetchEveryOrder } from 'src/services/orderService'
+import { fetchCancelledOrders, fetchEveryOrder } from 'src/services/orderService'
 import { fetchYearOrders } from 'src/services/archiveService'
 import { taiwanYearOf, yearFromQuery } from 'src/utils/historyData'
 import { fetchAllRegistrations } from 'src/services/sellerService'
@@ -378,6 +384,9 @@ const claims = ref([])
 // every order, one read each, for the 收支表's ticket types
 const orders = ref([])
 const registrations = ref([])
+// 取消與退款: what was paid and not given back is income
+const cancelledOrders = ref([])
+const cancelledError = ref(false)
 const searchTerm = ref('')
 const statusFilter = ref('all')
 // claims with a status change or delete in flight
@@ -391,7 +400,8 @@ const money = (amount) => `${amount < 0 ? '−' : ''}NT$ ${Math.abs(amount).toLo
 const profit = computed(() => calculateProfit({
   orderSummary: summarizeOrders(orders.value),
   registrations: registrations.value,
-  claims: claims.value
+  claims: claims.value,
+  cancelled: cancelledOrders.value
 }))
 
 /* ---------- 收支表 (utils/partyStatement.js) ---------- */
@@ -408,6 +418,7 @@ const statement = computed(() => buildStatement({
   orders: orders.value,
   registrations: registrations.value,
   claims: claims.value,
+  cancelled: cancelledOrders.value,
   basis: statementBasis.value
 }))
 const statementBasisLine = computed(() => {
@@ -471,13 +482,21 @@ async function load() {
   loadError.value = false
 
   try {
-    const [all, everyOrder, sellerRegistrations] = await Promise.all([
+    cancelledError.value = false
+    const [all, everyOrder, sellerRegistrations, cancelled] = await Promise.all([
       fetchReimbursements(viewYear),
       pastYear ? fetchYearOrders(viewYear) : fetchEveryOrder(),
-      fetchAllRegistrations()
+      fetchAllRegistrations(),
+      // the rest of the page still shows without them, saying so
+      fetchCancelledOrders(viewYear).catch((error) => {
+        console.error('Load cancelled orders error:', error)
+        cancelledError.value = true
+        return []
+      })
     ])
     claims.value = all
     orders.value = everyOrder
+    cancelledOrders.value = cancelled
     registrations.value = pastYear
       ? sellerRegistrations.filter((registration) => taiwanYearOf(registration.createdAt) === viewYear)
       : sellerRegistrations

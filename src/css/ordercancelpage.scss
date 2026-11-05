@@ -1,0 +1,282 @@
+/* =========================================================
+   取消與退款 (/admin/cancel): the admin page's look
+   (adminpage.scss) with a row list for orders
+   ========================================================= */
+
+.cancel-page > * {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* small text that carries information reads at 4.5:1 or more:
+   0.55 white is 5.6:1 on the page */
+.cancel-page .panel-copy,
+.cancel-page .empty,
+.cancel-page .stat,
+.cancel-page .tabs button {
+  color: rgba(242, 240, 233, 0.55);
+}
+
+.cancel-page .tabs button:hover,
+.cancel-page .tabs button.active {
+  color: var(--off-white);
+}
+
+.heading-copy {
+  max-width: 60ch;
+  margin-top: 16px;
+}
+
+.back-link {
+  display: inline-block;
+  margin-top: 24px;
+  text-decoration: none;
+}
+
+.first-panel {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.tab-count {
+  margin-left: 8px;
+  color: var(--ember);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 22px;
+}
+
+.toolbar-meta {
+  color: rgba(242, 240, 233, 0.55);
+  font-size: 12px;
+}
+
+.error-line {
+  margin: 20px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.error-line .row-action {
+  margin-left: 8px;
+}
+
+.stats-row {
+  flex-wrap: wrap;
+  gap: 24px 52px;
+}
+
+/* ---------- rows ---------- */
+
+.row-list {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-soft);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* 逾期 rows: a tap anywhere picks the order */
+.row.selectable {
+  cursor: pointer;
+  transition: background-color .2s ease;
+}
+
+.row.selectable:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.row.selected {
+  padding-left: 12px;
+  background: rgba(228, 164, 104, 0.03);
+  box-shadow: inset 3px 0 0 var(--ember);
+}
+
+/* a 44 px target around the 20 px box, without moving it */
+.row-check {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -12px -12px -12px -12px;
+  cursor: pointer;
+}
+
+.row-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--ember);
+  cursor: pointer;
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-main p,
+.row-side p {
+  margin: 0;
+}
+
+.row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.row-title a {
+  color: var(--ember);
+  text-decoration: none;
+}
+
+.row-title a:hover {
+  text-decoration: underline;
+}
+
+.row-reason {
+  margin-top: 6px !important;
+  color: rgba(242, 240, 233, 0.8);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.row-meta {
+  margin-top: 4px !important;
+  color: rgba(242, 240, 233, 0.55);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.row-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 45%;
+  font-size: 13px;
+  text-align: right;
+}
+
+/* 標記已退款 / 改回待退款: a full-size target at the desk */
+.row-action {
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 10px 16px;
+  font-size: 12px;
+}
+
+/* refund status: orange stays with what can be tapped or picked */
+.refund-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  color: var(--lunar);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.refund-tag.pending {
+  border-color: rgba(242, 240, 233, 0.45);
+  color: var(--off-white);
+}
+
+.refund-tag.pending::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+
+.refund-tag.done {
+  border-color: rgba(119, 191, 139, 0.45);
+  color: #9ad0a8;
+}
+
+/* ---------- selection ---------- */
+
+.selection-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid rgba(228, 164, 104, 0.45);
+  background: rgba(13, 16, 21, 0.96);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+
+.selection-bar > span {
+  margin-right: auto;
+}
+
+@media (max-width: 640px) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .row-main {
+    flex-basis: calc(100% - 40px);
+  }
+
+  .row-side {
+    align-items: flex-start;
+    max-width: none;
+    margin-left: 36px;
+    text-align: left;
+  }
+
+  .row.selected {
+    padding-left: 8px;
+  }
+
+  /* the summary above, both buttons side by side below */
+  .selection-bar > span {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  .selection-bar .btn-outline {
+    flex: 1;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}

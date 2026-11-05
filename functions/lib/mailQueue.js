@@ -8,17 +8,29 @@ import { createMailQueue } from './mailQueueCore.js'
 import { generateEmailHTML } from '../templates/orderConfirmation.js'
 import { generateGuestInvitationHTML } from '../templates/guestInvitation.js'
 import { generateOrderNotificationHTML } from '../templates/notification.js'
+import { generateCancellationHTML } from '../templates/orderCancellation.js'
 import { heroAttachment } from '../templates/shared.js'
 
 export const NOTIFY_TO = 'ckhssc@gl.ck.tp.edu.tw'
 export const MAX_BCC_PER_BATCH = 49
 
-async function buildMessage(job) {
+// exported for the emulator tests, which run the worker with a fake sender
+export async function buildMessage(job) {
   if (job.kind === 'notification') return {
     from: SENDER, to: NOTIFY_TO, bcc: job.recipients,
     subject: job.subject,
     html: generateOrderNotificationHTML({ type: job.type, ...job.fields }),
     attachments: [heroAttachment()]
+  }
+  if (job.kind === 'cancellation') {
+    const snap = await db.doc(`cancelledOrders/${job.cancelledOrderId}`).get()
+    if (!snap.exists || !snap.data().customerEmail) return null
+    return {
+      from: SENDER, to: snap.data().customerEmail,
+      subject: `建中舞會購票系統訂單取消通知 - 票券編號：${job.cancelledOrderId}`,
+      html: generateCancellationHTML(job.cancelledOrderId, snap.data(), getBuyerOrderUrl(job.cancelledOrderId)),
+      attachments: [heroAttachment()]
+    }
   }
   if (job.kind !== 'confirmation') throw new Error('Unsupported queue message kind')
   const snap = await db.doc(`orders/${job.orderId}`).get()
@@ -82,6 +94,17 @@ export function enqueueManualOrderResend(orderId, order, actorUid, { requestId }
 }
 
 export const enqueueNotificationBatch = (id, payload) => queue.enqueue(id, payload)
+
+// 訂單取消通知, queued in cancelOrders' transaction (before its writes: the
+// queue reads its job first). The cancelled order, written in the same
+// transaction, carries cancelEmailJobId so the worker records the outcome.
+export const cancellationJobId = (orderId) => `cancellation_${orderId}`
+export function enqueueCancellationNotice(tx, orderId, actorUid) {
+  return queue.enqueue(cancellationJobId(orderId), {
+    kind: 'cancellation', cancelledOrderId: orderId, recipientCount: 1, buyerCount: 1,
+    createdBy: actorUid
+  }, { tx })
+}
 
 export const processMailQueue = functions.region(REGION)
   .runWith({ secrets: MAIL_SECRETS, timeoutSeconds: 120, maxInstances: 1 })

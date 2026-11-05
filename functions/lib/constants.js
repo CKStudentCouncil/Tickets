@@ -94,3 +94,13 @@ export function getAdminOrderUrl(orderId, ticketCode = '') {
   const url = `${SITE_URL}/admin/orders/${encodeURIComponent(orderId)}`
   return ticketCode ? `${url}?c=${encodeURIComponent(ticketCode)}` : url
 }
+
+// 取消訂單 reasons (orderCancel.js, the cancellation email); the page keeps
+// the same in src/data/cancellations.js
+export const CANCEL_REASONS = {
+  unpaid: '逾期未繳費',
+  uncollected: '逾期未領票',
+  buyer_request: '購票人申請取消',
+  violation: '違反銷售條款',
+  other: '其他'
+}

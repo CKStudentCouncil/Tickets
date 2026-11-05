@@ -303,6 +303,7 @@ const navGroups = computed(() => {
     auth.isSuperAdmin && { to: '/admin/management', label: '票務管理' },
     auth.isSuperAdmin && { to: '/admin/account', label: '帳號管理' },
     //auth.isSuperAdmin && { to: '/super_admin/street', label: '路宣管理' },
+    auth.isSuperAdmin && { to: '/admin/cancel', label: '取消與退款' },
     auth.isSuperAdmin && { to: '/super_admin/guests', label: '公關票管理' },
     auth.isManager && { to: '/admin/survey', label: '系統問卷管理' },
     auth.isAdmin && { to: '/admin/sellers', label: '學弟賣票管理' },

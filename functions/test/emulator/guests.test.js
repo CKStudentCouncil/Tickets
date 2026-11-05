@@ -661,6 +661,13 @@ describe('notifications and 公關票', () => {
     const both = await callPrepare({ type: 'both', paymentTime: '11/20', pickupTime: '11/21', location: '穿堂' }, as(ADMIN))
     assert.deepEqual(await recipientsOf(both.jobId), ['buyer@example.com'])
 
+    // 繳費暨取票 takes one time for both
+    const shared = await callPrepare({ type: 'both', pickupTime: '11/22', location: '穿堂' }, as(ADMIN))
+    const { fields } = (await db.doc(`notificationJobs/${shared.jobId}`).get()).data()
+    assert.equal(fields.paymentTime, '11/22')
+    assert.equal(fields.pickupTime, '11/22')
+    await assert.rejects(callPrepare({ type: 'both', location: '穿堂' }, as(ADMIN)), { code: 'invalid-argument' })
+
     const pickup = await callPrepare({ type: 'pickup', pickupTime: '11/21', location: '穿堂' }, as(ADMIN))
     assert.deepEqual(await recipientsOf(pickup.jobId), ['alumni@example.com', 'buyer@example.com'])
   })

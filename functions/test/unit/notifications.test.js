@@ -117,3 +117,29 @@ test('recipient filters reject bad input and keep payment / pickup rules', async
   assert.deepEqual(readRecipientFilters({ school: '北一女中' }, 'pickup').schools, ['北一女中'])
   assert.deepEqual(readRecipientFilters({ school: 'all' }, 'survey').schools, [])
 })
+
+test('繳費暨取票 has one time: either field fills the other, and the email lists it once', async () => {
+  const { shareBothTime } = await import('../../lib/notifications.js')
+  const { generateOrderNotificationHTML } = await import('../../templates/notification.js')
+  const base = { location: '川堂', message: '' }
+  assert.deepEqual(shareBothTime('both', { ...base, paymentTime: '11/20 中午', pickupTime: '' }),
+    { ...base, paymentTime: '11/20 中午', pickupTime: '11/20 中午' })
+  assert.deepEqual(shareBothTime('both', { ...base, paymentTime: '', pickupTime: '11/20 中午' }),
+    { ...base, paymentTime: '11/20 中午', pickupTime: '11/20 中午' })
+  // only 繳費暨取票 shares; the others keep what they were given
+  assert.deepEqual(shareBothTime('pickup', { ...base, paymentTime: '', pickupTime: '11/20' }), { ...base, paymentTime: '', pickupTime: '11/20' })
+
+  const once = generateOrderNotificationHTML({ type: 'both', paymentTime: '11/20 中午', pickupTime: '11/20 中午', location: '川堂' })
+  assert.match(once, />\s*時間\s*</)
+  assert.doesNotMatch(once, /繳費時間|取票時間/)
+  assert.equal(once.match(/11\/20 中午/g).length, 2, 'the 時間 row and the preheader')
+
+  // a notice prepared before with two different times still shows both
+  const legacy = generateOrderNotificationHTML({ type: 'both', paymentTime: '11/20', pickupTime: '11/21', location: '川堂' })
+  assert.match(legacy, /繳費時間/)
+  assert.match(legacy, /取票時間/)
+
+  // 繳費 and 取票 alone are unchanged
+  assert.match(generateOrderNotificationHTML({ type: 'payment', paymentTime: '11/20', location: '川堂' }), /繳費時間/)
+  assert.match(generateOrderNotificationHTML({ type: 'pickup', pickupTime: '11/21', location: '川堂' }), /取票時間/)
+})

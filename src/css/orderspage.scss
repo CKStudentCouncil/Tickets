@@ -224,6 +224,100 @@
   .outline-button { margin-top: 26px; }
 }
 
+/* ---------- cancelled orders: a plain list, no QR code ---------- */
+
+.cancelled-orders {
+  margin-top: 56px;
+
+  h2 {
+    margin: 0 0 18px;
+    font-size: clamp(20px, 2.4vw, 24px);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line);
+  }
+}
+
+.cancelled-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--off-white);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+
+  &:hover { background: rgba(255, 255, 255, 0.02); }
+
+  svg { flex: none; color: var(--lunar); }
+}
+
+.cancelled-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cancelled-items {
+  color: rgba(242, 238, 229, 0.7);
+  font-size: 14px;
+  text-decoration: line-through;
+  text-decoration-color: rgba(242, 238, 229, 0.35);
+}
+
+.cancelled-meta {
+  color: var(--lunar);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+
+  .mono { font-family: 'SFMono-Regular', Menlo, Consolas, monospace; }
+}
+
+.cancelled-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  font-size: 13px;
+  text-align: right;
+}
+
+.refund-tag {
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  color: var(--lunar);
+  font-size: 11px;
+  white-space: nowrap;
+
+  // orange stays with buttons and links: an owed refund is plain text with a dot
+  &.pending {
+    border-color: rgba(242, 238, 229, 0.45);
+    color: var(--off-white);
+
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      vertical-align: 1px;
+    }
+  }
+
+  &.done { border-color: rgba(119, 191, 139, 0.45); color: #9ad0a8; }
+}
+
 /* ---------- no tickets: copy beside an empty ticket ---------- */
 
 .no-tickets {

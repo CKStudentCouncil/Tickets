@@ -57,7 +57,6 @@ export function generatePartySurveyInvitationHTML() {
   return renderEmail({
     title: '2026 建中舞會 COSMOS 滿意度調查',
     preheader: '感謝您參與 2026 建中舞會 COSMOS，邀請您花幾分鐘填寫舞會滿意度調查',
-    content,
-    heroCaption: 'Survey'
+    content
   });
 }
