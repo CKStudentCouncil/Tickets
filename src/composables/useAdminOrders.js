@@ -353,10 +353,17 @@ export function useAdminOrders({ showToast }) {
     }
   }
 
+  // gone from `orders` (deleted or cancelled); a live page drops it by
+  // itself, a page of search results does not
+  function dropOrder(orderIds) {
+    const gone = new Set([].concat(orderIds))
+    orders.value = orders.value.filter((order) => !gone.has(order.id))
+    refreshSummary()
+  }
+
   async function deleteOrder(orderId) {
     await deleteOrderDoc(orderId)
-    orders.value = orders.value.filter((order) => order.id !== orderId)
-    refreshSummary()
+    dropOrder(orderId)
     showToast('訂單已刪除')
   }
 
@@ -417,7 +424,7 @@ export function useAdminOrders({ showToast }) {
     currentStats, summary, summaryError, summaryLoading, summaryUpdatedAt, pageNumber, hasNext,
     pendingPaymentIds, exporting, nextPage, previousPage, refreshSummary,
     setActiveTab: (tab) => { activeTab.value = tab }, fetchOrders,
-    updatePaymentStatus, deleteOrder, exportToExcel, calculateDeliveryStats,
+    updatePaymentStatus, deleteOrder, dropOrder, exportToExcel, calculateDeliveryStats,
     formatDate: formatDateTime
   }
 }

@@ -146,6 +146,20 @@ describe('orders (PARTY-2)', () => {
     await assertSucceeds(deleteDoc(doc(db, 'orders', ORDER_ID)))
   })
 
+  test('a paid order is cancelled with cancelOrders, never deleted; 公關票 and 路宣 still are', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orders', 'CKS202611050002'), { ...ORDER, paid: true })
+      await setDoc(doc(db, 'orders', 'PR20261105ABC234'), { ...ORDER, paid: true, complimentary: true, school: '公關票' })
+      await setDoc(doc(db, 'orders', 'ST20261105ABC234'), { ...ORDER, paid: true, delivered: true, streetSale: true, school: '路宣' })
+    })
+    for (const who of [staff.admin, staff.superAdmin, staff.developer]) {
+      await assertFails(deleteDoc(doc(as(who), 'orders', 'CKS202611050002')))
+    }
+    await assertSucceeds(deleteDoc(doc(as(staff.admin), 'orders', 'PR20261105ABC234')))
+    await assertSucceeds(deleteDoc(doc(as(staff.admin), 'orders', 'ST20261105ABC234')))
+  })
+
   test('all staff roles are denied direct status, identity and metadata rewrites', async () => {
     for (const who of Object.values(staff)) {
       const target = doc(as(who), 'orders', ORDER_ID)
@@ -189,6 +203,45 @@ describe('orders (PARTY-2)', () => {
     await assertFails(getDoc(doc(as(staff.superAdmin), 'ticketSales', 'campus_ticket', 'shards', '0')))
     await assertFails(setDoc(doc(as(staff.superAdmin), 'ticketSales', 'campus_ticket', 'shards', '0'), { sold: 0 }))
     await assertFails(setDoc(doc(anon(), 'buyerPurchases', 'x'), { quantities: {} }))
+  })
+})
+
+describe('取消訂單 (cancelledOrders)', () => {
+  const CANCELLED_ID = 'CKS202611050009'
+  const CANCELLED = { ...ORDER, paid: true, cancelReason: 'buyer_request', refundAmount: 700, refundStatus: 'pending', cancelYear: 2026 }
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled((context) => setDoc(doc(context.firestore(), 'cancelledOrders', CANCELLED_ID), CANCELLED))
+  })
+
+  test('the buyer reads their own, with a userId filter; nobody else', async () => {
+    await assertSucceeds(getDoc(doc(as(buyer), 'cancelledOrders', CANCELLED_ID)))
+    await assertSucceeds(getDocs(query(collection(as(buyer), 'cancelledOrders'), where('userId', '==', buyer.uid))))
+    await assertFails(getDocs(collection(as(buyer), 'cancelledOrders')))
+    const other = { uid: 'other-uid', email: 'other@example.com' }
+    await assertFails(getDoc(doc(as(other), 'cancelledOrders', CANCELLED_ID)))
+    await assertFails(getDocs(query(collection(as(other), 'cancelledOrders'), where('userId', '==', buyer.uid))))
+    await assertFails(getDoc(doc(anon(), 'cancelledOrders', CANCELLED_ID)))
+  })
+
+  test('door staff open one; only super admins and developers list them all', async () => {
+    for (const who of [staff.manager, staff.admin]) {
+      await assertSucceeds(getDoc(doc(as(who), 'cancelledOrders', CANCELLED_ID)))
+      await assertFails(getDocs(query(collection(as(who), 'cancelledOrders'), where('cancelYear', '==', 2026))))
+    }
+    for (const who of [staff.superAdmin, staff.developer]) {
+      await assertSucceeds(getDocs(query(collection(as(who), 'cancelledOrders'), where('cancelYear', '==', 2026))))
+    }
+  })
+
+  test('only the functions write them: no client cancels, refunds or restores', async () => {
+    for (const who of [buyer, ...Object.values(staff)]) {
+      const db = as(who)
+      await assertFails(setDoc(doc(db, 'cancelledOrders', 'CKS202611050010'), CANCELLED))
+      await assertFails(updateDoc(doc(db, 'cancelledOrders', CANCELLED_ID), { refundStatus: 'done' }))
+      await assertFails(updateDoc(doc(db, 'cancelledOrders', CANCELLED_ID), { refundAmount: 0 }))
+      await assertFails(deleteDoc(doc(db, 'cancelledOrders', CANCELLED_ID)))
+    }
   })
 })
 

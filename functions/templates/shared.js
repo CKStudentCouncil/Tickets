@@ -322,9 +322,10 @@ function footer() {
 }
 
 // Full document: head, hidden preheader, hero, `content` and the footer.
-// `title` and `preheader` must already be escaped. `heroCaption` is the line
-// under COSMOS that names the kind of email (Confirmation, Notification).
-export function renderEmail({ title, preheader, content, heroCaption }) {
+// `title` and `preheader` must already be escaped. The hero ends on the
+// COSMOS lockup, as the poster does; each email names its kind in the intro
+// below it (the eyebrow and heading).
+export function renderEmail({ title, preheader, content }) {
   // Padded with zero-width joiners + non-breaking spaces so Gmail (and
   // similar clients) can't fall through to whatever visible text happens
   // to come right after this block for their inbox-preview snippet.
@@ -523,7 +524,7 @@ export function renderEmail({ title, preheader, content, heroCaption }) {
 
         <table role="presentation" class="mail" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.void}" style="width:100%;max-width:640px;background:${C.void};border:1px solid ${C.line};">
 
-          <!-- Hero: the homepage poster with the COSMOS lockup, then the email's caption -->
+          <!-- Hero: the homepage poster with the COSMOS lockup -->
           <tr>
             <td bgcolor="${C.void}" style="padding:0;font-size:0;line-height:0;background:${C.void};">
               <img
@@ -533,13 +534,6 @@ export function renderEmail({ title, preheader, content, heroCaption }) {
                 alt="2026 CK PARTY NIGHT · COSMOS"
                 style="display:block;width:100%;max-width:640px;height:auto;border:0;color:${C.text};font-family:${FONT};font-size:16px;line-height:1.4;text-align:center;"
               >
-            </td>
-          </tr>
-          <tr>
-            <td align="center" bgcolor="${C.void}" style="padding:0 24px;background:${C.void};text-align:center;">
-              <p style="margin:0;font-family:${FONT};font-size:13px;line-height:1.6;letter-spacing:.05em;color:${C.muted};">
-                ${heroCaption}
-              </p>
             </td>
           </tr>
 

@@ -1,5 +1,6 @@
 // 報帳 totals and the party's profit (/super_admin/reimbursements)
 import { REIMBURSEMENT_STATUSES } from '../data/reimbursements.js'
+import { retainedOf } from './cancellations.js'
 
 export const claimAmount = (claim) => Number(claim?.amount) || 0
 
@@ -29,7 +30,9 @@ export function summarizeReimbursements(claims = []) {
 // registration is paid and every pending claim approved.
 //   orderSummary   { bookedAmount, paidAmount } (fetchOrderSummary)
 //   registrations  sellerRegistrations, { price, quantity, paid }
-export function calculateProfit({ orderSummary = {}, registrations = [], claims = [] } = {}) {
+//   cancelled      cancelledOrders: what was paid and not given back counts
+//                  in both (utils/cancellations.js retainedOf)
+export function calculateProfit({ orderSummary = {}, registrations = [], claims = [], cancelled = [] } = {}) {
   const orders = {
     realized: Number(orderSummary.paidAmount) || 0,
     projected: Number(orderSummary.bookedAmount) || 0
@@ -38,9 +41,11 @@ export function calculateProfit({ orderSummary = {}, registrations = [], claims 
     realized: sumOf(registrations.filter((registration) => registration?.paid === true), registrationAmount),
     projected: sumOf(registrations, registrationAmount)
   }
+  const retained = sumOf(cancelled, retainedOf)
+  const kept = { realized: retained, projected: retained }
   const income = {
-    realized: orders.realized + sellers.realized,
-    projected: orders.projected + sellers.projected
+    realized: orders.realized + sellers.realized + kept.realized,
+    projected: orders.projected + sellers.projected + kept.projected
   }
 
   const { amounts, spent } = summarizeReimbursements(claims)
@@ -49,6 +54,7 @@ export function calculateProfit({ orderSummary = {}, registrations = [], claims 
   return {
     orders,
     sellers,
+    cancelled: kept,
     income,
     expenses,
     profit: {

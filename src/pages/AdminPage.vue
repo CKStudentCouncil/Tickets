@@ -31,6 +31,7 @@
       <router-link :to="{ name: 'admin-scan' }" class="btn scan-link">掃描票券 QR Code</router-link>
       <router-link :to="{ name: 'admin-scan-desk' }" class="btn-outline scan-link desk-link">電腦接收手機掃描</router-link>
       <router-link v-if="canPurge" :to="{ name: 'super-admin-analytics' }" class="btn-outline scan-link analytics-link">銷售報表</router-link>
+      <router-link v-if="canCancel" :to="{ name: 'admin-cancel' }" class="btn-outline scan-link analytics-link">取消與退款</router-link>
     </div>
 
     <div
@@ -225,7 +226,7 @@
           >
         </label>
 
-        <label v-if="notifyForm.type !== 'pickup' && notifyForm.type !== 'custom'" class="field">
+        <label v-if="notifyForm.type === 'payment'" class="field">
           <span>繳費時間</span>
           <input
             v-model="notifyForm.paymentTime"
@@ -234,10 +235,20 @@
           >
         </label>
 
-        <label v-if="notifyForm.type !== 'payment' && notifyForm.type !== 'custom'" class="field">
+        <label v-if="notifyForm.type === 'pickup'" class="field">
           <span>領票時間</span>
           <input
             v-model="notifyForm.pickupTime"
+            type="text"
+            placeholder="例如：8/20（三）12:00–13:00"
+          >
+        </label>
+
+        <!-- 繳費暨領票: one time, as one place -->
+        <label v-if="notifyForm.type === 'both'" class="field">
+          <span>時間（繳費與領票共用）</span>
+          <input
+            v-model="bothTime"
             type="text"
             placeholder="例如：8/20（三）12:00–13:00"
           >
@@ -268,8 +279,9 @@
             <p>內容：{{ notifyForm.message || '（尚未填寫）' }}</p>
           </template>
           <template v-else>
-            <p v-if="notifyForm.type !== 'pickup'">繳費時間：<strong>{{ notifyForm.paymentTime || '（尚未填寫）' }}</strong></p>
-            <p v-if="notifyForm.type !== 'payment'">領票時間：<strong>{{ notifyForm.pickupTime || '（尚未填寫）' }}</strong></p>
+            <p v-if="notifyForm.type === 'payment'">繳費時間：<strong>{{ notifyForm.paymentTime || '（尚未填寫）' }}</strong></p>
+            <p v-if="notifyForm.type === 'pickup'">領票時間：<strong>{{ notifyForm.pickupTime || '（尚未填寫）' }}</strong></p>
+            <p v-if="notifyForm.type === 'both'">時間：<strong>{{ bothTime || '（尚未填寫）' }}</strong></p>
             <p>地點：<strong>{{ notifyForm.location || '（尚未填寫）' }}</strong></p>
             <p v-if="notifyForm.message">補充說明：{{ notifyForm.message }}</p>
           </template>
@@ -381,12 +393,25 @@
         <span>第 {{ pageNumber }} 頁・每頁最多 50 筆</span>
         <button type="button" class="btn-outline" :disabled="loading || !hasNext" @click="nextPage">下一頁</button>
         <button v-if="isSearching" type="button" class="btn-outline" :disabled="loading" @click="fetchOrders({ reset: true })">更新搜尋結果</button>
+        <button
+          v-if="selectableOrders.length"
+          type="button"
+          class="btn-outline"
+          @click="toggleSelectAll"
+        >
+          {{ allSelected ? '全部不選' : `選取本頁可取消的訂單（${selectableOrders.length}）` }}
+        </button>
       </div>
       <div
         v-for="order in currentOrders"
         :key="order.id"
         class="order-card"
+        :class="{ selected: selectedIds.has(order.id) }"
       >
+        <label v-if="canCancel && !cancelBlockOf(order)" class="select-order">
+          <input type="checkbox" :checked="selectedIds.has(order.id)" @change="toggleSelected(order.id)">
+          <span>選取</span>
+        </label>
         <div
           class="delivery-bar"
           :class="order.delivered ? 'delivered' : 'pending'"
@@ -409,6 +434,7 @@
         <p><strong>購買時間：</strong><span class="num">{{ formatDate(order.createdAt) }}</span></p>
         <p><strong>最後領票更新者：</strong>{{ order.deliveryUpdatedByName || '—' }}</p>
         <p><strong>最後領票更新時間：</strong>{{ order.deliveryUpdatedAt ? formatDate(order.deliveryUpdatedAt) : '—' }}</p>
+        <p v-if="order.notices"><strong>已寄通知：</strong>{{ noticeText(order) }}</p>
         <div
           v-if="order.customerName || order.customerEmail || order.streetSale"
           class="customer-box"
@@ -462,15 +488,31 @@
             查看詳細
           </button>
           <button
+            v-if="canCancel && !cancelBlockOf(order)"
             type="button"
             class="btn-outline danger"
-            @click="confirmDelete(order.id)"
+            @click="openCancel([order])"
+          >
+            取消訂單
+          </button>
+          <!-- paid orders are cancelled, keeping their refund (firestore.rules) -->
+          <button
+            v-if="isDeletable(order)"
+            type="button"
+            class="btn-outline danger"
+            @click="confirmDelete(order)"
           >
             刪除訂單
           </button>
         </div>
       </div>
       <p v-if="!loading && !loadError && !fromCache && currentOrders.length === 0" class="empty">尚無符合條件的訂單</p>
+
+      <div v-if="selectedOrders.length" class="selection-bar" role="region" aria-label="已選取的訂單">
+        <span>已選 <strong class="num">{{ selectedOrders.length }}</strong> 筆・NT$ <span class="num">{{ selectedTotal.toLocaleString() }}</span></span>
+        <button type="button" class="btn-outline danger" @click="openCancel(selectedOrders)">取消所選訂單</button>
+        <button type="button" class="btn-outline" @click="clearSelection">清除選取</button>
+      </div>
     </div>
 
     <section
@@ -493,6 +535,8 @@
         <button type="button" class="btn-sm" @click="openResume">查看並繼續</button>
       </p>
     </section>
+
+    <CancelOrderDialog v-if="canCancel" v-model="cancelOpen" :orders="cancelTargets" @cancelled="onCancelled" />
 
     <q-dialog
       v-if="canPurge"
@@ -616,7 +660,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Circle, CircleCheck, CircleX, LoaderCircle } from 'lucide-vue-next'
 import { useAuthStore } from 'src/stores/auth'
@@ -624,7 +668,7 @@ import { useToastStore } from 'src/stores/toast'
 import { useAdminOrders } from 'src/composables/useAdminOrders'
 import { useNotificationJob } from 'src/composables/useNotificationJob'
 import { useOrderPurge } from 'src/composables/useOrderPurge'
-import { fetchOrder, resendOrderEmail } from 'src/services/orderService'
+import { fetchCancelledOrder, fetchOrder, resendOrderEmail } from 'src/services/orderService'
 import { needsNotificationEnqueue, canClearNotification } from 'src/utils/notificationProgress'
 import {
   COMPLIMENTARY_OPTIONS, DELIVERED_OPTIONS, NOTIFY_AUDIENCE, PAID_OPTIONS,
@@ -632,6 +676,8 @@ import {
   recipientFilterError, recipientFilterPayload
 } from 'src/utils/notificationFilters'
 import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
+import { cancelBlockOf, noticeCountsOf } from 'src/utils/cancellations'
+import CancelOrderDialog from 'src/components/CancelOrderDialog.vue'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import { STREET_SCHOOL } from 'src/data/schools'
 
@@ -644,6 +690,8 @@ const toast = useToastStore()
 const canAccessAdmin = computed(() => auth.isManager)
 const canManageOrders = computed(() => auth.isAdmin)
 const canPurge = computed(() => auth.isSuperAdmin)
+// 取消訂單與退款: super admins and developers (functions/lib/orderCancel.js)
+const canCancel = computed(() => auth.isSuperAdmin)
 
 const STAGE_STATUS = { pending: '等待中', running: '進行中', done: '完成', failed: '失敗' }
 
@@ -719,6 +767,7 @@ const {
   fetchOrders,
   updatePaymentStatus,
   deleteOrder,
+  dropOrder,
   exportToExcel,
   calculateDeliveryStats,
   formatDate
@@ -767,7 +816,8 @@ async function lookupExactOrder() {
   lookingUpOrder.value = true
   lookupError.value = ''
   try {
-    const order = await fetchOrder(id)
+    // a cancelled order opens too, showing that it was cancelled
+    const order = (await fetchOrder(id)) || (await fetchCancelledOrder(id))
     if (order) viewOrderDetail(order.id)
     else lookupError.value = '找不到這個訂單編號。'
   } catch {
@@ -781,9 +831,67 @@ function viewOrderDetail(orderId) {
   router.push({ name: 'admin-order-detail', params: { id: orderId } })
 }
 
-function confirmDelete(orderId) {
-  if (!window.confirm(`確定要刪除此訂單嗎？\nID: ${orderId}`)) return
-  deleteOrder(orderId).catch(() => toast.show('刪除失敗'))
+// Paid orders are cancelled instead (firestore.rules), so their refund is on
+// record; deleting is for unpaid mistakes and duplicates, 公關票 and 路宣
+const isDeletable = (order) => order.paid !== true || order.complimentary === true || order.streetSale === true
+
+function confirmDelete(order) {
+  const hint = order.complimentary || order.streetSale ? '' : '\n刪除只用於重複或誤建的訂單，不會留下紀錄；購票人放棄或逾期請改用「取消訂單」'
+  if (!window.confirm(`確定要刪除此訂單嗎？\nID: ${order.id}${hint}`)) return
+  deleteOrder(order.id).catch(() => toast.show('刪除失敗'))
+}
+
+/* ---------- 取消訂單 (functions/lib/orderCancel.js) ---------- */
+
+const cancelOpen = ref(false)
+// fixed when the dialog opens: the live page drops orders as they are cancelled
+const cancelTargets = ref([])
+// orders on this page picked to cancel together
+const selectedIds = ref(new Set())
+
+const selectableOrders = computed(() => (canCancel.value ? currentOrders.value.filter((order) => !cancelBlockOf(order)) : []))
+const selectedOrders = computed(() => selectableOrders.value.filter((order) => selectedIds.value.has(order.id)))
+const selectedTotal = computed(() => selectedOrders.value.reduce((total, order) => total + (Number(order.finalTotal) || 0), 0))
+const allSelected = computed(() => selectableOrders.value.length > 0 && selectedOrders.value.length === selectableOrders.value.length)
+
+// another page, a filter, or an order collected or gone meanwhile
+watch(selectableOrders, (orders) => {
+  const ids = new Set(orders.map((order) => order.id))
+  if ([...selectedIds.value].some((id) => !ids.has(id))) {
+    selectedIds.value = new Set([...selectedIds.value].filter((id) => ids.has(id)))
+  }
+})
+
+function toggleSelected(orderId) {
+  const next = new Set(selectedIds.value)
+  if (next.has(orderId)) next.delete(orderId)
+  else next.add(orderId)
+  selectedIds.value = next
+}
+
+function toggleSelectAll() {
+  selectedIds.value = allSelected.value ? new Set() : new Set(selectableOrders.value.map((order) => order.id))
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+function noticeText(order) {
+  const counts = noticeCountsOf(order)
+  return `繳費通知 ${counts.payment} 次・領票通知 ${counts.pickup} 次`
+}
+
+function openCancel(orders) {
+  cancelTargets.value = [...orders]
+  cancelOpen.value = true
+}
+
+function onCancelled({ orderIds, refundAmount }) {
+  dropOrder(orderIds)
+  selectedIds.value = new Set([...selectedIds.value].filter((id) => !orderIds.includes(id)))
+  const what = orderIds.length > 1 ? `已取消 ${orderIds.length} 筆訂單` : '已取消訂單'
+  toast.show(refundAmount ? `${what}，待退款 NT$ ${refundAmount.toLocaleString()}` : what)
 }
 
 const notifyTypeLabel = computed(() => {
@@ -793,6 +901,17 @@ const notifyTypeLabel = computed(() => {
   return '繳費暨領票通知'
 })
 
+// 繳費暨領票 has one time for both, as it has one place. Typing it fills both
+// fields, so it carries over when the type changes; a time typed for 繳費 or
+// 領票 alone shows here when switching to 繳費暨領票.
+const bothTime = computed({
+  get: () => notifyForm.value.paymentTime || notifyForm.value.pickupTime,
+  set: (value) => {
+    notifyForm.value.paymentTime = value
+    notifyForm.value.pickupTime = value
+  }
+})
+
 const canSendNotify = computed(() => {
   const f = notifyForm.value
   if (notifyFilterError.value) return false
@@ -800,7 +919,7 @@ const canSendNotify = computed(() => {
   if (!f.location.trim()) return false
   if (f.type === 'payment') return !!f.paymentTime.trim()
   if (f.type === 'pickup') return !!f.pickupTime.trim()
-  return !!f.paymentTime.trim() && !!f.pickupTime.trim()
+  return !!bothTime.value.trim()
 })
 
 function openNotifyModal() {
@@ -829,8 +948,9 @@ async function confirmSendNotify() {
       filters: recipientFilterPayload(notifyFilters.value, notifyForm.value.type),
       // the subject input only exists for custom notices (PARTY-22)
       subject: notifyForm.value.type === 'custom' ? notifyForm.value.subject.trim() : '',
-      paymentTime: notifyForm.value.paymentTime.trim(),
-      pickupTime: notifyForm.value.pickupTime.trim(),
+      // 繳費暨領票 sends its one time as both (functions/lib/notifications.js)
+      paymentTime: (notifyForm.value.type === 'both' ? bothTime.value : notifyForm.value.paymentTime).trim(),
+      pickupTime: (notifyForm.value.type === 'both' ? bothTime.value : notifyForm.value.pickupTime).trim(),
       location: notifyForm.value.location.trim(),
       message: notifyForm.value.message.trim()
     })
@@ -898,6 +1018,68 @@ async function resendEmail(order) {
 
 <style scoped>
 @import 'src/css/adminpage.scss';
+
+/* ---------- 取消所選訂單 ---------- */
+
+/* a 44 px tall target around the box and its label */
+.select-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: -8px 0 2px;
+  padding-right: 16px;
+  color: var(--lunar);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.select-order input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--ember);
+}
+
+.order-card.selected {
+  padding-left: 16px;
+  background: rgba(228, 164, 104, .03);
+  box-shadow: inset 3px 0 0 var(--ember);
+}
+
+.selection-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid rgba(228, 164, 104, .45);
+  background: rgba(13, 16, 21, .96);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
+  font-size: 13px;
+}
+
+.selection-bar > span {
+  margin-right: auto;
+}
+
+/* the summary above, both buttons side by side below */
+@media (max-width: 640px) {
+  .selection-bar > span {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  .selection-bar .btn-outline {
+    flex: 1;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
 
 .scan-link {
   display: inline-block;

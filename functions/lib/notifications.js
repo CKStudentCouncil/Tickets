@@ -1,5 +1,5 @@
 import * as functions from 'firebase-functions/v1'
-import { FieldPath, FieldValue } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { db, HttpsError, assertRole } from './common.js'
 import { REGION, SCHOOL_CODES, STREET_SCHOOL } from './constants.js'
 import { SENDER_EMAIL } from './mailSender.js'
@@ -7,6 +7,7 @@ import { enqueueNotificationBatch, MAX_BCC_PER_BATCH } from './mailQueue.js'
 import { notificationProgress } from './mailQueueCore.js'
 import { TICKET_TYPE_ID_PATTERN } from './orderValidation.js'
 import { GUEST_SCHOOL } from './guests.js'
+import { COUNTED_NOTICE_TYPES } from './orderCancel.js'
 
 export { batchDelayMs } from './mailQueueCore.js'
 
@@ -30,6 +31,15 @@ function readField(data, key, limit = 500) {
   return value
 }
 
+// 繳費暨取票 has one time for both, as it has one place: the page sends it as
+// both fields, and either one fills the other. Two different times (a page
+// opened before this) are kept, and the email then lists both.
+export function shareBothTime(type, fields) {
+  if (type !== 'both') return fields
+  const time = fields.paymentTime || fields.pickupTime
+  return { ...fields, paymentTime: fields.paymentTime || time, pickupTime: fields.pickupTime || time }
+}
+
 function validateNotification(type, { paymentTime, pickupTime, location, message }) {
   if (type === 'survey') return
   if (type === 'custom') {
@@ -37,6 +47,7 @@ function validateNotification(type, { paymentTime, pickupTime, location, message
     return
   }
   if (!location) throw new HttpsError('invalid-argument', '請提供地點')
+  if (type === 'both' && !paymentTime) throw new HttpsError('invalid-argument', '請提供繳費與取票時間')
   if ((type === 'payment' || type === 'both') && !paymentTime) throw new HttpsError('invalid-argument', '請提供繳費時間')
   if ((type === 'pickup' || type === 'both') && !pickupTime) throw new HttpsError('invalid-argument', '請提供取票時間')
 }
@@ -162,13 +173,15 @@ export function matchesRecipientFilters(order, filters) {
   return true
 }
 
+// email -> the ids of its orders the notice is for (recordOrderNotices
+// stamps them once their batch's mail is accepted)
 async function collectRecipients(filters, type) {
   let query = db.collection('orders')
   // one school narrows the scan; several are checked per order below
   if (filters.complimentary === 'only') query = query.where('school', '==', GUEST_SCHOOL)
   else if (filters.schools.length === 1) query = query.where('school', '==', filters.schools[0])
   query = query.orderBy(FieldPath.documentId()).limit(250)
-  const emails = new Set()
+  const emails = new Map()
   let cursor
   while (true) {
     const snapshot = await (cursor ? query.startAfter(cursor) : query).get()
@@ -176,13 +189,15 @@ async function collectRecipients(filters, type) {
     snapshot.forEach((doc) => {
       if (!needsNotice(doc.data(), type) || !matchesRecipientFilters(doc.data(), filters)) return
       const email = String(doc.data().customerEmail || '').trim().toLowerCase()
-      if (email && email.length <= 320 && email !== SENDER_EMAIL && !email.startsWith('no-reply@') && !email.startsWith('noreply@')) emails.add(email)
+      if (email && email.length <= 320 && email !== SENDER_EMAIL && !email.startsWith('no-reply@') && !email.startsWith('noreply@')) {
+        ;(emails.get(email) || emails.set(email, []).get(email)).push(doc.id)
+      }
     })
     if (emails.size > MAX_RECIPIENTS) throw new HttpsError('resource-exhausted', '收件人過多，請縮小篩選條件後分批建立通知')
     cursor = snapshot.docs.at(-1)
     if (snapshot.size < 250) break
   }
-  return [...emails]
+  return emails
 }
 
 function notificationRef(data) {
@@ -220,12 +235,15 @@ export const prepareOrderNotification = functions.region(REGION).https.onCall(as
   await assertRole(context, 'manager')
   const type = NOTIFY_TYPES.includes(data?.type) ? data.type : 'payment'
   const filters = readRecipientFilters(data, type)
-  const fields = { paymentTime: readField(data, 'paymentTime'), pickupTime: readField(data, 'pickupTime'),
-    location: readField(data, 'location'), message: readField(data, 'message', 8000) }
+  const fields = shareBothTime(type, { paymentTime: readField(data, 'paymentTime'), pickupTime: readField(data, 'pickupTime'),
+    location: readField(data, 'location'), message: readField(data, 'message', 8000) })
   validateNotification(type, fields)
   if (type === 'survey') await assertPartySurveyOpen(Number(data?.year))
-  const recipients = await collectRecipients(filters, type)
+  const orderIdsByEmail = await collectRecipients(filters, type)
+  const recipients = [...orderIdsByEmail.keys()]
   if (!recipients.length) return { status: 'empty', jobId: null, sentCount: 0, total: 0 }
+  // payment / pickup notices are recorded on the orders they were for
+  const counted = COUNTED_NOTICE_TYPES.includes(type)
   const ref = db.collection('notificationJobs').doc()
   const batch = db.batch()
   // `school` stays for older readers of notificationJobs
@@ -237,8 +255,10 @@ export const prepareOrderNotification = functions.region(REGION).https.onCall(as
   // Bounded immutable subdocuments keep the campaign itself small. 10,000
   // recipients need at most 205 batch documents, within one atomic write.
   for (let start = 0; start < recipients.length; start += MAX_BCC_PER_BATCH) {
+    const slice = recipients.slice(start, start + MAX_BCC_PER_BATCH)
     batch.create(ref.collection('batches').doc(String(start).padStart(6, '0')), {
-      start, recipients: recipients.slice(start, start + MAX_BCC_PER_BATCH)
+      start, recipients: slice,
+      ...(counted ? { orderIds: slice.flatMap((email) => orderIdsByEmail.get(email)) } : {})
     })
   }
   await batch.commit()
@@ -268,11 +288,12 @@ export const sendOrderNotification = functions.region(REGION).runWith({ timeoutS
       }
       return current
     })
-    const enqueue = async (start, recipients) => {
+    const enqueue = async (start, recipients, orderIds) => {
       await enqueueNotificationBatch(`notification_${ref.id}_${start}`, {
         kind: 'notification', notificationJobId: ref.id, type: job.type,
         subject: job.subject, fields: job.fields, recipients,
         buyerCount: recipients.length, recipientCount: recipients.length + 1,
+        ...(Array.isArray(orderIds) && orderIds.length ? { orderIds } : {}),
         createdBy: context.auth.uid
       })
     }
@@ -282,7 +303,7 @@ export const sendOrderNotification = functions.region(REGION).runWith({ timeoutS
       while (true) {
         const page = await (cursor ? query.startAfter(cursor) : query).get()
         if (page.empty) break
-        for (const snap of page.docs) await enqueue(snap.data().start, snap.data().recipients)
+        for (const snap of page.docs) await enqueue(snap.data().start, snap.data().recipients, snap.data().orderIds)
         cursor = page.docs.at(-1)
         if (page.size < 100) break
       }
@@ -299,3 +320,28 @@ export const getOrderNotificationStatus = functions.region(REGION).https.onCall(
   await assertRole(context, 'manager')
   return progressOf(notificationRef(data))
 })
+
+// Once SES accepts a payment / pickup notice batch, each order it was for gets
+// notices.{jobId} = { type, at }: how many notices an order had is what
+// 逾期處理 (orderCancel.js) goes by. Failed and uncertain batches are not
+// recorded. Keyed by the job, so a repeat of this trigger changes nothing; an
+// order deleted or cancelled meanwhile is skipped.
+export const recordOrderNotices = functions.region(REGION)
+  .runWith({ failurePolicy: true })
+  .firestore.document('mailQueue/{mailId}')
+  .onUpdate(async (change) => {
+    const before = change.before.data()
+    const after = change.after.data()
+    if (after?.kind !== 'notification' || after.status !== 'accepted' || before?.status === 'accepted') return
+    if (!COUNTED_NOTICE_TYPES.includes(after.type) || !JOB_ID_PATTERN.test(String(after.notificationJobId || ''))) return
+    const orderIds = (Array.isArray(after.orderIds) ? after.orderIds : [])
+      .filter((id) => typeof id === 'string' && id && id.length <= 200 && !id.includes('/'))
+    if (!orderIds.length) return
+
+    const notice = { type: after.type, at: after.acceptedAt instanceof Timestamp ? after.acceptedAt : Timestamp.now() }
+    const field = new FieldPath('notices', after.notificationJobId)
+    await Promise.all([...new Set(orderIds)].map((id) => db.doc(`orders/${id}`).update(field, notice).catch((error) => {
+      // NOT_FOUND: deleted or cancelled after the notice was prepared
+      if (error?.code !== 5) throw error
+    })))
+  })

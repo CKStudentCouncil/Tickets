@@ -4,7 +4,8 @@
 // and the PDF are all drawn from these rows.
 //
 //   款 1 舞會收入   項: 線上售票, 路宣, 學弟賣票 (目: each ticket type),
-//                   公關票 (NT$0, only how many)
+//                   取消訂單未退還款項 (目: each 取消原因), 公關票 (NT$0,
+//                   only how many)
 //   款 2 舞會支出   項: each 科目 in REIMBURSEMENT_CATEGORIES order (目: each claim)
 //
 // `basis` is the profit's (utils/reimbursements.js): 'realized' counts money
@@ -15,8 +16,10 @@ import {
   REIMBURSEMENT_STATUS_LABELS,
   UNCATEGORIZED
 } from '../data/reimbursements.js'
+import { CANCEL_REASONS } from '../data/cancellations.js'
 import { parseDate } from './datetime.js'
 import { claimAmount } from './reimbursements.js'
+import { retainedOf } from './cancellations.js'
 
 export const STATEMENT_BASES = {
   realized: { label: '目前', detail: '已收款的訂單與學弟賣票，已核准及已撥款的報帳' },
@@ -64,7 +67,9 @@ const registrationLines = (registrations) => registrations.map((registration) =>
 
 // { rows, income, expense, balance }; a row is { codes, name, income,
 // expense, note, kind }, kind 'total' | 'group' | 'item' | 'balance'
-export function buildStatement({ orders = [], registrations = [], claims = [], basis = 'realized' } = {}) {
+// `cancelled` are cancelledOrders: what was paid and not given back is income
+// on both bases.
+export function buildStatement({ orders = [], registrations = [], claims = [], cancelled = [], basis = 'realized' } = {}) {
   const realized = basis === 'realized'
   const collected = (record) => !realized || record?.paid === true
 
@@ -104,9 +109,39 @@ export function buildStatement({ orders = [], registrations = [], claims = [], b
       kind: 'item'
     }))
   })
+  let groupCount = incomeSections.length
+  const kept = cancelled.filter((order) => retainedOf(order) > 0)
+  if (kept.length) {
+    const reasons = new Map()
+    kept.forEach((order) => {
+      const key = Object.hasOwn(CANCEL_REASONS, order.cancelReason) ? order.cancelReason : 'other'
+      const reason = reasons.get(key) || { amount: 0, count: 0 }
+      reason.amount += retainedOf(order)
+      reason.count += 1
+      reasons.set(key, reason)
+    })
+    // in CANCEL_REASONS order
+    const list = Object.keys(CANCEL_REASONS).filter((key) => reasons.has(key)).map((key) => [key, reasons.get(key)])
+    incomeRows.push({
+      codes: codesOf(1, ++groupCount),
+      name: '取消訂單未退還款項',
+      income: list.reduce((total, [, reason]) => total + reason.amount, 0),
+      expense: null,
+      note: `${kept.length} 筆`,
+      kind: 'group'
+    })
+    list.forEach(([key, reason], index) => incomeRows.push({
+      codes: codesOf(2, index + 1),
+      name: CANCEL_REASONS[key],
+      income: reason.amount,
+      expense: null,
+      note: `${reason.count} 筆`,
+      kind: 'item'
+    }))
+  }
   if (guests.length) {
     incomeRows.push({
-      codes: codesOf(1, incomeSections.length + 1),
+      codes: codesOf(1, groupCount + 1),
       name: '公關票',
       income: 0,
       expense: null,

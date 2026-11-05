@@ -114,3 +114,32 @@ test('the Excel sheet has the titles, the two header rows and a row per line, am
   assert.equal(sheet.getCell(`G${last}`).master.address, `F${last}`)
   assert.equal(sheet.rowCount, last)
 })
+
+test('money kept from cancelled orders is income on both bases, by 取消原因', () => {
+  const cancelled = [
+    { paid: true, finalTotal: 900, refundAmount: 0, refundStatus: 'none', cancelReason: 'uncollected' },
+    { paid: true, finalTotal: 1800, refundAmount: 1200, refundStatus: 'pending', cancelReason: 'buyer_request' },
+    { paid: true, finalTotal: 900, refundAmount: 0, refundStatus: 'none', cancelReason: 'uncollected' },
+    { paid: true, finalTotal: 900, refundAmount: 900, refundStatus: 'done', cancelReason: 'buyer_request' },
+    { paid: false, finalTotal: 900, refundAmount: 0, refundStatus: 'none', cancelReason: 'unpaid' }
+  ]
+  for (const basis of ['realized', 'projected']) {
+    const without = buildStatement({ orders, registrations, claims, basis })
+    const statement = buildStatement({ orders, registrations, claims, cancelled, basis })
+    assert.equal(statement.income, without.income + 2400, basis)
+    const rows = table(statement)
+    const at = rows.findIndex((row) => row[1] === '取消訂單未退還款項')
+    assert.deepEqual(rows.slice(at, at + 3), [
+      [' 4 0 0', '取消訂單未退還款項', 2400, null, '3 筆'],
+      ['  1 0', '逾期未領票', 1800, null, '2 筆'],
+      ['  2 0', '購票人申請取消', 600, null, '1 筆']
+    ])
+    // 公關票 moves down one
+    assert.equal(rows.find((row) => row[1] === '公關票')[0], ' 5 0 0')
+  }
+  const profit = calculateProfit({ orderSummary: summarizeOrders(orders), registrations, claims, cancelled })
+  const plain = calculateProfit({ orderSummary: summarizeOrders(orders), registrations, claims })
+  assert.deepEqual(profit.cancelled, { realized: 2400, projected: 2400 })
+  assert.equal(profit.profit.realized, plain.profit.realized + 2400)
+  assert.equal(profit.profit.projected, plain.profit.projected + 2400)
+})

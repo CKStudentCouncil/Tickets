@@ -271,6 +271,32 @@
   color: #e0a0a0;
 }
 
+/* ---------- 取消訂單 ---------- */
+
+.cancel-row {
+  margin: 14px 0 0;
+}
+
+/* super admins only; a full-size target, quieter than the check-in buttons */
+.btn-outline.cancel-action {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-color: rgba(201, 120, 120, .45);
+  color: var(--danger);
+}
+
+.btn-outline.cancel-action:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: #e0a0a0;
+  background: rgba(201, 120, 120, .06);
+}
+
+.cancelled-alert {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* ---------- buyer identity (學生 / 社會人士, staff only) ---------- */
 
 .identity-check {

@@ -26,6 +26,8 @@ const createOrderCallable = httpsCallable(functions, 'createOrder')
 const resendOrderEmailCallable = httpsCallable(functions, 'resendOrderEmail')
 const deliveryCallable = httpsCallable(functions, 'updateOrderDelivery')
 const paymentCallable = httpsCallable(functions, 'updateOrderPayment')
+const cancelCallable = httpsCallable(functions, 'cancelOrders')
+const refundCallable = httpsCallable(functions, 'updateRefundStatus')
 
 // Errors where the order may or may not have been saved, or the server was
 // just too busy; retrying with the same requestId is safe (the server returns
@@ -243,4 +245,51 @@ export async function resendOrderEmail(orderId, requestId = createRequestId()) {
 
 export function deleteOrder(orderId) {
   return deleteDoc(doc(db, 'orders', orderId))
+}
+
+/* ---------- 取消訂單與退款 (functions/lib/orderCancel.js) ---------- */
+
+// { results: [{ orderId, status: 'cancelled' | 'already' | 'skipped',
+// refundAmount?, message? }], cancelledCount }. refund: 'full' | 'none', or a
+// whole NT$ amount for a single order; notify emails each buyer the
+// 訂單取消通知.
+export async function cancelOrders(orderIds, { reason, note = '', refund = null, notify = true }) {
+  const { data } = await cancelCallable({ orderIds, reason, note, refund, notify })
+  return data
+}
+
+export async function updateRefundStatus(orderId, refunded, expectedRefunded) {
+  try {
+    const { data } = await refundCallable({ orderId, refunded, expectedRefunded })
+    return { ...data, refundedAt: data.refundedAt ? new Date(data.refundedAt) : null }
+  } catch (error) {
+    if (error?.details?.refundedAt) error.details = { ...error.details, refundedAt: new Date(error.details.refundedAt) }
+    throw error
+  }
+}
+
+const cancelledOf = (snapshot) => snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
+const byCancelledAtDesc = (a, b) => (parseDate(b.cancelledAt)?.getTime() || 0) - (parseDate(a.cancelledAt)?.getTime() || 0)
+
+// One cancelled order: staff any, a buyer only their own; null otherwise
+export async function fetchCancelledOrder(orderId) {
+  if (!orderId) return null
+  try {
+    const snap = await getDoc(doc(db, 'cancelledOrders', orderId))
+    return snap.exists() ? { id: snap.id, ...snap.data() } : null
+  } catch (error) {
+    if (error?.code === 'permission-denied') return null
+    throw error
+  }
+}
+
+export async function fetchMyCancelledOrders(uid) {
+  const snapshot = await getDocs(query(collection(db, 'cancelledOrders'), where('userId', '==', uid)))
+  return cancelledOf(snapshot).sort(byCancelledAtDesc)
+}
+
+// A party's cancelled orders (admins), newest first
+export async function fetchCancelledOrders(year) {
+  const snapshot = await getDocsFromServer(query(collection(db, 'cancelledOrders'), where('cancelYear', '==', year)))
+  return cancelledOf(snapshot).sort(byCancelledAtDesc)
 }
