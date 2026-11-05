@@ -10,6 +10,7 @@ Everyone signs in with Google on `/login` to buy tickets, and sees their orders 
 - 學生優先購買 on a ticket type: until a set time only school accounts (`edu.tw`) may buy it, then everyone, from the same stock; school-account buyers tick a box confirming they are students. Orders are marked 學生 or 社會人士 from the account email for staff only, and the check-in desk asks 學生 buyers of such tickets for a student ID before they are collected
 - Server-side order validation in a Cloud Function transaction, so tickets cannot be oversold
 - Confirmation email with a QR code that door staff scan into the admin order view, with the phone's camera app or the in-page scanner on `/admin/scan`
+- 手機掃描、電腦處理: a computer on `/admin/scan/desk` shows a pairing QR code; a phone that scans it on `/admin/scan` sends the tickets it reads to that computer, which opens them for check-in (`scanLinks` in `firestore.rules`, valid 12 hours). Unpaired phones keep opening orders themselves
 - A 購票教學 (buying guide) that opens on a visitor's first visit and from the ? in the header afterwards (steps in `src/data/buyGuide.js`)
 - Role-based administration for managers, admins, and super admins
 - Atomic QR collection and payment updates with staff audit history
@@ -231,7 +232,8 @@ A functions deploy fails while any secret a function declares is missing, the Dr
 | `/intro`, `/performer`, `/about` | Party introduction, lineup, about |
 | `/survey` | User survey |
 | `/admin` | Admin dashboard / notifications |
-| `/admin/scan` | In-page camera scanner for ticket QR codes |
+| `/admin/scan` | In-page camera scanner for ticket QR codes; paired with a computer, it sends them there |
+| `/admin/scan/desk` | 電腦接收掃描: pairing QR code for a phone, opens the tickets it scans |
 | `/admin/orders/:id` | Staff order view (ticket QR codes link here) |
 | `/admin/management` | Ticket type settings |
 | `/admin/account` | Staff accounts |

@@ -211,6 +211,7 @@
 import { computed, nextTick, onMounted, ref, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
+import { useScanDeskStore } from 'src/stores/scanDesk'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
 import { ArrowRight, CircleQuestionMark, LogOut, X } from 'lucide-vue-next'
@@ -224,6 +225,17 @@ const router = useRouter()
 const auth = useAuthStore()
 const shop = useShopStore()
 const toast = useToastStore()
+const scanDesk = useScanDeskStore()
+
+// A tab receiving a phone's scans (/admin/scan/desk) keeps receiving after a
+// reload, whichever admin page it is on
+watch(
+  () => auth.isManager,
+  (isManager) => {
+    if (isManager) scanDesk.resume(router)
+  },
+  { immediate: true }
+)
 
 // The router guard checks the opening time on the way in. A visitor already
 // in the shop goes back to Coming Soon if it turns out to be later: the

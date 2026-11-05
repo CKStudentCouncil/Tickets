@@ -164,6 +164,13 @@ const routes = [
         component: () => import('pages/ScanPage.vue')
       },
       {
+        // 手機掃描、電腦處理: a computer shows a pairing QR code; a phone that
+        // scans it on /admin/scan sends its scans here (src/stores/scanDesk.js)
+        path: 'scan/desk',
+        name: 'admin-scan-desk',
+        component: () => import('pages/ScanDeskPage.vue')
+      },
+      {
         path: 'orders/:id',
         name: 'admin-order-detail',
         // door staff (managers) scan ticket QR codes into this page

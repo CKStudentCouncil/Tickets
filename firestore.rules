@@ -576,6 +576,65 @@ service cloud.firestore {
     }
 
     // =========================
+    // 手機掃描、電腦處理 (src/services/scanLinkService.js)
+    // =========================
+
+    // A computer at the check-in desk (/admin/scan/desk) makes a link and
+    // shows its id as a pairing QR code. A phone that scans it on
+    // /admin/scan writes each ticket it reads here instead of opening it;
+    // the computer listens and opens the order, where tickets are collected
+    // with the usual callables (so the ticketCode check still applies). The
+    // id is a random Firestore id, only ever shown in that QR code, so links
+    // are read by id and never listed. Links take scans for 12 hours
+    // (SCAN_LINK_HOURS in src/utils/scanLink.js).
+    function isValidScanLinkPhone(phone) {
+      return phone is map
+        && phone.keys().hasAll(['uid', 'name', 'at'])
+        && phone.keys().hasOnly(['uid', 'name', 'at'])
+        && phone.uid == request.auth.uid
+        && isShortString(phone.name, 200)
+        && phone.at == request.time;
+    }
+
+    function isValidScanLinkScan(scan) {
+      return scan is map
+        && scan.keys().hasAll(['id', 'orderId', 'ticketCode', 'at', 'byUid'])
+        && scan.keys().hasOnly(['id', 'orderId', 'ticketCode', 'at', 'byUid'])
+        && isShortString(scan.id, 64)
+        && scan.id.size() > 0
+        // ORDER_ID_PATTERN in src/utils/ticketQr.js
+        && scan.orderId is string
+        && scan.orderId.matches('[A-Z]{1,4}[0-9]{8}([0-9]{4}|[A-HJ-NP-Z2-9]{6})')
+        && isShortString(scan.ticketCode, 200)
+        && scan.at == request.time
+        && scan.byUid == request.auth.uid;
+    }
+
+    match /scanLinks/{linkId} {
+      allow get: if isManager();
+      allow list: if false;
+
+      allow create: if isManager()
+        && request.resource.data.keys().hasAll(['ownerUid', 'ownerName', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['ownerUid', 'ownerName', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && isShortString(request.resource.data.ownerName, 200)
+        && request.resource.data.createdAt == request.time;
+
+      // phones: every write says which phone it is; a scan comes with one
+      allow update: if isManager()
+        && request.time < resource.data.createdAt + duration.value(12, 'h')
+        && onlyChanges(['phone', 'scan'])
+        && isValidScanLinkPhone(request.resource.data.phone)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['scan'])
+          || isValidScanLinkScan(request.resource.data.scan));
+
+      // the computer ends its own link; super admins clear old ones
+      allow delete: if (isManager() && resource.data.ownerUid == request.auth.uid)
+        || isSuperAdmin();
+    }
+
+    // =========================
     // Everything else is denied
     // =========================
 

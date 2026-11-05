@@ -40,7 +40,7 @@
             v-if="isAdminView"
             type="button"
             class="btn"
-            @click="router.push({ name: 'admin-scan' })"
+            @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
           >
             掃描下一張
           </button>
@@ -300,6 +300,7 @@ import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
 import { guestSourceText } from 'src/data/guests'
 import { fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { useAuthStore } from 'src/stores/auth'
+import { useScanDeskStore } from 'src/stores/scanDesk'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
 import { getBuyerTypeLabel, getIdCheck } from 'src/utils/buyerIdentity'
@@ -447,6 +448,8 @@ const router = useRouter()
 
 const auth = useAuthStore()
 const toast = useToastStore()
+// receiving a phone's scans (/admin/scan/desk): 掃描下一張 goes back there
+const scanDesk = useScanDeskStore()
 
 const loading = ref(true)
 const order = ref(null)

@@ -1227,3 +1227,156 @@ describe('報帳 (reimbursements)', () => {
     await assertSucceeds(deleteDoc(doc(as(staff.superAdmin), 'reimbursements', 'approved')))
   })
 })
+
+describe('scanLinks (手機掃描、電腦處理)', () => {
+  const LINK_ID = 'AbCdEfGhIjKlMnOpQrSt'
+  // the computer at the desk, and a phone signed in as someone else
+  const desk = staff.manager
+  const phoneUser = staff.admin
+  const linkDoc = (who, id = LINK_ID) => doc(as(who), 'scanLinks', id)
+  const freshId = (n) => `NewLink${String(n).padStart(13, '0')}`
+
+  const newLink = (who, fields = {}) => ({
+    ownerUid: who.uid,
+    ownerName: '門口電腦',
+    createdAt: serverTimestamp(),
+    ...fields
+  })
+  const phone = (who, fields = {}) => ({ uid: who.uid, name: '王小明', at: serverTimestamp(), ...fields })
+  const scan = (who, fields = {}) => ({
+    id: 'scan-1',
+    orderId: ORDER_ID,
+    ticketCode: 'secret-code',
+    at: serverTimestamp(),
+    byUid: who.uid,
+    ...fields
+  })
+  const seed = (createdAt = Timestamp.now()) =>
+    env.withSecurityRulesDisabled((context) =>
+      setDoc(doc(context.firestore(), 'scanLinks', LINK_ID), { ownerUid: desk.uid, ownerName: '門口電腦', createdAt })
+    )
+  const hoursAgo = (hours) => Timestamp.fromDate(new Date(Date.now() - hours * 60 * 60 * 1000))
+
+  test('staff make a link for themselves, the way createScanLink does', async () => {
+    await assertSucceeds(setDoc(linkDoc(desk, freshId(1)), newLink(desk)))
+    await assertFails(setDoc(doc(as(buyer), 'scanLinks', freshId(2)), newLink(buyer)))
+    await assertFails(setDoc(doc(anon(), 'scanLinks', freshId(3)), newLink({ uid: 'anon' })))
+  })
+
+  test('a link made for someone else, with a chosen time, or malformed is rejected', async () => {
+    let n = 10
+    for (const fields of [
+      { ownerUid: phoneUser.uid },
+      { createdAt: Timestamp.now() },
+      { ownerName: 'x'.repeat(201) },
+      { ownerName: 3 },
+      { phone: phone(desk) },
+      { scan: scan(desk) },
+      { note: 'x' }
+    ]) {
+      await assertFails(setDoc(linkDoc(desk, freshId(n++)), newLink(desk, fields)))
+    }
+    for (const key of ['ownerUid', 'ownerName', 'createdAt']) {
+      const data = newLink(desk)
+      delete data[key]
+      await assertFails(setDoc(linkDoc(desk, freshId(n++)), data))
+    }
+  })
+
+  test('staff read a link by its id; nobody lists them', async () => {
+    await seed()
+    await assertSucceeds(getDoc(linkDoc(phoneUser)))
+    await assertSucceeds(getDoc(linkDoc(phoneUser, freshId(1)))) // not there: the phone is told so
+    await assertFails(getDoc(doc(as(buyer), 'scanLinks', LINK_ID)))
+    await assertFails(getDoc(doc(anon(), 'scanLinks', LINK_ID)))
+    for (const who of [staff.manager, staff.superAdmin]) {
+      await assertFails(getDocs(collection(as(who), 'scanLinks')))
+    }
+  })
+
+  test('a phone pairs and sends scans, the way joinScanLink and sendScan do', async () => {
+    await seed()
+    await assertSucceeds(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser) }))
+    await assertSucceeds(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), scan: scan(phoneUser) }))
+    // typed in by hand: no ticket code
+    await assertSucceeds(updateDoc(linkDoc(phoneUser), {
+      phone: phone(phoneUser),
+      scan: scan(phoneUser, { id: 'scan-2', orderId: 'CKS20261027ABCDEF', ticketCode: '' })
+    }))
+    await assertFails(updateDoc(doc(as(buyer), 'scanLinks', LINK_ID), { phone: phone(buyer), scan: scan(buyer) }))
+    await assertFails(updateDoc(doc(anon(), 'scanLinks', LINK_ID), { phone: phone({ uid: 'anon' }) }))
+  })
+
+  test('a scan must say which phone sent it, as itself, at the server time', async () => {
+    await seed()
+    for (const data of [
+      { scan: scan(phoneUser) }, // no phone
+      { phone: phone(desk) },
+      { phone: phone(phoneUser, { at: Timestamp.now() }) },
+      { phone: phone(phoneUser, { name: 'x'.repeat(201) }) },
+      { phone: phone(phoneUser, { extra: 1 }) },
+      { phone: { uid: phoneUser.uid, at: serverTimestamp() } },
+      { phone: 'me' }
+    ]) {
+      await assertFails(updateDoc(linkDoc(phoneUser), data))
+    }
+  })
+
+  test('a malformed scan is rejected', async () => {
+    await seed()
+    const incomplete = (key) => {
+      const data = scan(phoneUser)
+      delete data[key]
+      return data
+    }
+    for (const value of [
+      scan(phoneUser, { byUid: desk.uid }),
+      scan(phoneUser, { at: Timestamp.now() }),
+      scan(phoneUser, { orderId: 'cks202611050001' }),
+      scan(phoneUser, { orderId: '../users/x' }),
+      scan(phoneUser, { orderId: `${ORDER_ID}0` }),
+      scan(phoneUser, { orderId: '' }),
+      scan(phoneUser, { ticketCode: 'x'.repeat(201) }),
+      scan(phoneUser, { id: '' }),
+      scan(phoneUser, { id: 'x'.repeat(65) }),
+      scan(phoneUser, { extra: 1 }),
+      ...['id', 'orderId', 'ticketCode', 'at', 'byUid'].map(incomplete)
+    ]) {
+      await assertFails(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), scan: value }))
+    }
+  })
+
+  test('nobody changes who owns a link, when it was made, or adds fields', async () => {
+    await seed()
+    for (const fields of [
+      { ownerUid: phoneUser.uid },
+      { ownerName: '別人的電腦' },
+      { createdAt: serverTimestamp() },
+      { note: 'x' }
+    ]) {
+      await assertFails(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), ...fields }))
+      await assertFails(updateDoc(linkDoc(desk), { phone: phone(desk), ...fields }))
+    }
+  })
+
+  test('a link takes scans for 12 hours', async () => {
+    await seed(hoursAgo(11.5))
+    await assertSucceeds(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), scan: scan(phoneUser) }))
+
+    await seed(hoursAgo(12.5))
+    await assertFails(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser) }))
+    await assertFails(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), scan: scan(phoneUser) }))
+    // the computer still sees it, to say it has expired
+    await assertSucceeds(getDoc(linkDoc(desk)))
+  })
+
+  test('the computer ends its own link; super admins delete any', async () => {
+    await seed()
+    await assertFails(deleteDoc(linkDoc(phoneUser)))
+    await assertFails(deleteDoc(doc(as(buyer), 'scanLinks', LINK_ID)))
+    await assertSucceeds(deleteDoc(linkDoc(desk)))
+
+    await seed()
+    await assertSucceeds(deleteDoc(linkDoc(staff.superAdmin)))
+  })
+})

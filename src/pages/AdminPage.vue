@@ -29,6 +29,7 @@
       <p class="eyebrow">後台管理</p>
       <h1>{{ canManageOrders ? '後台管理' : '通知管理' }}</h1>
       <router-link :to="{ name: 'admin-scan' }" class="btn scan-link">掃描票券 QR Code</router-link>
+      <router-link :to="{ name: 'admin-scan-desk' }" class="btn-outline scan-link desk-link">電腦接收手機掃描</router-link>
       <router-link v-if="canPurge" :to="{ name: 'super-admin-analytics' }" class="btn-outline scan-link analytics-link">銷售報表</router-link>
     </div>
 
@@ -902,5 +903,9 @@ async function resendEmail(order) {
   display: inline-block;
   margin-top: 20px;
   text-decoration: none;
+}
+
+.desk-link {
+  margin-left: 10px;
 }
 </style>

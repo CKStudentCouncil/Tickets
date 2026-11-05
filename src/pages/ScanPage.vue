@@ -24,6 +24,16 @@
         </div>
       </header>
 
+      <div v-if="remoteLink" class="remote-bar" role="status">
+        <div>
+          <p class="remote-title"><i />已連線到電腦</p>
+          <p class="remote-meta">
+            {{ remoteOwner ? `${remoteOwner}的電腦` : '連線中…' }}；掃到的票券會在電腦上開啟
+          </p>
+        </div>
+        <button type="button" class="secondary-button" @click="disconnect">中斷連線</button>
+      </div>
+
       <div class="scanner-card">
         <div class="scanner-card-head">
           <span>掃描視窗</span>
@@ -48,7 +58,7 @@
         <p class="scanner-caption"><span>01</span> 將 QR Code 放入框線內，系統會自動辨識</p>
       </div>
 
-      <p class="scan-notice" role="status" aria-live="polite">{{ notice }}</p>
+      <p class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
 
       <div v-if="state === 'scanning'" class="camera-row">
         <p class="camera-hint">畫面模糊時，把手機拿遠一點（約 20–30 公分）讓鏡頭對焦。</p>
@@ -71,11 +81,17 @@
             :aria-invalid="!!manualError"
             aria-describedby="manual-help"
           >
-          <button type="submit" class="secondary-button">開啟訂單</button>
+          <button type="submit" class="secondary-button">{{ remoteLink ? '傳送到電腦' : '開啟訂單' }}</button>
         </div>
         <p v-if="manualError" class="manual-error" role="alert">{{ manualError }}</p>
         <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。</p>
       </form>
+
+      <section v-if="!remoteLink" class="desk-entry">
+        <h2>手機只掃描，在電腦上領票</h2>
+        <p>在電腦上開啟「電腦接收掃描」，再用本頁對準電腦畫面上的配對 QR Code；之後掃到的票券都會在電腦上開啟</p>
+        <router-link :to="{ name: 'admin-scan-desk' }" class="desk-entry-link">這台是電腦：開啟電腦接收掃描 →</router-link>
+      </section>
     </main>
 
     <GuideDialog
@@ -89,15 +105,20 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { CircleQuestionMark } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
 import { SITE_URL } from 'src/config/app'
+import { isScanLinkClosed, useScanRemote } from 'src/composables/useScanRemote'
+import { useAuthStore } from 'src/stores/auth'
 import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
 import { cameraErrorMessage, listCameras, startQrScanner } from 'src/utils/qrScanner'
+import { createRepeatFilter, isScanLinkId, parseScanLinkQr } from 'src/utils/scanLink'
 import { ORDER_ID_PATTERN, parseTicketQr } from 'src/utils/ticketQr'
 
+const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const GUIDE_STEPS = [
   {
@@ -129,10 +150,17 @@ const GUIDE_STEPS = [
     lines: [
       '按訂單頁的「掃描下一張」或返回，就會回到掃描畫面。',
       '無法掃描時，可在下方輸入訂單編號手動開啟，但需由管理員核對身分後才能領票。',
+      '想在電腦上核票：電腦開啟「電腦接收掃描」，手機用本頁掃描電腦上的配對 QR Code；之後手機只負責掃描，訂單會在電腦上開啟',
       '之後可隨時按標題旁的「?」再看一次教學。'
     ]
   }
 ]
+
+// While paired, a ticket counts again only after it has been out of view
+// this long, since the camera stays on between scans
+const REPEAT_GAP_MS = 2000
+// how long a send may take before the phone says the computer may not have it
+const SLOW_SEND_MS = 5000
 
 // Shown automatically on this device's first visit only
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen'
@@ -165,6 +193,8 @@ const state = ref('starting')
 const guideOpen = ref(false)
 const errorMessage = ref('')
 const notice = ref('')
+// danger | ok | info
+const noticeTone = ref('danger')
 const manualId = ref('')
 const manualError = ref('')
 const cameras = ref([])
@@ -176,6 +206,17 @@ let infoTimer = 0
 let startSequence = 0
 let lastInvalid = ''
 let noticeTimer = 0
+
+// 手機掃描、電腦處理: paired with a computer, tickets read here are sent to it
+// instead of opened on this phone
+const remote = useScanRemote({
+  getPhone: () => ({ uid: auth.user?.uid, name: auth.displayName }),
+  onEnded: (message) => showNotice(message, 'danger', 6000)
+})
+const { linkId: remoteLink, ownerName: remoteOwner } = remote
+const repeats = createRepeatFilter(REPEAT_GAP_MS)
+let pairing = false
+let sendSequence = 0
 
 async function start(deviceId = savedCamera()) {
   const sequence = ++startSequence
@@ -231,13 +272,68 @@ function switchCamera() {
   start(next.deviceId)
 }
 
-function showNotice(text) {
+// `duration` 0 keeps the notice until the next one
+function showNotice(text, tone = 'danger', duration = 3000) {
   notice.value = text
+  noticeTone.value = tone
   clearTimeout(noticeTimer)
+  if (!duration) return
   noticeTimer = setTimeout(() => {
     notice.value = ''
     lastInvalid = ''
-  }, 3000)
+  }, duration)
+}
+
+async function pair(linkId) {
+  if (pairing) return
+  pairing = true
+  showNotice('正在連線到電腦…', 'info', 0)
+  const slow = setTimeout(() => showNotice('網路連線不穩，仍在連線到電腦…', 'danger', 0), SLOW_SEND_MS)
+  try {
+    await remote.pair(linkId)
+    navigator.vibrate?.(60)
+    showNotice('已連線到電腦；接下來掃到的票券會在電腦上開啟', 'ok', 5000)
+  } catch (error) {
+    console.error('Pairing failed', error)
+    showNotice(
+      isScanLinkClosed(error)
+        ? '這個配對 QR Code 已過期或已結束；請在電腦上重新產生'
+        : '無法連線到電腦，請檢查網路後再掃一次'
+    )
+  } finally {
+    clearTimeout(slow)
+    pairing = false
+  }
+}
+
+async function sendToDesk(ticket) {
+  const sequence = ++sendSequence
+  const linkId = remoteLink.value
+  navigator.vibrate?.(60)
+  showNotice(`正在傳送 ${ticket.orderId} 到電腦…`, 'info', 0)
+  // offline, the write waits for the network instead of failing
+  const slow = setTimeout(() => {
+    if (sequence === sendSequence) showNotice('網路連線不穩，電腦可能還沒收到；請看電腦畫面確認', 'danger', 0)
+  }, SLOW_SEND_MS)
+  try {
+    await remote.send(ticket)
+    if (sequence === sendSequence) showNotice(`已傳送 ${ticket.orderId} 到電腦`, 'ok')
+  } catch (error) {
+    console.error('Failed to send scan', error)
+    if (isScanLinkClosed(error) && remoteLink.value === linkId) {
+      remote.leave()
+      showNotice('配對已過期或電腦已結束連線，這張沒有傳送；請重新配對', 'danger', 6000)
+    } else if (sequence === sendSequence) {
+      showNotice('傳送失敗；請把 QR Code 移開再掃一次')
+    }
+  } finally {
+    clearTimeout(slow)
+  }
+}
+
+function disconnect() {
+  remote.leave()
+  showNotice('已中斷連線；掃到的票券會在這支手機上開啟', 'info')
 }
 
 function openOrder(orderId, ticketCode = '') {
@@ -262,6 +358,14 @@ function onGuideHide() {
 function handleCode(text) {
   // don't leave the page while staff are reading the guide
   if (guideOpen.value) return
+
+  // a computer's pairing QR code (/admin/scan/desk)
+  const pairingId = parseScanLinkQr(text, origins)
+  if (pairingId) {
+    if (pairingId !== remoteLink.value && repeats.isNew(text)) pair(pairingId)
+    return
+  }
+
   const ticket = parseTicketQr(text, origins)
   if (!ticket) {
     // the same wrong code stays in view for many frames; say it once
@@ -271,6 +375,18 @@ function handleCode(text) {
     }
     return
   }
+
+  // Paired, the camera stays on, so a ticket held up is sent only once. A
+  // first read still opens at once; this only skips a ticket still in view
+  // from a moment ago, e.g. one just sent to the computer when the pairing
+  // ended, which must not then open on this phone too.
+  if (!repeats.isNew(text)) return
+
+  if (remoteLink.value) {
+    sendToDesk(ticket)
+    return
+  }
+
   navigator.vibrate?.(60)
   openOrder(ticket.orderId, ticket.ticketCode)
 }
@@ -282,6 +398,11 @@ function openManual() {
     return
   }
   manualError.value = ''
+  if (remoteLink.value) {
+    manualId.value = ''
+    sendToDesk({ orderId, ticketCode: '' })
+    return
+  }
   openOrder(orderId)
 }
 
@@ -299,6 +420,17 @@ function onVisibilityChange() {
 
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
+
+  // opened from a pairing QR code with the phone's own camera app
+  if (route.query.link !== undefined) {
+    const linkId = String(route.query.link)
+    router.replace({ query: {} })
+    if (isScanLinkId(linkId)) pair(linkId)
+    else showNotice('配對連結不正確，請重新掃描電腦上的 QR Code')
+  } else {
+    remote.restore()
+  }
+
   if (isGuideSeen(GUIDE_SEEN_KEY)) {
     start()
   } else {
@@ -531,6 +663,92 @@ onBeforeUnmount(() => {
   margin: 12px 0 0;
   color: var(--danger);
   font-size: 14px;
+}
+
+.scan-notice.ok {
+  color: #77bf8b;
+}
+
+.scan-notice.info {
+  color: var(--lunar);
+}
+
+.remote-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(119, 191, 139, .35);
+  background: rgba(119, 191, 139, .07);
+}
+
+.remote-bar p {
+  margin: 0;
+}
+
+.remote-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--off-white);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.remote-title i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #77bf8b;
+  box-shadow: 0 0 0 4px rgba(119, 191, 139, .14);
+}
+
+.remote-meta {
+  margin-top: 4px !important;
+  color: var(--lunar);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 420px) {
+  .remote-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.desk-entry {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px dashed var(--line);
+}
+
+.desk-entry h2 {
+  margin: 0 0 6px;
+  color: var(--off-white);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.desk-entry p {
+  margin: 0;
+  color: var(--lunar);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.desk-entry-link {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--ember);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.desk-entry-link:hover {
+  text-decoration: underline;
 }
 
 .camera-row {
