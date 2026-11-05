@@ -114,19 +114,20 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
-import { MAX_SIGNUP_NOTE } from 'src/data/guests'
+import { LINK_ID_PATTERN, MAX_SIGNUP_NOTE } from 'src/data/guests'
 import { fetchMySignup, fetchSignupLink, submitGuestSignup } from 'src/services/guestService'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const route = useRoute()
 
-const linkId = String(route.params.id || '')
+// vue-router keeps this page when only the id changes (another /join link)
+const linkId = computed(() => String(route.params.id || ''))
 
 // the stub's pill and the status card's heading, by the sign-up's status
 // ('none' before signing up)
@@ -153,17 +154,20 @@ const unchanged = computed(
 )
 const canSubmit = computed(() => name.value.trim() !== '' && !unchanged.value)
 
-// `quiet` keeps the page up while it reloads after a sign-up
+// `quiet` keeps the page up while it reloads after a sign-up. What comes back
+// for a link the page has since left is dropped.
 async function load({ quiet = false } = {}) {
+  const id = linkId.value
   if (!quiet) loading.value = true
   loadError.value = false
 
   try {
-    if (!/^[A-Za-z0-9_-]{24}$/.test(linkId)) {
+    if (!LINK_ID_PATTERN.test(id)) {
       link.value = null
       return
     }
-    const [found, mine] = await Promise.all([fetchSignupLink(linkId), fetchMySignup(linkId, auth.user.uid)])
+    const [found, mine] = await Promise.all([fetchSignupLink(id), fetchMySignup(id, auth.user.uid)])
+    if (id !== linkId.value) return
     link.value = found
     signup.value = mine
     if (mine) {
@@ -172,11 +176,21 @@ async function load({ quiet = false } = {}) {
     }
   } catch (error) {
     console.error('Load sign-up link error:', error)
-    if (!quiet) loadError.value = true
+    if (!quiet && id === linkId.value) loadError.value = true
   } finally {
-    loading.value = false
+    if (id === linkId.value) loading.value = false
   }
 }
+
+// another link: start over, as on a first visit
+watch(linkId, () => {
+  link.value = null
+  signup.value = null
+  name.value = auth.user?.displayName || ''
+  note.value = ''
+  submitError.value = ''
+  load()
+})
 
 // definite refusals, explained by the server's message (closed, already
 // reviewed, bad input)
@@ -189,7 +203,7 @@ async function submit() {
   submitting.value = true
   submitError.value = ''
   try {
-    await submitGuestSignup({ linkId, name: name.value.trim(), note: note.value.trim() })
+    await submitGuestSignup({ linkId: linkId.value, name: name.value.trim(), note: note.value.trim() })
     toast.show(updating ? '已更新登記資料' : '已送出登記，審核通過後會寄出公關票', 6000)
     await load({ quiet: true })
   } catch (error) {

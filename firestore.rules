@@ -446,22 +446,25 @@ service cloud.firestore {
       // Each account's sign-up, keyed by its uid: created and changed (while
       // pending) only by submitGuestSignup, marked sent only by
       // sendGuestSignupTicket. The guest reads their own by its path, so
-      // also before signing up. Super admins review it (pending, approved or
-      // rejected), never once it is sent.
+      // also before signing up. Super admins list a link's sign-ups and
+      // review them (pending, approved or rejected), never once sent. A
+      // review names the updatedAt of the sign-up it was made on, which
+      // only submitGuestSignup changes, so one its guest changed after the
+      // super admin's page loaded is refused rather than approved unseen.
       match /signups/{uid} {
         allow get: if isSuperAdmin() || (signedIn() && request.auth.uid == uid);
+        allow list: if isSuperAdmin();
         allow update: if isSuperAdmin()
-          && onlyChanges(['status', 'reviewedAt', 'reviewedByUid'])
+          && onlyChanges(['status', 'reviewedAt', 'reviewedByUid', 'reviewedUpdatedAt'])
           && resource.data.status in ['pending', 'approved', 'rejected']
           && request.resource.data.status in ['pending', 'approved', 'rejected']
           && request.resource.data.reviewedAt == request.time
-          && request.resource.data.reviewedByUid == request.auth.uid;
+          && request.resource.data.reviewedByUid == request.auth.uid
+          && request.resource.data.reviewedUpdatedAt == resource.data.updatedAt;
+        // junk, once rejected; its guest may sign up again while the link
+        // is open. A sent one stays with its order.
+        allow delete: if isSuperAdmin() && resource.data.status == 'rejected';
       }
-    }
-
-    // every link's sign-ups at once (a collection group query)
-    match /{path=**}/signups/{uid} {
-      allow list: if isSuperAdmin();
     }
 
     // =========================

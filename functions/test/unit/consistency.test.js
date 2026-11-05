@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 
 import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, MAX_SIGNUP_TITLE, MAX_SIGNUP_NOTE, STREET_SCHOOL, guestRelationText } from '../../lib/constants.js'
 import { MAX_TICKETS_PER_ORDER } from '../../lib/orderValidation.js'
+import { LINK_ID_PATTERN, newInviteId, sanitizeQuantity } from '../../lib/guests.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
 import { generateOrderNotificationHTML } from '../../templates/notification.js'
 
@@ -94,6 +95,18 @@ test('公關票 limits and relation text match src/data/guests.js', async () => 
   assert.equal(guests.MAX_INVITE_NOTE, MAX_INVITE_NOTE)
   assert.equal(guests.MAX_SIGNUP_TITLE, MAX_SIGNUP_TITLE)
   assert.equal(guests.MAX_SIGNUP_NOTE, MAX_SIGNUP_NOTE)
+  // the pages check a link's id, and a form's ticket count, as the functions do
+  assert.equal(guests.LINK_ID_PATTERN.source, LINK_ID_PATTERN.source)
+  assert.match(newInviteId(), guests.LINK_ID_PATTERN)
+  for (const quantity of [-1, 0, 1, MAX_GUEST_TICKETS, MAX_GUEST_TICKETS + 1, 1.5]) {
+    let accepted = true
+    try {
+      sanitizeQuantity({ quantity })
+    } catch {
+      accepted = false
+    }
+    assert.equal(guests.validTicketQuantity(quantity), accepted, String(quantity))
+  }
   for (const guest of [
     { relation: 'alumni', relationDetail: '78 屆' },
     { relation: 'friend', relationDetail: ' 王小明 ' },

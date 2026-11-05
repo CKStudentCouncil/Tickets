@@ -6,6 +6,14 @@
 // Tickets one send or invite link may carry
 export const MAX_GUEST_TICKETS = 10
 
+// A whole number of tickets one send or link may carry
+export const validTicketQuantity = (quantity) =>
+  Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_GUEST_TICKETS
+
+// The random id in an invite or sign-up link (/invite/:id, /join/:id). Keep
+// in sync with LINK_ID_PATTERN in functions/lib/guests.js
+export const LINK_ID_PATTERN = /^[A-Za-z0-9_-]{24}$/
+
 // The largest quota an officer (幹部) may be given
 export const MAX_OFFICER_QUOTA = 500
 

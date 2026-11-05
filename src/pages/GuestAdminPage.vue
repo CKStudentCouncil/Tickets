@@ -252,7 +252,7 @@
             </label>
           </div>
           <p v-if="inviteError" class="error" role="alert">{{ inviteError }}</p>
-          <button type="submit" class="btn" :disabled="creating || !validInviteQuantity">
+          <button type="submit" class="btn" :disabled="creating || !validTicketQuantity(inviteQuantity)">
             {{ creating ? '產生中...' : '產生邀請連結' }}
           </button>
         </form>
@@ -340,52 +340,70 @@
           </button>
         </form>
 
-        <h3 class="sub-heading">所有登記連結 <span class="num">{{ signupLinks.length }}</span></h3>
-        <p v-if="signupLinks.length === 0" class="empty">還沒有登記連結</p>
-        <div v-else class="table-wrap">
-          <table class="signup-table">
-            <thead>
-              <tr>
-                <th>名稱</th>
-                <th>每人</th>
-                <th>登記</th>
-                <th>狀態</th>
-                <th>產生時間</th>
-                <th>連結</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in signupLinks" :key="item.id">
-                <td class="strong note-cell">{{ item.title }}</td>
-                <td><span class="num">{{ item.quantity }}</span> 張</td>
-                <td>
-                  <span class="num">{{ signupsOf(item.id).length }}</span> 人<span v-if="pendingOf(item.id)" class="pending-count">・待審核 <span class="num">{{ pendingOf(item.id) }}</span></span>
-                </td>
-                <td>
-                  <span class="status" :class="{ on: item.open }">{{ item.open ? '登記中' : '已停止' }}</span>
-                </td>
-                <td class="num">{{ formatDateTime(item.createdAt) }}</td>
-                <td>
-                  <button type="button" class="btn-outline btn-small" @click="copyText(signupUrl(item.id), '已複製登記連結')">複製</button>
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    class="btn-outline btn-small"
-                    :disabled="linkBusyIds.has(item.id)"
-                    @click="toggleSignupLink(item)"
-                  >
-                    {{ item.open ? '停止登記' : '重新開放' }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <template v-if="signupLoadError">
+          <p class="empty">登記連結載入失敗，請檢查網路後重試</p>
+          <button type="button" class="btn-outline" :disabled="refreshing" @click="load(false)">重新載入</button>
+        </template>
+        <template v-else>
+          <h3 class="sub-heading">所有登記連結 <span class="num">{{ signupLinks.length }}</span></h3>
+          <p v-if="signupLinks.length === 0" class="empty">還沒有登記連結</p>
+          <div v-else class="table-wrap">
+            <table class="signup-table">
+              <thead>
+                <tr>
+                  <th>名稱</th>
+                  <th>每人</th>
+                  <th>登記</th>
+                  <th>狀態</th>
+                  <th>產生時間</th>
+                  <th>連結</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in signupLinks" :key="item.id">
+                  <td class="strong note-cell">{{ item.title }}</td>
+                  <td><span class="num">{{ item.quantity }}</span> 張</td>
+                  <td>
+                    <template v-if="loadedLinkIds.has(item.id)">
+                      <span class="num">{{ statsOf(item.id).total }}</span> 人<span v-if="statsOf(item.id).pending" class="pending-count">・待審核 <span class="num">{{ statsOf(item.id).pending }}</span></span>
+                    </template>
+                    <!-- closed, with every sign-up handled: not loaded until asked -->
+                    <button
+                      v-else
+                      type="button"
+                      class="btn-outline btn-small"
+                      :disabled="linkBusyIds.has(item.id)"
+                      @click="showSignupsOf(item)"
+                    >
+                      {{ linkBusyIds.has(item.id) ? '載入中...' : '查看登記' }}
+                    </button>
+                  </td>
+                  <td>
+                    <span class="status" :class="{ on: item.open }">{{ item.open ? '登記中' : '已停止' }}</span>
+                  </td>
+                  <td class="num">{{ formatDateTime(item.createdAt) }}</td>
+                  <td>
+                    <button type="button" class="btn-outline btn-small" @click="copyText(signupUrl(item.id), '已複製登記連結')">複製</button>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      class="btn-outline btn-small"
+                      :disabled="linkBusyIds.has(item.id)"
+                      @click="toggleSignupLink(item)"
+                    >
+                      {{ item.open ? '停止登記' : '重新開放' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
       </section>
 
-      <section class="panel" aria-labelledby="signups-title">
+      <section v-if="!signupLoadError" class="panel" aria-labelledby="signups-title">
         <div class="notify-header">
           <h2 id="signups-title">登記審核</h2>
           <div class="ticket-type-header-actions">
@@ -395,7 +413,7 @@
           </div>
         </div>
         <p class="panel-copy">
-          逐一核准或不通過登記的人；按「寄出公關票」後，邀請信約一分鐘內寄到他們登入的 Email；寄出前都可以改變審核結果
+          逐一核准或不通過登記的人；按「寄出公關票」後，邀請信約一分鐘內寄到他們登入的 Email；寄出前都可以改變審核結果；未通過的登記可以刪除，連結還在登記中的話對方可以再登記；已停止登記、登記也都處理完的連結，要在上方按「查看登記」才會列出
         </p>
 
         <p class="ledger-summary">
@@ -407,7 +425,7 @@
             <span>登記連結</span>
             <select v-model="signupLinkFilter" class="select-field">
               <option value="">全部</option>
-              <option v-for="item in signupLinks" :key="item.id" :value="item.id">{{ item.title }}</option>
+              <option v-for="item in loadedLinks" :key="item.id" :value="item.id">{{ item.title }}</option>
             </select>
           </label>
           <label class="field source-filter">
@@ -419,7 +437,7 @@
           </label>
         </div>
 
-        <div v-if="linkPending.length || linkApproved.length || sendProgress" class="signup-batch">
+        <div v-if="linkPending.length || linkApproved.length || linkRejected.length || sendProgress" class="signup-batch">
           <button
             v-if="linkPending.length"
             type="button"
@@ -427,7 +445,7 @@
             :disabled="batchBusy"
             @click="approveAll"
           >
-            {{ approvingAll ? '核准中...' : `核准全部待審核（${linkPending.length} 位）` }}
+            {{ batchAction === 'approve' ? '核准中...' : `核准全部待審核（${linkPending.length} 位）` }}
           </button>
           <button
             v-if="linkApproved.length || sendProgress"
@@ -437,6 +455,15 @@
             @click="sendApproved"
           >
             {{ sendProgress ? `寄出中 ${sendProgress.done}/${sendProgress.total}...` : `寄出公關票（${linkApproved.length} 位已核准，共 ${ticketsFor(linkApproved)} 張）` }}
+          </button>
+          <button
+            v-if="linkRejected.length"
+            type="button"
+            class="btn-outline danger"
+            :disabled="batchBusy"
+            @click="removeSignups(linkRejected)"
+          >
+            {{ batchAction === 'delete' ? '刪除中...' : `刪除未通過的登記（${linkRejected.length} 位）` }}
           </button>
         </div>
 
@@ -460,13 +487,17 @@
                 <td class="strong">{{ item.name }}</td>
                 <td>
                   <span class="mono">{{ item.email }}</span>
-                  <span v-if="item.status !== 'sent' && ticketFor(item.email)" class="warning-tag">已收過公關票</span>
+                  <template v-if="item.status !== 'sent'">
+                    <span v-if="ticketFor(item.email)" class="warning-tag">已收過公關票</span>
+                    <span v-else-if="repeatedEmails.has(item.email)" class="warning-tag">另有登記</span>
+                  </template>
                 </td>
                 <td class="note-cell">{{ item.note || '—' }}</td>
                 <td class="note-cell">{{ linkById[item.linkId]?.title || '—' }}</td>
                 <td class="num">{{ formatDateTime(item.createdAt) }}</td>
                 <td>
                   <span class="status" :class="`signup-${item.status}`">{{ SIGNUP_STATUS[item.status] || item.status }}</span>
+                  <span v-if="item.status !== 'sent' && item.deletedOrderId" class="warning-tag">公關票已刪除</span>
                 </td>
                 <td :class="{ mono: item.status === 'sent' }">
                   <div v-if="item.status !== 'sent'" class="row-actions">
@@ -480,7 +511,10 @@
                       </button>
                       <button type="button" class="btn-outline btn-small" :disabled="rowBusy(item)" @click="review([item], 'pending')">取消核准</button>
                     </template>
-                    <button v-else type="button" class="btn-outline btn-small" :disabled="rowBusy(item)" @click="review([item], 'pending')">重新審核</button>
+                    <template v-else>
+                      <button type="button" class="btn-outline btn-small" :disabled="rowBusy(item)" @click="review([item], 'pending')">重新審核</button>
+                      <button type="button" class="btn-outline btn-small danger" :disabled="rowBusy(item)" @click="removeSignups([item])">刪除</button>
+                    </template>
                   </div>
                   <router-link v-else-if="item.orderId" :to="{ name: 'admin-order-detail', params: { id: item.orderId } }">{{ item.orderId }}</router-link>
                 </td>
@@ -564,19 +598,22 @@ import {
   MAX_OFFICER_QUOTA,
   MAX_SIGNUP_TITLE,
   SIGNUP_STATUS,
-  guestSourceText
+  guestSourceText,
+  validTicketQuantity
 } from 'src/data/guests'
 import {
   addOfficer,
   createCouncilInvite,
   createSignupLink,
   deleteOfficer,
+  deleteSignups,
   fetchAllInviteNotes,
   fetchAllInvites,
-  fetchAllSignups,
   fetchGuestTickets,
   fetchOfficers,
   fetchSignupLinks,
+  fetchSignups,
+  hasWaitingSignups,
   inviteUrl,
   quantityOf,
   remainingOf,
@@ -588,7 +625,7 @@ import {
   signupUrl,
   updateOfficer
 } from 'src/services/guestService'
-import { createRequestId } from 'src/services/orderService'
+import { byCreatedAtDesc, createRequestId } from 'src/services/orderService'
 import { formatDateTime } from 'src/utils/datetime'
 import { EMAIL_STATUS } from 'src/utils/orderBackup'
 
@@ -639,43 +676,66 @@ const inviteError = ref('')
 // the link just made, shown until it is copied
 const createdInvite = ref(null)
 const revokingIds = reactive(new Set())
-const validInviteQuantity = computed(
-  () => Number.isInteger(inviteQuantity.value) && inviteQuantity.value >= 1 && inviteQuantity.value <= MAX_GUEST_TICKETS
-)
 
 // 登記連結: one link for a group, whose sign-ups wait for review here
 const signupLinks = ref([])
-// every link's sign-ups, each with `key` (its path), linkId and uid
+// the sign-ups of the links in loadedLinkIds, each with `key` (its path),
+// linkId and uid
 const signups = ref([])
+// The links whose sign-ups are on the page: the open ones, those with
+// sign-ups still to review or send, and any shown with 查看登記. A closed
+// link whose sign-ups are all handled waits to be asked.
+const loadedLinkIds = ref(new Set())
+// the sign-up links failed to load; the rest of the page still works
+const signupLoadError = ref(false)
 const signupTitle = ref('')
 const signupQuantity = ref(1)
 const creatingSignup = ref(false)
 const signupLinkError = ref('')
 // the link just made, shown until it is copied
 const createdSignupLink = ref(null)
-// links being closed or reopened
+// links being closed, reopened or loaded
 const linkBusyIds = reactive(new Set())
-const signupLinkValid = computed(
-  () =>
-    signupTitle.value.trim() !== '' &&
-    Number.isInteger(signupQuantity.value) && signupQuantity.value >= 1 && signupQuantity.value <= MAX_GUEST_TICKETS
-)
+const signupLinkValid = computed(() => signupTitle.value.trim() !== '' && validTicketQuantity(signupQuantity.value))
 const linkById = computed(() => Object.fromEntries(signupLinks.value.map((item) => [item.id, item])))
-const signupsOf = (linkId) => signups.value.filter((item) => item.linkId === linkId)
-const pendingOf = (linkId) => signupsOf(linkId).filter((item) => item.status === 'pending').length
+const loadedLinks = computed(() => signupLinks.value.filter((item) => loadedLinkIds.value.has(item.id)))
+// { [linkId]: { total, pending } }, in one pass over the sign-ups
+const signupStats = computed(() => {
+  const stats = {}
+  for (const item of signups.value) {
+    const entry = (stats[item.linkId] ||= { total: 0, pending: 0 })
+    entry.total++
+    if (item.status === 'pending') entry.pending++
+  }
+  return stats
+})
+const NO_SIGNUPS = { total: 0, pending: 0 }
+const statsOf = (linkId) => signupStats.value[linkId] || NO_SIGNUPS
+// emails signed up on more than one link (rejected ones aside), each of
+// which could be sent a ticket
+const repeatedEmails = computed(() => {
+  const counts = new Map()
+  for (const item of signups.value) {
+    if (item.status !== 'rejected') counts.set(item.email, (counts.get(item.email) || 0) + 1)
+  }
+  return new Set([...counts].filter(([, count]) => count > 1).map(([email]) => email))
+})
 
 // the review: by link, then by status
 const signupLinkFilter = ref('')
 const signupStatusFilter = ref('')
-// sign-ups being reviewed or sent, by key
+// sign-ups being reviewed, sent or deleted, by key
 const signupBusy = reactive(new Set())
-const approvingAll = ref(false)
+// 'approve' or 'delete' while that batch button's write is under way
+const batchAction = ref('')
 // { done, total } while approved sign-ups are being sent
 const sendProgress = ref(null)
-const batchBusy = computed(() => approvingAll.value || sendProgress.value !== null)
+const batchBusy = computed(() => batchAction.value !== '' || sendProgress.value !== null)
 const rowBusy = (item) => batchBusy.value || signupBusy.has(item.key)
 
-const linkSignups = computed(() => (signupLinkFilter.value ? signupsOf(signupLinkFilter.value) : signups.value))
+const linkSignups = computed(() =>
+  signupLinkFilter.value ? signups.value.filter((item) => item.linkId === signupLinkFilter.value) : signups.value
+)
 const shownSignups = computed(() =>
   signupStatusFilter.value ? linkSignups.value.filter((item) => item.status === signupStatusFilter.value) : linkSignups.value
 )
@@ -686,6 +746,7 @@ const signupCounts = computed(() => {
 })
 const linkPending = computed(() => linkSignups.value.filter((item) => item.status === 'pending'))
 const linkApproved = computed(() => linkSignups.value.filter((item) => item.status === 'approved'))
+const linkRejected = computed(() => linkSignups.value.filter((item) => item.status === 'rejected'))
 const ticketsFor = (items) => items.reduce((sum, item) => sum + (Number(linkById.value[item.linkId]?.quantity) || 0), 0)
 
 const validQuota = (quota, min = 0) => Number.isInteger(quota) && quota >= min && quota <= MAX_OFFICER_QUOTA
@@ -721,11 +782,7 @@ const earlierTicket = computed(() => ticketFor(form.value.email))
 
 const formValid = computed(() => {
   const { name, email, quantity } = form.value
-  return (
-    name.trim() !== '' &&
-    EMAIL_PATTERN.test(email.trim()) &&
-    Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_GUEST_TICKETS
-  )
+  return name.trim() !== '' && EMAIL_PATTERN.test(email.trim()) && validTicketQuantity(quantity)
 })
 
 const shownTickets = computed(() => {
@@ -741,34 +798,80 @@ const deliveredCount = computed(() =>
 // any change to the details asks for another look
 watch(form, () => { directReview.value = false }, { deep: true })
 
-// `showLoading` false keeps the page up while the lists refresh
+// Everything on the page; `showLoading` false keeps the page up while the
+// lists refresh. The sign-up links load apart, so a failure there leaves the
+// officers, links and tickets working.
 async function load(showLoading = true) {
   if (showLoading) loading.value = true
   else refreshing.value = true
-  loadError.value = false
+  await Promise.all([loadGuests(showLoading), loadSignups()])
+  loading.value = false
+  refreshing.value = false
+}
 
+// Officers, invite links and their notes, and every ticket; never throws.
+// `showLoading` as for load: whether a failure takes the whole page.
+async function loadGuests(showLoading = false) {
+  loadError.value = false
   try {
-    const [officerList, inviteList, sent, noteMap, linkList, signupList] = await Promise.all([
+    const [officerList, inviteList, sent, noteMap] = await Promise.all([
       fetchOfficers(),
       fetchAllInvites(),
       fetchGuestTickets(),
-      fetchAllInviteNotes(),
-      fetchSignupLinks(),
-      fetchAllSignups()
+      fetchAllInviteNotes()
     ])
     officers.value = officerList
     invites.value = inviteList
     notes.value = noteMap
     tickets.value = sent
-    signupLinks.value = linkList
-    signups.value = signupList
   } catch (error) {
     console.error('Load guests error:', error)
     if (showLoading) loadError.value = true
     else toast.show('重新整理失敗，請稍後再試')
+  }
+}
+
+// The sign-up links and the sign-ups of those in loadedLinkIds; never
+// throws. A failure shows in the sign-up panels alone.
+async function loadSignups() {
+  try {
+    const links = await fetchSignupLinks()
+    const wanted = await Promise.all(
+      links.map((link) => link.open || loadedLinkIds.value.has(link.id) || hasWaitingSignups(link.id))
+    )
+    const ids = links.filter((_, i) => wanted[i]).map((link) => link.id)
+    signups.value = await fetchSignups(ids)
+    signupLinks.value = links
+    loadedLinkIds.value = new Set(ids)
+    signupLoadError.value = false
+  } catch (error) {
+    console.error('Load sign-ups error:', error)
+    signupLoadError.value = true
+  }
+}
+
+// the ledger and the 已收過公關票 tags, after tickets went out
+async function loadTickets() {
+  try {
+    tickets.value = await fetchGuestTickets()
+  } catch (error) {
+    console.error('Load guest tickets error:', error)
+  }
+}
+
+// a closed link whose sign-ups are all handled, picked in the links table
+async function showSignupsOf(link) {
+  linkBusyIds.add(link.id)
+  try {
+    const list = await fetchSignups([link.id])
+    signups.value = [...signups.value.filter((item) => item.linkId !== link.id), ...list].sort(byCreatedAtDesc)
+    loadedLinkIds.value = new Set([...loadedLinkIds.value, link.id])
+    signupLinkFilter.value = link.id
+  } catch (error) {
+    console.error('Load link sign-ups error:', error)
+    toast.show('載入失敗，請稍後再試')
   } finally {
-    loading.value = false
-    refreshing.value = false
+    linkBusyIds.delete(link.id)
   }
 }
 
@@ -785,7 +888,7 @@ async function submitOfficer() {
     })
     toast.show(`已新增幹部 ${newOfficer.value.name.trim()}`)
     newOfficer.value = emptyOfficer()
-    await load(false)
+    await loadGuests()
   } catch (error) {
     console.error('Add officer error:', error)
     // the rules refuse a second create of the same email
@@ -814,7 +917,7 @@ async function saveOfficer(item) {
     await updateOfficer(item.id, { name: editForm.value.name.trim(), quota: editForm.value.quota })
     editingId.value = null
     toast.show('已更新幹部額度')
-    await load(false)
+    await loadGuests()
   } catch (error) {
     console.error('Update officer error:', error)
     // the rules refuse a quota below what the officer has used meanwhile
@@ -843,10 +946,16 @@ async function removeOfficer(item) {
   }
 }
 
-// The send whose outcome is unknown (the response was lost). Sending the
-// same again reuses its requestId, so the server returns that ticket
-// instead of creating a second one.
-let pending = null
+// Each form's call whose outcome is unknown (the response was lost). Making
+// the same call again reuses its requestId, so the server returns that
+// ticket or link instead of making a second one. One per form, so a call
+// from one form never drops another's.
+const pending = {}
+function requestIdFor(kind, input) {
+  const key = JSON.stringify(input)
+  if (pending[kind]?.key !== key) pending[kind] = { key, requestId: createRequestId() }
+  return pending[kind].requestId
+}
 
 // definite refusals, explained by the server's message
 const REFUSALS = ['functions/invalid-argument', 'functions/permission-denied', 'functions/failed-precondition']
@@ -867,20 +976,18 @@ async function sendDirect() {
     email: form.value.email.trim().toLowerCase(),
     quantity: form.value.quantity
   }
-  const key = JSON.stringify(input)
-  if (pending?.key !== key) pending = { key, requestId: createRequestId() }
 
   try {
-    const { id } = await sendGuestInvitation({ ...input, requestId: pending.requestId })
-    pending = null
+    const { id } = await sendGuestInvitation({ ...input, requestId: requestIdFor('direct', input) })
+    pending.direct = null
     form.value = emptyForm()
     toast.show(`已建立公關票 ${id}，邀請信約一分鐘內寄出`, 6000)
-    await load(false)
+    await loadGuests()
   } catch (error) {
     console.error('Send guest invitation error:', error)
     if (REFUSALS.includes(error?.code)) {
       // nothing was created: the next try is a new send
-      pending = null
+      pending.direct = null
       directError.value = error.message
     } else {
       directError.value = '寄送失敗，請稍後再試（再按一次不會重複寄送）'
@@ -891,25 +998,23 @@ async function sendDirect() {
 }
 
 async function createInvite() {
-  if (!validInviteQuantity.value || creating.value) return
+  if (!validTicketQuantity(inviteQuantity.value) || creating.value) return
 
   creating.value = true
   inviteError.value = ''
   const input = { quantity: inviteQuantity.value, note: inviteNote.value.trim() }
-  const key = JSON.stringify({ invite: input })
-  if (pending?.key !== key) pending = { key, requestId: createRequestId() }
 
   try {
-    const { id } = await createCouncilInvite({ ...input, requestId: pending.requestId })
-    pending = null
+    const { id } = await createCouncilInvite({ ...input, requestId: requestIdFor('invite', input) })
+    pending.invite = null
     createdInvite.value = { id, ...input }
     inviteQuantity.value = 1
     inviteNote.value = ''
-    await load(false)
+    await loadGuests()
   } catch (error) {
     console.error('Create council invite error:', error)
     if (REFUSALS.includes(error?.code)) {
-      pending = null
+      pending.invite = null
       inviteError.value = error.message
     } else {
       inviteError.value = '產生失敗，請稍後再試（再按一次不會重複產生）'
@@ -934,7 +1039,7 @@ async function revoke(invite) {
     toast.show(REFUSALS.includes(error?.code) ? error.message : '撤銷失敗，請稍後再試')
   } finally {
     revokingIds.delete(invite.id)
-    await load(false)
+    await loadGuests()
   }
 }
 
@@ -946,20 +1051,18 @@ async function createSignup() {
   creatingSignup.value = true
   signupLinkError.value = ''
   const input = { title: signupTitle.value.trim(), quantity: signupQuantity.value }
-  const key = JSON.stringify({ signupLink: input })
-  if (pending?.key !== key) pending = { key, requestId: createRequestId() }
 
   try {
-    const { id } = await createSignupLink({ ...input, requestId: pending.requestId })
-    pending = null
+    const { id } = await createSignupLink({ ...input, requestId: requestIdFor('signupLink', input) })
+    pending.signupLink = null
     createdSignupLink.value = { id, ...input }
     signupTitle.value = ''
     signupQuantity.value = 1
-    await load(false)
+    await loadSignups()
   } catch (error) {
     console.error('Create sign-up link error:', error)
     if (REFUSALS.includes(error?.code)) {
-      pending = null
+      pending.signupLink = null
       signupLinkError.value = error.message
     } else {
       signupLinkError.value = '產生失敗，請稍後再試（再按一次不會重複產生）'
@@ -990,7 +1093,12 @@ function reviewedText(items, status) {
   return { approved: `已核准 ${who}`, rejected: `已將 ${who} 設為不通過`, pending: `已將 ${who} 改回待審核` }[status]
 }
 
-// `status`: 'approved', 'rejected' or back to 'pending'
+// Of a batch write that failed (writeInBatches in guestService.js), how many
+// went through first
+const doneBefore = (error) => Number(error?.done) || 0
+
+// `status`: 'approved', 'rejected' or back to 'pending'. Each names the
+// sign-up as shown here, so one its guest changed since is refused.
 async function review(items, status) {
   items.forEach((item) => signupBusy.add(item.key))
   try {
@@ -999,9 +1107,11 @@ async function review(items, status) {
     toast.show(reviewedText(items, status))
   } catch (error) {
     console.error('Review sign-ups error:', error)
-    // the rules refuse a sign-up sent meanwhile
-    toast.show('更新失敗：登記狀態可能已經變更，已重新整理')
-    await load(false)
+    // the rules refuse a sign-up sent, or changed by its guest, meanwhile
+    const done = doneBefore(error)
+    const reason = '登記可能剛被修改或寄出，已重新整理'
+    toast.show(done ? `已更新 ${done} 位；其餘 ${items.length - done} 位更新失敗：${reason}` : `更新失敗：${reason}`, 6000)
+    await loadSignups()
   } finally {
     items.forEach((item) => signupBusy.delete(item.key))
   }
@@ -1010,51 +1120,116 @@ async function review(items, status) {
 async function approveAll() {
   const items = [...linkPending.value]
   if (items.length === 0 || batchBusy.value) return
-  if (!window.confirm(`確定要核准全部 ${items.length} 位待審核的登記嗎？`)) return
+  const reopened = items.filter((item) => item.deletedOrderId).length
+  const note = reopened ? `其中 ${reopened} 位的公關票曾被刪除` : ''
+  if (!window.confirm(`確定要核准全部 ${items.length} 位待審核的登記嗎？${note}`)) return
 
-  approvingAll.value = true
+  batchAction.value = 'approve'
   try {
     await review(items, 'approved')
   } finally {
-    approvingAll.value = false
+    batchAction.value = ''
   }
 }
 
-// Sends each sign-up its ticket, a few at a time. Each call is safe to
-// repeat: a sign-up already sent returns its order.
-async function sendSignups(items) {
+// Rejected sign-ups only (firestore.rules); whoever is deleted may sign up
+// again while the link is open
+async function removeSignups(items) {
+  if (items.length === 0 || batchBusy.value || items.some((item) => signupBusy.has(item.key))) return
+  const who = items.length > 1 ? `這 ${items.length} 位未通過的登記` : `${items[0].name} 的登記`
+  if (!window.confirm(`確定要刪除${who}嗎？刪除後無法復原；連結還在登記中的話，對方可以再登記`)) return
+
+  if (items.length > 1) batchAction.value = 'delete'
+  items.forEach((item) => signupBusy.add(item.key))
+  try {
+    await deleteSignups(items)
+    const keys = new Set(items.map((item) => item.key))
+    signups.value = signups.value.filter((item) => !keys.has(item.key))
+    toast.show(items.length > 1 ? `已刪除 ${items.length} 位未通過的登記` : `已刪除 ${items[0].name} 的登記`)
+  } catch (error) {
+    console.error('Delete sign-ups error:', error)
+    const done = doneBefore(error)
+    toast.show(done ? `已刪除 ${done} 位；其餘 ${items.length - done} 位刪除失敗，已重新整理` : '刪除失敗：登記可能剛被改變，已重新整理', 6000)
+    await loadSignups()
+  } finally {
+    items.forEach((item) => signupBusy.delete(item.key))
+    batchAction.value = ''
+  }
+}
+
+// "王大明、陳小華" or "王大明、陳小華、林小美 等 5 位"
+const namesOf = (items) =>
+  items.length > 3 ? `${items.slice(0, 3).map((item) => item.name).join('、')} 等 ${items.length} 位` : items.map((item) => item.name).join('、')
+
+// Sends each sign-up, as shown here, its ticket, a few at a time; one
+// email's sign-ups go one after another, so the server sees the first
+// ticket before it decides on the next. Each call is safe to repeat: a
+// sign-up already sent returns its order. Returns { sent, failures,
+// duplicates }: those whose email already has a 公關票, unless `allowDuplicate`.
+async function sendEach(items, allowDuplicate) {
   sendProgress.value = { done: 0, total: items.length }
-  const queue = [...items]
+  const byEmail = new Map()
+  for (const item of items) byEmail.set(item.email, [...(byEmail.get(item.email) || []), item])
+  const queue = [...byEmail.values()]
   const failures = []
+  const duplicates = []
 
   const worker = async () => {
     while (queue.length) {
-      const item = queue.shift()
-      signupBusy.add(item.key)
-      try {
-        const { id } = await sendSignupTicket(item)
-        Object.assign(item, { status: 'sent', orderId: id })
-      } catch (error) {
-        console.error('Send sign-up ticket error:', error)
-        failures.push(error)
-      } finally {
-        signupBusy.delete(item.key)
-        sendProgress.value.done++
+      for (const item of queue.shift()) {
+        signupBusy.add(item.key)
+        try {
+          const { id } = await sendSignupTicket(item, allowDuplicate)
+          Object.assign(item, { status: 'sent', orderId: id })
+        } catch (error) {
+          if (error?.code === 'functions/already-exists' && error.details?.duplicate) {
+            duplicates.push(item)
+          } else {
+            console.error('Send sign-up ticket error:', error)
+            failures.push(error)
+          }
+        } finally {
+          signupBusy.delete(item.key)
+          sendProgress.value.done++
+        }
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker))
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, worker))
   sendProgress.value = null
+  return { sent: items.length - failures.length - duplicates.length, failures, duplicates }
+}
 
-  const sent = items.length - failures.length
-  if (failures.length === 0) {
-    toast.show(`已寄出 ${sent} 位的公關票，邀請信約一分鐘內寄到`, 6000)
-  } else {
-    const reason = REFUSALS.includes(failures[0]?.code) ? failures[0].message : '請稍後再試（再按一次不會重複寄送）'
-    toast.show(`已寄出 ${sent} 位，${failures.length} 位失敗：${reason}`, 8000)
+// Sends the sign-ups their tickets; those whose email already has a 公關票
+// go only after a second yes
+async function sendSignups(items) {
+  const first = await sendEach(items, false)
+  let { sent, failures } = first
+  let skipped = 0
+  if (first.duplicates.length) {
+    if (window.confirm(`${namesOf(first.duplicates)} 的 Email 已經收過公關票，仍要再寄一份嗎？`)) {
+      const again = await sendEach(first.duplicates, true)
+      sent += again.sent
+      failures = [...failures, ...again.failures]
+    } else {
+      skipped = first.duplicates.length
+    }
   }
-  // the ledger below shows the new tickets
-  await load(false)
+
+  if (failures.length === 0 && skipped === 0) {
+    toast.show(`已寄出 ${sent} 位的公關票，邀請信約一分鐘內寄到`, 6000)
+  } else if (sent || failures.length) {
+    // nothing to say when the only ones left are those just declined
+    const parts = [`已寄出 ${sent} 位`]
+    if (failures.length) {
+      const reason = REFUSALS.includes(failures[0]?.code) ? failures[0].message : '請稍後再試（再按一次不會重複寄送）'
+      parts.push(`${failures.length} 位失敗：${reason}`)
+    }
+    if (skipped) parts.push(`${skipped} 位已收過公關票，沒有寄出`)
+    toast.show(parts.join('；'), 8000)
+  }
+  // the ledger below shows the new tickets; a refusal may mean sign-ups changed
+  await Promise.all([loadTickets(), failures.length ? loadSignups() : null])
 }
 
 function sendOne(item) {

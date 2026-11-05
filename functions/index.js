@@ -12,6 +12,7 @@ export {
   createGuestSignupLink,
   createOfficerInvite,
   releaseOfficerQuota,
+  reopenGuestSignup,
   revokeOfficerInvite,
   sendGuestInvitation,
   sendGuestSignupTicket,

@@ -4,6 +4,7 @@ import { after, beforeEach, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { HOUR, PROJECT_ID, db, fft, functions, isEmulator } from './setup.js'
+import { getTaiwanYear } from '../../lib/time.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
@@ -17,6 +18,7 @@ const callPrepare = fft.wrap(functions.prepareOrderNotification)
 const callCreateSignupLink = fft.wrap(functions.createGuestSignupLink)
 const callSignUp = fft.wrap(functions.submitGuestSignup)
 const callSendSignup = fft.wrap(functions.sendGuestSignupTicket)
+const callReopen = fft.wrap(functions.reopenGuestSignup)
 
 const SUPER = { uid: 'super-uid', email: 'super@example.com' }
 const ADMIN = { uid: 'admin-uid', email: 'admin@example.com' }
@@ -42,11 +44,12 @@ const officerOf = async (email = 'officer@example.com') => (await db.doc(`office
 const inviteOf = async (id) => (await db.doc(`officerInvites/${id}`).get()).data()
 const noteOf = async (id) => (await db.doc(`officerInviteNotes/${id}`).get()).data()
 
-// what deleting an order does: the trigger gets the deleted snapshot
-async function deleteOrder(id) {
+// what deleting an order does: the trigger (releaseOfficerQuota unless
+// named) gets the deleted snapshot
+async function deleteOrder(id, trigger = callRelease) {
   const snap = await db.doc(`orders/${id}`).get()
   await db.doc(`orders/${id}`).delete()
-  return () => callRelease(snap, { params: { orderId: id } })
+  return () => trigger(snap, { params: { orderId: id } })
 }
 
 after(() => fft.cleanup())
@@ -378,6 +381,11 @@ describe('sign-up links (登記連結)', () => {
   const signupOf = async (linkId, uid = GUEST.uid) => (await db.doc(`guestSignupLinks/${linkId}/signups/${uid}`).get()).data()
   // what a super admin's review does on GuestAdminPage.vue (firestore.rules allow it)
   const reviewAs = (linkId, uid, status) => db.doc(`guestSignupLinks/${linkId}/signups/${uid}`).update({ status })
+  // what GuestAdminPage.vue sends: the sign-up as its page shows it now
+  const sendAs = async (linkId, { uid = GUEST.uid, who = SUPER, ...extra } = {}) => {
+    const signup = await signupOf(linkId, uid)
+    return callSendSignup({ linkId, uid, updatedAt: signup.updatedAt.toMillis(), ...extra }, as(who))
+  }
 
   test('a super admin makes an open link; a retry returns the same one', async () => {
     const request = linkInput()
@@ -449,10 +457,10 @@ describe('sign-up links (登記連結)', () => {
     await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
 
     // not before it is approved
-    await assert.rejects(callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER)), { code: 'failed-precondition' })
+    await assert.rejects(sendAs(linkId), { code: 'failed-precondition' })
     await reviewAs(linkId, GUEST.uid, 'approved')
 
-    const { id } = await callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER))
+    const { id } = await sendAs(linkId)
     assert.match(id, /^PR\d{8}/)
     const order = await orderOf(id)
     assert.equal(order.complimentary, true)
@@ -471,7 +479,7 @@ describe('sign-up links (登記連結)', () => {
     assert.equal(signup.sentByUid, SUPER.uid)
 
     // a retry (a lost response) returns the same ticket
-    assert.equal((await callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER))).id, id)
+    assert.equal((await sendAs(linkId)).id, id)
     assert.equal((await db.collection('orders').get()).size, 1)
     // and a sent sign-up can no longer be changed by the guest
     await assert.rejects(callSignUp({ linkId, name: '陳大華' }, as(GUEST)), { code: 'failed-precondition' })
@@ -483,7 +491,7 @@ describe('sign-up links (登記連結)', () => {
     await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
     await reviewAs(linkId, GUEST.uid, 'approved')
 
-    const results = await Promise.all(Array.from({ length: 3 }, () => callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER))))
+    const results = await Promise.all(Array.from({ length: 3 }, () => sendAs(linkId)))
     assert.equal(new Set(results.map((r) => r.id)).size, 1)
     assert.equal((await db.collection('orders').get()).size, 1)
   })
@@ -494,11 +502,114 @@ describe('sign-up links (登記連結)', () => {
     await reviewAs(linkId, GUEST.uid, 'approved')
 
     for (const who of [ADMIN, OFFICER, GUEST]) {
-      await assert.rejects(callSendSignup({ linkId, uid: GUEST.uid }, as(who)), { code: 'permission-denied' })
+      await assert.rejects(sendAs(linkId, { who }), { code: 'permission-denied' })
     }
-    await assert.rejects(callSendSignup({ linkId, uid: STRANGER.uid }, as(SUPER)), { code: 'not-found' })
-    await assert.rejects(callSendSignup({ linkId, uid: '../x' }, as(SUPER)), { code: 'not-found' })
+    await assert.rejects(callSendSignup({ linkId, uid: STRANGER.uid, updatedAt: Date.now() }, as(SUPER)), { code: 'not-found' })
+    await assert.rejects(callSendSignup({ linkId, uid: '../x', updatedAt: Date.now() }, as(SUPER)), { code: 'not-found' })
+    // without the version the page showed
+    await assert.rejects(callSendSignup({ linkId, uid: GUEST.uid }, as(SUPER)), { code: 'invalid-argument' })
     assert.equal((await db.collection('orders').get()).size, 0)
+  })
+
+  test('a send must name the sign-up as the super admin last saw it', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+    const seen = (await signupOf(linkId)).updatedAt.toMillis()
+
+    // back in review, the guest changes it, and it is approved again
+    await reviewAs(linkId, GUEST.uid, 'approved')
+    await reviewAs(linkId, GUEST.uid, 'pending')
+    await callSignUp({ linkId, name: '王大明' }, as(GUEST))
+    await reviewAs(linkId, GUEST.uid, 'approved')
+
+    // a page still showing 陳小華 is refused
+    await assert.rejects(callSendSignup({ linkId, uid: GUEST.uid, updatedAt: seen }, as(SUPER)), {
+      code: 'failed-precondition',
+      message: '登記資料已經變更，請重新整理後再確認'
+    })
+    assert.equal((await db.collection('orders').get()).size, 0)
+
+    const { id } = await sendAs(linkId)
+    assert.equal((await orderOf(id)).customerName, '王大明')
+    // a retry of a send already made returns it, whatever the page showed
+    assert.equal((await callSendSignup({ linkId, uid: GUEST.uid, updatedAt: seen }, as(SUPER))).id, id)
+  })
+
+  test('an email that already has a 公關票 waits for a second yes', async () => {
+    // one person signed up on two links, both approved
+    const { id: first } = await callCreateSignupLink(linkInput(), as(SUPER))
+    const { id: second } = await callCreateSignupLink(linkInput({ title: '歷屆大學長' }), as(SUPER))
+    for (const linkId of [first, second]) {
+      await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+      await reviewAs(linkId, GUEST.uid, 'approved')
+    }
+
+    const { id } = await sendAs(first)
+    await assert.rejects(sendAs(second), (error) => {
+      assert.equal(error.code, 'already-exists')
+      assert.deepEqual(error.details, { duplicate: true })
+      return true
+    })
+    assert.equal((await signupOf(second)).status, 'approved')
+    assert.equal((await db.collection('orders').get()).size, 1)
+
+    const again = await sendAs(second, { allowDuplicate: true })
+    assert.notEqual(again.id, id)
+    assert.equal((await signupOf(second)).status, 'sent')
+
+    // a ticket sent any other way counts too
+    const { id: third } = await callCreateSignupLink(linkInput({ title: '校友會' }), as(SUPER))
+    await callSignUp({ linkId: third, name: '王大明' }, as(STRANGER))
+    await reviewAs(third, STRANGER.uid, 'approved')
+    await callSend(send({ email: STRANGER.email }), as(SUPER))
+    await assert.rejects(sendAs(third, { uid: STRANGER.uid }), { code: 'already-exists' })
+  })
+
+  test('deleting a sign-up\'s ticket sends the sign-up back to review, once', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+    await reviewAs(linkId, GUEST.uid, 'approved')
+    const { id } = await sendAs(linkId)
+
+    const reopen = await deleteOrder(id, callReopen)
+    await reopen()
+    let signup = await signupOf(linkId)
+    assert.equal(signup.status, 'pending')
+    assert.equal(signup.orderId, undefined)
+    assert.equal(signup.sentAt, undefined)
+    assert.equal(signup.deletedOrderId, id)
+    assert.ok(signup.ticketDeletedAt)
+    // the guest may change it again while it waits
+    await callSignUp({ linkId, name: '陳大華' }, as(GUEST))
+
+    // approved and sent again: a late repeat of the first deletion changes nothing
+    await reviewAs(linkId, GUEST.uid, 'approved')
+    const { id: resent } = await sendAs(linkId)
+    assert.notEqual(resent, id)
+    await reopen()
+    signup = await signupOf(linkId)
+    assert.equal(signup.status, 'sent')
+    assert.equal(signup.orderId, resent)
+    assert.equal((await orderOf(resent)).customerName, '陳大華')
+  })
+
+  test('a purged ticket, or one of a deleted sign-up, changes nothing', async () => {
+    const { id: linkId } = await callCreateSignupLink(linkInput(), as(SUPER))
+    await callSignUp({ linkId, name: '陳小華' }, as(GUEST))
+    await callSignUp({ linkId, name: '王大明' }, as(STRANGER))
+    for (const who of [GUEST, STRANGER]) await reviewAs(linkId, who.uid, 'approved')
+    const { id: purged } = await sendAs(linkId)
+    const { id: orphan } = await sendAs(linkId, { uid: STRANGER.uid })
+
+    // purgeOrders archives an order in the same transaction as its delete
+    await db.doc(`salesArchives/${getTaiwanYear()}/archivedOrders/${purged}`).set(await orderOf(purged))
+    await (await deleteOrder(purged, callReopen))()
+    assert.equal((await signupOf(linkId)).status, 'sent')
+    assert.equal((await signupOf(linkId)).orderId, purged)
+
+    await db.doc(`guestSignupLinks/${linkId}/signups/${STRANGER.uid}`).delete()
+    await (await deleteOrder(orphan, callReopen))()
+    assert.equal(await signupOf(linkId, STRANGER.uid), undefined)
   })
 })
 

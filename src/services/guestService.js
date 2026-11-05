@@ -1,10 +1,10 @@
 import {
   collection,
-  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   serverTimestamp,
@@ -33,7 +33,9 @@ import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 //   guestSignupLinks/{id}      { title, quantity (per person), open }
 //   guestSignupLinks/{id}/signups/{uid}
 //                              { name, email, note, status: 'pending' |
-//                              'approved' | 'rejected' | 'sent', orderId }
+//                              'approved' | 'rejected' | 'sent', orderId,
+//                              updatedAt (what the guest last wrote) };
+//                              deletedOrderId once its ticket was deleted
 
 const callables = {
   sendGuestInvitation: httpsCallable(functions, 'sendGuestInvitation'),
@@ -199,12 +201,23 @@ export async function fetchSignupLinks() {
   return snapshot.docs.map(toItem).sort(byCreatedAtDesc)
 }
 
-// Every link's sign-ups; `key` tells apart one guest's sign-ups on two links
-export async function fetchAllSignups() {
-  const snapshot = await getDocs(collectionGroup(db, 'signups'))
-  return snapshot.docs
-    .map((d) => ({ ...d.data(), key: d.ref.path, linkId: d.ref.parent.parent.id, uid: d.id }))
-    .sort(byCreatedAtDesc)
+const signupsRef = (linkId) => collection(db, 'guestSignupLinks', linkId, 'signups')
+
+// The sign-ups of these links, newest first; `key` tells apart one guest's
+// sign-ups on two links
+export async function fetchSignups(linkIds) {
+  const lists = await Promise.all(
+    linkIds.map(async (linkId) =>
+      (await getDocs(signupsRef(linkId))).docs.map((d) => ({ ...d.data(), key: d.ref.path, linkId, uid: d.id }))
+    )
+  )
+  return lists.flat().sort(byCreatedAtDesc)
+}
+
+// Whether a link still has sign-ups to review or send; reads one at most
+export async function hasWaitingSignups(linkId) {
+  const snapshot = await getDocs(query(signupsRef(linkId), where('status', 'in', ['pending', 'approved']), limit(1)))
+  return !snapshot.empty
 }
 
 // { requestId, title, quantity }; returns { id } of the link
@@ -213,18 +226,46 @@ export const createSignupLink = (input) => call('createGuestSignupLink', input)
 // closes a link to new sign-ups, or opens it again
 export const setSignupLinkOpen = (id, open) => updateDoc(signupLinkRef(id), { open })
 
-// Sets the review of sign-ups ({ linkId, uid }) to 'pending', 'approved' or
-// 'rejected'. All or none: one sent meanwhile fails the whole batch.
-export async function reviewSignups(signups, status, reviewerUid) {
-  for (let start = 0; start < signups.length; start += 500) {
+// Firestore takes at most 500 writes a batch, so a longer list goes in
+// batches one after another: each is all or none, but a failed one leaves
+// those before it written. Its error then carries `done`, the items written.
+async function writeInBatches(items, write) {
+  let done = 0
+  for (let start = 0; start < items.length; start += 500) {
+    const chunk = items.slice(start, start + 500)
     const batch = writeBatch(db)
-    for (const { linkId, uid } of signups.slice(start, start + 500)) {
-      batch.update(signupRef(linkId, uid), { status, reviewedAt: serverTimestamp(), reviewedByUid: reviewerUid })
+    chunk.forEach((item) => write(batch, item))
+    try {
+      await batch.commit()
+    } catch (error) {
+      throw Object.assign(error, { done })
     }
-    await batch.commit()
+    done += chunk.length
   }
 }
 
-// Sends an approved sign-up its ticket; returns { id } of the order. Sending
-// one already sent returns the same order.
-export const sendSignupTicket = ({ linkId, uid }) => call('sendGuestSignupTicket', { linkId, uid })
+// Sets the review of sign-ups ({ linkId, uid, updatedAt }) to 'pending',
+// 'approved' or 'rejected', each naming the updatedAt it was shown with: one
+// sent, or changed by its guest, since then fails its batch (writeInBatches).
+export function reviewSignups(signups, status, reviewerUid) {
+  return writeInBatches(signups, (batch, { linkId, uid, updatedAt }) =>
+    batch.update(signupRef(linkId, uid), {
+      status,
+      reviewedAt: serverTimestamp(),
+      reviewedByUid: reviewerUid,
+      reviewedUpdatedAt: updatedAt ?? null
+    })
+  )
+}
+
+// Deletes rejected sign-ups ({ linkId, uid }); see writeInBatches
+export function deleteSignups(signups) {
+  return writeInBatches(signups, (batch, { linkId, uid }) => batch.delete(signupRef(linkId, uid)))
+}
+
+// Sends an approved sign-up, as it was shown, its ticket; returns { id } of
+// the order. Sending one already sent returns the same order. Unless
+// `allowDuplicate`, an email that already has a 公關票 is refused with
+// already-exists and details { duplicate: true }.
+export const sendSignupTicket = ({ linkId, uid, updatedAt }, allowDuplicate = false) =>
+  call('sendGuestSignupTicket', { linkId, uid, updatedAt: updatedAt?.toMillis?.() ?? null, allowDuplicate })

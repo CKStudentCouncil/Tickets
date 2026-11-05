@@ -15,6 +15,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
   serverTimestamp,
   setDoc,
@@ -961,11 +962,15 @@ describe('公關票登記連結 (guestSignupLinks and their sign-ups)', () => {
   const LINK_ID = 'AbCdEfGhIjKlMnOpQrStUvWx'
   const linkDoc = (db) => doc(db, 'guestSignupLinks', LINK_ID)
   const signupDoc = (db, uid = guest.uid) => doc(db, 'guestSignupLinks', LINK_ID, 'signups', uid)
-  // what GuestAdminPage.vue writes for a review (reviewSignups)
-  const review = (status, who = staff.superAdmin) => ({ status, reviewedAt: serverTimestamp(), reviewedByUid: who.uid })
-  const seedSignup = (fields = {}) =>
-    env.withSecurityRulesDisabled((context) => setDoc(signupDoc(context.firestore()), {
-      linkId: LINK_ID, uid: guest.uid, name: '陳小華', email: guest.email, note: '', status: 'pending', createdAt: Timestamp.now(), ...fields
+  // when the guest last wrote it (submitGuestSignup)
+  const UPDATED_AT = Timestamp.fromMillis(1_793_000_000_123)
+  // what GuestAdminPage.vue writes for a review (reviewSignups): the
+  // updatedAt of the sign-up as its page showed it
+  const review = (status, who = staff.superAdmin, seen = UPDATED_AT) =>
+    ({ status, reviewedAt: serverTimestamp(), reviewedByUid: who.uid, reviewedUpdatedAt: seen })
+  const seedSignup = (fields = {}, uid = guest.uid) =>
+    env.withSecurityRulesDisabled((context) => setDoc(signupDoc(context.firestore(), uid), {
+      linkId: LINK_ID, uid, name: '陳小華', email: guest.email, note: '', status: 'pending', createdAt: Timestamp.now(), updatedAt: UPDATED_AT, ...fields
     }))
 
   beforeEach(() => env.withSecurityRulesDisabled((context) =>
@@ -1002,10 +1007,17 @@ describe('公關票登記連結 (guestSignupLinks and their sign-ups)', () => {
     await assertSucceeds(getDoc(signupDoc(as(staff.superAdmin), guest.uid)))
 
     await assertFails(getDocs(collection(as(guest), 'guestSignupLinks', LINK_ID, 'signups')))
+    await assertFails(getDocs(collection(as(staff.admin), 'guestSignupLinks', LINK_ID, 'signups')))
     await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'guestSignupLinks', LINK_ID, 'signups')))
-    await assertFails(getDocs(collectionGroup(as(guest), 'signups')))
-    await assertFails(getDocs(collectionGroup(as(staff.admin), 'signups')))
-    await assertSucceeds(getDocs(collectionGroup(as(staff.superAdmin), 'signups')))
+    // whether a closed link still has sign-ups waiting (hasWaitingSignups)
+    await assertSucceeds(getDocs(query(
+      collection(as(staff.superAdmin), 'guestSignupLinks', LINK_ID, 'signups'), where('status', 'in', ['pending', 'approved']), limit(1)
+    )))
+    // super admins list one link's at a time: no rule opens every "signups"
+    // collection in the database
+    for (const who of [guest, staff.admin, staff.superAdmin]) {
+      await assertFails(getDocs(collectionGroup(as(who), 'signups')))
+    }
   })
 
   test('only submitGuestSignup makes or changes a sign-up', async () => {
@@ -1031,7 +1043,7 @@ describe('公關票登記連結 (guestSignupLinks and their sign-ups)', () => {
     await assertFails(updateDoc(mine, review('sent')))
     await assertFails(updateDoc(mine, { ...review('approved'), orderId: 'PR20261026K7Q2MX' }))
     await assertFails(updateDoc(mine, { ...review('approved'), name: '改名' }))
-    await assertFails(updateDoc(mine, { status: 'approved', reviewedAt: Timestamp.fromMillis(0), reviewedByUid: staff.superAdmin.uid }))
+    await assertFails(updateDoc(mine, { ...review('approved'), reviewedAt: Timestamp.fromMillis(0) }))
     await assertFails(updateDoc(mine, review('approved', staff.admin)))
     await assertFails(updateDoc(signupDoc(as(staff.admin)), review('rejected', staff.admin)))
     await assertFails(deleteDoc(mine))
@@ -1039,6 +1051,32 @@ describe('公關票登記連結 (guestSignupLinks and their sign-ups)', () => {
     await seedSignup({ status: 'sent', orderId: 'PR20261026K7Q2MX' })
     await assertFails(updateDoc(mine, review('rejected')))
     await assertFails(updateDoc(mine, review('pending')))
+  })
+
+  test('a review is of the sign-up as the super admin saw it', async () => {
+    await seedSignup()
+    const mine = signupDoc(as(staff.superAdmin))
+    // the guest changed it after the page loaded
+    await assertFails(updateDoc(mine, review('approved', staff.superAdmin, Timestamp.fromMillis(UPDATED_AT.toMillis() - 60_000))))
+    // nor without saying which
+    await assertFails(updateDoc(mine, { status: 'approved', reviewedAt: serverTimestamp(), reviewedByUid: staff.superAdmin.uid }))
+    await assertSucceeds(updateDoc(mine, review('approved')))
+  })
+
+  test('super admins delete only rejected sign-ups', async () => {
+    const mine = signupDoc(as(staff.superAdmin))
+    for (const status of ['pending', 'approved']) {
+      await seedSignup({ status })
+      await assertFails(deleteDoc(mine))
+    }
+    await seedSignup({ status: 'sent', orderId: 'PR20261026K7Q2MX' })
+    await assertFails(deleteDoc(mine))
+
+    await seedSignup({ status: 'rejected' })
+    for (const who of [guest, staff.admin]) {
+      await assertFails(deleteDoc(signupDoc(as(who))))
+    }
+    await assertSucceeds(deleteDoc(mine))
   })
 })
 

@@ -81,6 +81,13 @@ export function archiveYearOf(order, fallbackYear) {
   return at ? getTaiwanYear(at) : fallbackYear
 }
 
+// Whether a deleted order went out with a purge rather than on its own: a
+// purge writes its archived copy in the same transaction as the delete.
+// For orders with a createdAt, whose archive year needs no fallback.
+export async function wasPurged(orderId, order) {
+  return (await archivedOrderRef(archiveYearOf(order, getTaiwanYear()), orderId).get()).exists
+}
+
 // The documents deleting one order writes: its archived copy, the order, its
 // release marker and the counters its release changes (written once per
 // transaction however many orders share them, see applyStockReleases).

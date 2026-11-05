@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import {
   GUEST_ORDER_PREFIX,
+  LINK_ID_PATTERN,
   guestOrderOf,
   newInviteId,
   remainingOf,
@@ -13,7 +14,7 @@ import {
   sanitizeLinkId,
   sanitizeSignupInput,
   sanitizeSignupLinkInput,
-  sanitizeSignupRef,
+  sanitizeSignupSend,
   ticketCountOf
 } from '../../lib/guests.js'
 import { includesGuests } from '../../lib/notifications.js'
@@ -72,7 +73,7 @@ test('an invite link takes a request id, a quantity and an optional note', () =>
 
 test('invite ids are random, link-safe and checked before any read', () => {
   const id = newInviteId()
-  assert.match(id, /^[A-Za-z0-9_-]{24}$/)
+  assert.match(id, LINK_ID_PATTERN)
   assert.notEqual(newInviteId(), id)
   assert.equal(sanitizeInviteId({ inviteId: id }), id)
   for (const inviteId of [undefined, '', 'short', '../orders/PR20261026K7Q2MX', `${id}x`]) {
@@ -112,9 +113,21 @@ test('a sign-up keeps the trimmed name and note; its link and uid are checked be
   assert.equal(sanitizeSignupInput({ linkId, name: '陳', note: 'x'.repeat(150) }).note.length, 100)
   assert.equal(code(() => sanitizeSignupInput({ linkId, name: ' ' })), 'invalid-argument')
 
-  assert.deepEqual(sanitizeSignupRef({ linkId, uid: 'guest-uid' }), { linkId, uid: 'guest-uid' })
+})
+
+test('a send names the sign-up and the version of it the super admin confirmed', () => {
+  const linkId = newInviteId()
+  const updatedAt = 1_793_000_000_123
+  assert.deepEqual(sanitizeSignupSend({ linkId, uid: 'guest-uid', updatedAt }), { linkId, uid: 'guest-uid', updatedAt, allowDuplicate: false })
+  // only exactly true sends to an email that already has a 公關票
+  assert.equal(sanitizeSignupSend({ linkId, uid: 'guest-uid', updatedAt, allowDuplicate: true }).allowDuplicate, true)
+  assert.equal(sanitizeSignupSend({ linkId, uid: 'guest-uid', updatedAt, allowDuplicate: 'yes' }).allowDuplicate, false)
+
   for (const uid of [undefined, '', 'a/b', '..', 'x'.repeat(129)]) {
-    assert.equal(code(() => sanitizeSignupRef({ linkId, uid })), 'not-found', String(uid))
+    assert.equal(code(() => sanitizeSignupSend({ linkId, uid, updatedAt })), 'not-found', String(uid))
+  }
+  for (const bad of [undefined, null, 0, -1, 1.5, '1793000000123x', Number.MAX_SAFE_INTEGER + 2]) {
+    assert.equal(code(() => sanitizeSignupSend({ linkId, uid: 'guest-uid', updatedAt: bad })), 'invalid-argument', String(bad))
   }
 })
 

@@ -6,6 +6,7 @@ import { db, HttpsError, assertRole, getRoleRank } from './common.js'
 import { MAX_GUEST_TICKETS, MAX_INVITE_NOTE, MAX_SIGNUP_NOTE, MAX_SIGNUP_TITLE, REGION, ROLE_RANK } from './constants.js'
 import { getBuyerAccount } from './orders.js'
 import { generateOrderId, isValidRequestId } from './orderValidation.js'
+import { wasPurged } from './orderPurge.js'
 import { getTaiwanDateKey } from './time.js'
 
 // 公關票: free tickets for guests. Super admins keep a list of officers
@@ -58,12 +59,19 @@ import { getTaiwanDateKey } from './time.js'
 //                                   { linkId, uid, name, email, note, status:
 //                                   'pending' | 'approved' | 'rejected' |
 //                                   'sent', createdAt, updatedAt } and, once
-//                                   sent, orderId, sentAt, sentByUid
+//                                   sent, orderId, sentAt, sentByUid.
+//                                   updatedAt changes only with what the
+//                                   guest wrote: a review (reviewedAt,
+//                                   reviewedByUid, reviewedUpdatedAt) and a
+//                                   send must name the updatedAt the super
+//                                   admin saw. A sign-up whose ticket was
+//                                   deleted goes back to pending with
+//                                   deletedOrderId and ticketDeletedAt
 //
 // Every document here is written only by these functions, except the
-// officers' name and quota, a sign-up link's `open` and a sign-up's review
-// (pending, approved or rejected), which super admins write
-// (firestore.rules).
+// officers' name and quota, a sign-up link's `open`, a sign-up's review
+// (pending, approved or rejected) and deleting a rejected sign-up, which
+// super admins do (firestore.rules).
 
 // 公關票 order ids start with this instead of a school code
 export const GUEST_ORDER_PREFIX = 'PR'
@@ -71,7 +79,9 @@ export const GUEST_ORDER_PREFIX = 'PR'
 export const GUEST_SCHOOL = '公關票'
 const GUEST_TICKET_ID = 'guest'
 const ORDER_ID_ATTEMPTS = 3
-const INVITE_ID_PATTERN = /^[A-Za-z0-9_-]{24}$/
+// The random id in an invite or sign-up link (newInviteId). Keep in sync
+// with LINK_ID_PATTERN in src/data/guests.js
+export const LINK_ID_PATTERN = /^[A-Za-z0-9_-]{24}$/
 const EMAIL_PATTERN = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/
 
 class OrderIdTaken extends Error {}
@@ -151,11 +161,15 @@ export function sanitizeInviteInput(data) {
   }
 }
 
-export function sanitizeInviteId(data) {
-  const inviteId = String(data?.inviteId ?? '')
-  if (!INVITE_ID_PATTERN.test(inviteId)) throw new HttpsError('not-found', '這個邀請連結無效或已失效')
-  return inviteId
+// An invite or sign-up link's id, checked before any read: anything else is
+// a link that does not exist
+function linkIdOf(value, message) {
+  const id = String(value ?? '')
+  if (!LINK_ID_PATTERN.test(id)) throw new HttpsError('not-found', message)
+  return id
 }
+
+export const sanitizeInviteId = (data) => linkIdOf(data?.inviteId, '這個邀請連結無效或已失效')
 
 export function sanitizeClaimInput(data) {
   return { inviteId: sanitizeInviteId(data), name: sanitizeName(data) }
@@ -170,23 +184,25 @@ export function sanitizeSignupLinkInput(data) {
   return { requestId, title, quantity }
 }
 
-export function sanitizeLinkId(data) {
-  const linkId = String(data?.linkId ?? '')
-  if (!INVITE_ID_PATTERN.test(linkId)) throw new HttpsError('not-found', '這個登記連結無效或已失效')
-  return linkId
-}
+export const sanitizeLinkId = (data) => linkIdOf(data?.linkId, '這個登記連結無效或已失效')
 
 // A guest's sign-up: { linkId, name, note }
 export function sanitizeSignupInput(data) {
   return { linkId: sanitizeLinkId(data), name: sanitizeName(data), note: cleanString(data?.note, MAX_SIGNUP_NOTE) }
 }
 
-// The sign-up a super admin sends: { linkId, uid }
-export function sanitizeSignupRef(data) {
+// The sign-up a super admin sends: { linkId, uid, updatedAt, allowDuplicate }.
+// `updatedAt` (milliseconds) is that of the sign-up their page showed, so one
+// changed since is not sent unseen; `allowDuplicate` as for sendOfficerTicket.
+export function sanitizeSignupSend(data) {
   const linkId = sanitizeLinkId(data)
   const uid = String(data?.uid ?? '')
   if (!UID_PATTERN.test(uid)) throw new HttpsError('not-found', '找不到這筆登記')
-  return { linkId, uid }
+  const updatedAt = Number(data?.updatedAt)
+  if (!Number.isSafeInteger(updatedAt) || updatedAt <= 0) {
+    throw new HttpsError('invalid-argument', '寄送請求無效，請重新整理後再試')
+  }
+  return { linkId, uid, updatedAt, allowDuplicate: data?.allowDuplicate === true }
 }
 
 // The order of a 公關票, shaped like a checkout's (orders.js) so every
@@ -263,6 +279,16 @@ async function withNewOrder(label, create) {
 
 const newTicketCode = () => randomBytes(9).toString('base64url')
 
+// Unless the caller already said yes: an email that already has a 公關票 is
+// refused with already-exists and details { duplicate: true }, so the page
+// can ask first. Read in the transaction, so a ticket made meanwhile counts.
+async function refuseDuplicate(tx, email) {
+  const earlier = await tx.get(
+    db.collection('orders').where('customerEmail', '==', email).where('complimentary', '==', true).limit(1)
+  )
+  if (!earlier.empty) throw new HttpsError('already-exists', '這個 Email 已經收過公關票', { duplicate: true })
+}
+
 // Super admins send a ticket by name and email, outside any quota. A
 // retried call with the same requestId returns the same order.
 export const sendGuestInvitation = functions
@@ -294,8 +320,8 @@ export const sendGuestInvitation = functions
   })
 
 // An officer sends a ticket by name and email from their quota. Unless
-// `allowDuplicate`, an email that already has a 公關票 is refused with
-// already-exists and details { duplicate: true }, so the page can ask first.
+// `allowDuplicate`, an email that already has a 公關票 is refused
+// (refuseDuplicate).
 export const sendOfficerTicket = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
@@ -309,15 +335,7 @@ export const sendOfficerTicket = functions
       if (earlier) return { id: earlier.orderId }
       if (!officerSnap.exists) throw new HttpsError('permission-denied', '你不在幹部名單中')
       assertQuota(officerSnap.data(), quantity)
-
-      if (!allowDuplicate) {
-        const earlier = await tx.get(
-          db.collection('orders').where('customerEmail', '==', guest.email).where('complimentary', '==', true).limit(1)
-        )
-        if (!earlier.empty) {
-          throw new HttpsError('already-exists', '這個 Email 已經收過公關票', { duplicate: true })
-        }
-      }
+      if (!allowDuplicate) await refuseDuplicate(tx, guest.email)
 
       tx.create(orderRef, guestOrderOf({
         guest,
@@ -545,11 +563,13 @@ export const submitGuestSignup = functions
 // and outside any quota: the order goes to the guest's name and account
 // email, they own it (已購門票), and the sign-up is marked sent. Sending one
 // already sent returns the same ticket, so a lost response is safe to retry.
+// It must be the sign-up the super admin confirmed (`updatedAt`), and an
+// email that already has a 公關票 waits for `allowDuplicate`.
 export const sendGuestSignupTicket = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
     await assertRole(context, 'super_admin')
-    const { linkId, uid } = sanitizeSignupRef(data)
+    const { linkId, uid, updatedAt, allowDuplicate } = sanitizeSignupSend(data)
     const ref = signupRef(linkId, uid)
 
     return withNewOrder('sendGuestSignupTicket', async (orderRef, tx) => {
@@ -559,6 +579,11 @@ export const sendGuestSignupTicket = functions
       if (status === 'sent') return { id: orderId }
       if (status !== 'approved') throw new HttpsError('failed-precondition', '只能寄給已核准的登記')
       if (!link.exists) throw new HttpsError('not-found', '這個登記連結無效或已失效')
+      // the guest changed it (while it was back in review) after the page loaded
+      if (signup.data().updatedAt?.toMillis?.() !== updatedAt) {
+        throw new HttpsError('failed-precondition', '登記資料已經變更，請重新整理後再確認')
+      }
+      if (!allowDuplicate) await refuseDuplicate(tx, email)
 
       tx.create(orderRef, guestOrderOf({
         guest: { name, email },
@@ -575,6 +600,38 @@ export const sendGuestSignupTicket = functions
         sentByUid: context.auth.uid
       })
       return { id: orderRef.id }
+    })
+  })
+
+// When an admin deletes a sign-up's ticket, the sign-up goes back to review
+// (pending, with deletedOrderId), to be approved and sent again or rejected:
+// a guest whose ticket was taken back is not sent another unasked. Tickets
+// that went out with a purge (清除所有訂單) leave their sign-ups as sent, so
+// a past party's sign-ups do not all come back for review.
+export const reopenGuestSignup = functions
+  .region(REGION)
+  .runWith({ failurePolicy: true }) // retried on failure; a repeat finds the sign-up no longer sent with this order
+  .firestore.document('orders/{orderId}')
+  .onDelete(async (snap, context) => {
+    const order = snap.data()
+    const { orderId } = context.params
+    if (order.complimentary !== true || typeof order.signupLinkId !== 'string' || typeof order.userId !== 'string') return
+    if (!LINK_ID_PATTERN.test(order.signupLinkId) || !UID_PATTERN.test(order.userId)) return
+    if (await wasPurged(orderId, order)) return
+
+    const ref = signupRef(order.signupLinkId, order.userId)
+    await db.runTransaction(async (tx) => {
+      const signup = await tx.get(ref)
+      // deleted meanwhile, already reopened, or sent again with another order
+      if (!signup.exists || signup.data().status !== 'sent' || signup.data().orderId !== orderId) return
+      tx.update(ref, {
+        status: 'pending',
+        orderId: FieldValue.delete(),
+        sentAt: FieldValue.delete(),
+        sentByUid: FieldValue.delete(),
+        deletedOrderId: orderId,
+        ticketDeletedAt: FieldValue.serverTimestamp()
+      })
     })
   })
 

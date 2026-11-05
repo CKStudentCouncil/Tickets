@@ -99,6 +99,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
+import { LINK_ID_PATTERN } from 'src/data/guests'
 import { claimOfficerInvite, fetchInvite } from 'src/services/guestService'
 
 const auth = useAuthStore()
@@ -125,7 +126,7 @@ async function load() {
   loadError.value = false
 
   try {
-    invite.value = /^[A-Za-z0-9_-]{24}$/.test(inviteId) ? await fetchInvite(inviteId) : null
+    invite.value = LINK_ID_PATTERN.test(inviteId) ? await fetchInvite(inviteId) : null
   } catch (error) {
     console.error('Load invite error:', error)
     loadError.value = true
