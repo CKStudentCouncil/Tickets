@@ -25,6 +25,8 @@ import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 //   sellerStats/summary             { total } registered by everyone
 //   sellerPickups/{id}              { sellerEmail, quantity } each pickup,
 //                                   recorded by admins
+//   sellerPayments/{id}             { sellerEmail, amount } each payment (NT$),
+//                                   recorded by admins
 //   settings/sellerProgram          { enabled, ticketTypeId, goal }
 
 const registerCallable = httpsCallable(functions, 'registerSellerTickets')
@@ -37,6 +39,10 @@ const summaryRef = () => doc(db, 'sellerStats', 'summary')
 const sellerRef = (email) => doc(db, 'sellers', email.trim().toLowerCase())
 const registrationRef = (id) => doc(db, 'sellerRegistrations', id)
 const pickupsRef = () => collection(db, 'sellerPickups')
+const paymentsRef = () => collection(db, 'sellerPayments')
+
+// NT$ one payment may record. Keep in sync with firestore.rules
+export const MAX_SELLER_PAYMENT = 1000000
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -88,6 +94,11 @@ export async function fetchMyRegistrations(uid) {
 // other sellers' pickups
 export async function fetchMyPickups(email) {
   const snapshot = await getDocs(query(pickupsRef(), where('sellerEmail', '==', email.trim().toLowerCase())))
+  return snapshot.docs.map(toRegistration).sort(byCreatedAtDesc)
+}
+
+export async function fetchMyPayments(email) {
+  const snapshot = await getDocs(query(paymentsRef(), where('sellerEmail', '==', email.trim().toLowerCase())))
   return snapshot.docs.map(toRegistration).sort(byCreatedAtDesc)
 }
 
@@ -161,8 +172,24 @@ export function deletePickup(id) {
   return deleteDoc(doc(db, 'sellerPickups', id))
 }
 
-// key: 'delivered' or 'paid'. Only that field is written, so two admins
-// recording pickup and payment at once do not undo each other.
+export async function fetchAllPayments() {
+  const snapshot = await getDocs(query(paymentsRef(), orderBy('createdAt', 'desc')))
+  return snapshot.docs.map(toRegistration)
+}
+
+// amount in NT$; returns the saved payment, with the local time until the next load
+export async function addPayment(sellerEmail, amount, createdByUid) {
+  const email = sellerEmail.trim().toLowerCase()
+  const ref = await addDoc(paymentsRef(), { sellerEmail: email, amount, createdAt: serverTimestamp(), createdByUid })
+  return { id: ref.id, sellerEmail: email, amount, createdAt: new Date(), createdByUid }
+}
+
+export function deletePayment(id) {
+  return deleteDoc(doc(db, 'sellerPayments', id))
+}
+
+// key: 'delivered' or 'paid', from before pickups and payments were
+// recorded one by one; no page writes them now. Only that field is written.
 export function setRegistrationFlag(id, key, value, updatedByUid) {
   return updateDoc(registrationRef(id), { [key]: value, updatedAt: serverTimestamp(), updatedByUid })
 }

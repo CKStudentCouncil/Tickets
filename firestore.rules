@@ -350,10 +350,11 @@ service cloud.firestore {
 
     // Created only by registerSellerTickets, which takes the tickets from
     // stock. Sellers read their own (lists must filter on sellerUid); admins
-    // record payment, may delete a mistaken one (releaseSellerStock gives
+    // may delete a mistaken one (releaseSellerStock gives
     // the tickets back) and change its quantity through
-    // updateSellerRegistrationQuantity. `delivered` is from before pickups
-    // were counted in sellerPickups.
+    // updateSellerRegistrationQuantity. `delivered` and `paid` are from
+    // before pickups and payments were counted in sellerPickups and
+    // sellerPayments.
     match /sellerRegistrations/{registrationId} {
       allow get, list: if isAdmin() || (signedIn() && resource.data.sellerUid == request.auth.uid);
       allow create: if false;
@@ -388,6 +389,28 @@ service cloud.firestore {
         && request.resource.data.quantity is int
         && request.resource.data.quantity >= 1
         && request.resource.data.quantity <= 200
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // Each payment a seller hands over (NT$), recorded by an admin; sellers
+    // may pay in parts, so the page adds them up. Same reading rules as the
+    // pickups. Keep the limit in sync with MAX_SELLER_PAYMENT.
+    match /sellerPayments/{paymentId} {
+      allow get, list: if isAdmin() || (
+        signedIn()
+        && request.auth.token.email_verified == true
+        && resource.data.sellerEmail == signedInEmail()
+      );
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['sellerEmail', 'amount', 'createdAt', 'createdByUid'])
+        && isShortString(request.resource.data.sellerEmail, 200)
+        && request.resource.data.sellerEmail == request.resource.data.sellerEmail.lower()
+        && request.resource.data.amount is int
+        && request.resource.data.amount >= 1
+        && request.resource.data.amount <= 1000000
         && request.resource.data.createdAt == request.time
         && request.resource.data.createdByUid == request.auth.uid;
       allow update: if false;

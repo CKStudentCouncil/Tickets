@@ -128,8 +128,8 @@
                   <th>Email</th>
                   <th>登記張數</th>
                   <th>已領票</th>
-                  <th>已交款</th>
                   <th>應交金額</th>
+                  <th>已交款</th>
                 </tr>
               </thead>
               <tbody>
@@ -139,8 +139,8 @@
                   <td class="mono">{{ row.email }}</td>
                   <td class="num">{{ row.quantity }}</td>
                   <td class="num">{{ row.pickedUp }}</td>
-                  <td class="num">{{ row.paid }}</td>
                   <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
+                  <td class="num">NT$ {{ row.paidAmount.toLocaleString() }}</td>
                 </tr>
               </tbody>
             </table>
@@ -154,7 +154,7 @@
         </div>
         <p class="panel-copy">
           每位學弟一列。學弟來拿票時在「這次領」填張數後按記錄，已領張數會自動累加；按「明細」可以看每筆登記與領票紀錄：
-          登記張數可以直接修改（多的從庫存扣、少的退回庫存），交款後勾選已交款；學弟不能退票，刪除登記只用於修正錯誤，票會全部退回庫存；領票記錯就刪掉那一筆再重記
+          學弟繳錢時在「這次繳」填金額後按記錄，可以分次繳；登記張數可以直接修改（多的從庫存扣、少的退回庫存）；學弟不能退票，刪除登記只用於修正錯誤，票會全部退回庫存；領票或繳費記錯就刪掉那一筆再重記
         </p>
 
         <input v-model="searchTerm" type="search" class="search" placeholder="搜尋姓名或 Email">
@@ -169,8 +169,11 @@
                 <th>登記張數</th>
                 <th>已領</th>
                 <th>待領</th>
-                <th>應交金額</th>
                 <th>這次領</th>
+                <th>應交金額</th>
+                <th>已交</th>
+                <th>未交</th>
+                <th>這次繳（NT$）</th>
                 <th>明細</th>
               </tr>
             </thead>
@@ -182,12 +185,14 @@
                     <span v-if="row.legacyDelivered && row.pickedUp === 0" class="legacy-tag" title="改版前在登記紀錄勾過「已拿票」的張數，請補記實際領票">
                       舊紀錄勾過已拿票 {{ row.legacyDelivered }} 張
                     </span>
+                    <span v-if="row.legacyPaid && row.payments.length === 0" class="legacy-tag" title="改版前在登記紀錄勾過「已交款」的金額，請補記實際繳費">
+                      舊紀錄勾過已交款 NT$ {{ row.legacyPaid.toLocaleString() }}
+                    </span>
                   </td>
                   <td class="mono">{{ row.email }}</td>
                   <td class="num">{{ row.quantity }}</td>
                   <td class="num">{{ row.pickedUp }}</td>
                   <td class="num" :class="{ over: row.quantity - row.pickedUp < 0 }">{{ row.quantity - row.pickedUp }}</td>
-                  <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
                   <td>
                     <form class="inline-form" @submit.prevent="recordPickup(row)">
                       <input
@@ -206,14 +211,35 @@
                       </button>
                     </form>
                   </td>
+                  <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
+                  <td class="num">NT$ {{ row.paidAmount.toLocaleString() }}</td>
+                  <td class="num" :class="{ over: row.amount - row.paidAmount < 0 }">NT$ {{ (row.amount - row.paidAmount).toLocaleString() }}</td>
+                  <td>
+                    <form class="inline-form" @submit.prevent="recordPayment(row)">
+                      <input
+                        v-model.number="paymentInputs[row.email]"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        :max="MAX_SELLER_PAYMENT"
+                        step="1"
+                        class="qty-input amount-input"
+                        :aria-label="`${row.name} 這次繳的金額`"
+                        :disabled="busyPayments.has(row.email)"
+                      >
+                      <button type="submit" class="btn btn-small" :disabled="busyPayments.has(row.email) || !paymentInputs[row.email]">
+                        記錄
+                      </button>
+                    </form>
+                  </td>
                   <td>
                     <button type="button" class="btn-outline btn-small" @click="toggleExpanded(row.email)">
-                      {{ expanded.has(row.email) ? '收起' : `登記 ${row.registrations.length}・領票 ${row.pickups.length}` }}
+                      {{ expanded.has(row.email) ? '收起' : `登記 ${row.registrations.length}・領票 ${row.pickups.length}・繳費 ${row.payments.length}` }}
                     </button>
                   </td>
                 </tr>
                 <tr v-if="expanded.has(row.email)" class="detail-row">
-                  <td colspan="8">
+                  <td colspan="11">
                     <div class="detail-grid">
                       <div>
                         <h3 class="detail-title">登記紀錄</h3>
@@ -224,7 +250,6 @@
                               <th>時間</th>
                               <th>張數</th>
                               <th>金額</th>
-                              <th>已交款</th>
                               <th>操作</th>
                             </tr>
                           </thead>
@@ -261,15 +286,6 @@
                               </td>
                               <td class="num">NT$ {{ amountOf(item).toLocaleString() }}</td>
                               <td>
-                                <input
-                                  type="checkbox"
-                                  :checked="item.paid"
-                                  :disabled="busyIds.has(item.id)"
-                                  :aria-label="`${item.sellerName} 已交款`"
-                                  @change="toggle(item, 'paid', $event.target)"
-                                >
-                              </td>
-                              <td>
                                 <button type="button" class="btn-outline danger btn-small" :disabled="busyIds.has(item.id)" @click="remove(item)">
                                   刪除
                                 </button>
@@ -291,6 +307,25 @@
                               class="btn-outline danger btn-small"
                               :disabled="busyPickups.has(pickup.id)"
                               @click="removePickup(row, pickup)"
+                            >
+                              刪除
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div>
+                        <h3 class="detail-title">繳費紀錄</h3>
+                        <p v-if="row.payments.length === 0" class="muted-note">還沒有繳費</p>
+                        <ul v-else class="pickup-list">
+                          <li v-for="payment in row.payments" :key="payment.id">
+                            <span class="num">{{ formatDateTime(payment.createdAt) }}</span>
+                            <strong class="num">NT$ {{ payment.amount.toLocaleString() }}</strong>
+                            <button
+                              type="button"
+                              class="btn-outline danger btn-small"
+                              :disabled="busyPayments.has(payment.id)"
+                              @click="removePayment(row, payment)"
                             >
                               刪除
                             </button>
@@ -363,10 +398,13 @@ import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import {
+  addPayment,
   addPickup,
   addSellers,
+  deletePayment,
   deletePickup,
   deleteRegistration,
+  fetchAllPayments,
   fetchAllPickups,
   fetchAllRegistrations,
   fetchSellerProgram,
@@ -374,7 +412,7 @@ import {
   fetchSellerTotal,
   removeSeller,
   saveSellerProgram,
-  setRegistrationFlag,
+  MAX_SELLER_PAYMENT,
   updateRegistrationQuantity
 } from 'src/services/sellerService'
 import { MAX_SELLER_TICKETS } from 'src/data/sellerGuide'
@@ -393,6 +431,7 @@ const total = ref(0)
 const registrations = ref([])
 const sellers = ref([])
 const pickups = ref([])
+const payments = ref([])
 const searchTerm = ref('')
 // 業績排行 starts folded
 const showLeaderboard = ref(false)
@@ -402,6 +441,10 @@ const busyIds = reactive(new Set())
 const busyPickups = reactive(new Set())
 // what the admin typed in 這次領, by seller email
 const pickupInputs = reactive({})
+// sellers (by email) and payments (by id) with a write in flight
+const busyPayments = reactive(new Set())
+// what the admin typed in 這次繳, by seller email
+const paymentInputs = reactive({})
 // sellers whose pickups are shown
 const expanded = reactive(new Set())
 // the registration whose quantity is being edited
@@ -422,11 +465,9 @@ const goalPercent = computed(() =>
   savedProgram.value.goal > 0 ? Math.min(100, (total.value / savedProgram.value.goal) * 100) : 0
 )
 const pickedUpCount = computed(() => pickups.value.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0))
-const paidAmount = computed(() =>
-  registrations.value.filter((item) => item.paid).reduce((sum, item) => sum + amountOf(item), 0)
-)
+const paidAmount = computed(() => payments.value.reduce((sum, item) => sum + (Number(item.amount) || 0), 0))
 const unpaidAmount = computed(() =>
-  registrations.value.filter((item) => !item.paid).reduce((sum, item) => sum + amountOf(item), 0)
+  Math.max(0, registrations.value.reduce((sum, item) => sum + amountOf(item), 0) - paidAmount.value)
 )
 
 const leaderboard = computed(() => {
@@ -440,7 +481,9 @@ const leaderboard = computed(() => {
     pickups: [],
     registrations: [],
     legacyDelivered: 0,
-    paid: 0,
+    legacyPaid: 0,
+    payments: [],
+    paidAmount: 0,
     amount: 0
   }).get(email)
 
@@ -451,7 +494,7 @@ const leaderboard = computed(() => {
     row.registrations.push(item)
     // ticked on the registration before pickups were counted
     if (item.delivered) row.legacyDelivered += item.quantity
-    if (item.paid) row.paid += item.quantity
+    if (item.paid) row.legacyPaid += amountOf(item)
     row.amount += amountOf(item)
   })
   // a seller whose registration was deleted still shows what they picked up
@@ -459,6 +502,11 @@ const leaderboard = computed(() => {
     const row = rowOf(pickup.sellerEmail)
     row.pickedUp += Number(pickup.quantity) || 0
     row.pickups.push(pickup)
+  })
+  payments.value.forEach((payment) => {
+    const row = rowOf(payment.sellerEmail)
+    row.paidAmount += Number(payment.amount) || 0
+    row.payments.push(payment)
   })
   return [...rows.values()].sort((a, b) => b.quantity - a.quantity)
 })
@@ -484,13 +532,14 @@ async function load() {
   loadError.value = false
 
   try {
-    const [types, program, totalCount, all, list, allPickups] = await Promise.all([
+    const [types, program, totalCount, all, list, allPickups, allPayments] = await Promise.all([
       fetchTicketTypes(),
       fetchSellerProgram(),
       fetchSellerTotal(),
       fetchAllRegistrations(),
       fetchSellers(),
-      fetchAllPickups()
+      fetchAllPickups(),
+      fetchAllPayments()
     ])
     ticketTypes.value = types
     savedProgram.value = program
@@ -499,6 +548,7 @@ async function load() {
     registrations.value = all
     sellers.value = list
     pickups.value = allPickups
+    payments.value = allPayments
     editingId.value = ''
   } catch (error) {
     console.error('Load seller admin error:', error)
@@ -530,22 +580,6 @@ async function saveProgram() {
     toast.show('儲存失敗，請稍後再試')
   } finally {
     savingProgram.value = false
-  }
-}
-
-async function toggle(item, key, checkbox) {
-  const value = checkbox.checked
-  busyIds.add(item.id)
-  try {
-    await setRegistrationFlag(item.id, key, value, auth.user.uid)
-    item[key] = value
-  } catch (error) {
-    console.error('Update seller registration error:', error)
-    // the box must show what is saved
-    checkbox.checked = item[key] === true
-    toast.show('更新失敗，請稍後再試')
-  } finally {
-    busyIds.delete(item.id)
   }
 }
 
@@ -628,6 +662,46 @@ async function recordPickup(row) {
     toast.show('記錄失敗，請稍後再試')
   } finally {
     busyPickups.delete(row.email)
+  }
+}
+
+async function recordPayment(row) {
+  const amount = Number(paymentInputs[row.email])
+  if (!Number.isInteger(amount) || amount < 1 || amount > MAX_SELLER_PAYMENT) {
+    toast.show(`金額必須是 1 到 ${MAX_SELLER_PAYMENT.toLocaleString()} 的整數`)
+    return
+  }
+  const remaining = row.amount - row.paidAmount
+  if (amount > remaining &&
+    !window.confirm(`${row.name} 只剩 NT$ ${Math.max(0, remaining).toLocaleString()} 未交，這次記 NT$ ${amount.toLocaleString()} 會超過應交金額，確定嗎？`)) return
+
+  busyPayments.add(row.email)
+  try {
+    const payment = await addPayment(row.email, amount, auth.user.uid)
+    payments.value = [payment, ...payments.value]
+    delete paymentInputs[row.email]
+    toast.show(`已記錄 ${row.name} 繳 NT$ ${amount.toLocaleString()}，共繳 NT$ ${(row.paidAmount + amount).toLocaleString()}`)
+  } catch (error) {
+    console.error('Record seller payment error:', error)
+    toast.show('記錄失敗，請稍後再試')
+  } finally {
+    busyPayments.delete(row.email)
+  }
+}
+
+async function removePayment(row, payment) {
+  if (!window.confirm(`確定要刪除 ${row.name} 在 ${formatDateTime(payment.createdAt)} 繳 NT$ ${payment.amount.toLocaleString()} 的紀錄嗎？`)) return
+
+  busyPayments.add(payment.id)
+  try {
+    await deletePayment(payment.id)
+    payments.value = payments.value.filter((p) => p.id !== payment.id)
+    toast.show('已刪除繳費紀錄')
+  } catch (error) {
+    console.error('Delete seller payment error:', error)
+    toast.show('刪除失敗，請稍後再試')
+  } finally {
+    busyPayments.delete(payment.id)
   }
 }
 
