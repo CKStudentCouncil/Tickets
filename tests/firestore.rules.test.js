@@ -840,6 +840,38 @@ describe('學弟登記賣票', () => {
     await assertSucceeds(deleteDoc(pickupDoc(staff.admin, 'p1')))
   })
 
+  test('admins record each payment, in NT$, and delete a mistaken one; sellers read only their own', async () => {
+    const payment = (who, fields = {}) => ({
+      sellerEmail: seller.email,
+      amount: 1600,
+      createdAt: serverTimestamp(),
+      createdByUid: who.uid,
+      ...fields
+    })
+    const paymentDoc = (who, id) => doc(as(who), 'sellerPayments', id)
+
+    for (const who of [seller, staff.manager]) {
+      await assertFails(setDoc(paymentDoc(who, 'm0'), payment(who)))
+    }
+    await assertSucceeds(setDoc(paymentDoc(staff.admin, 'm1'), payment(staff.admin)))
+    await assertSucceeds(setDoc(paymentDoc(staff.admin, 'm2'), payment(staff.admin, { sellerEmail: other.email, amount: 1000000 })))
+    for (const fields of [{ amount: 0 }, { amount: 1000001 }, { amount: 99.5 }, { amount: '800' }, { sellerEmail: 'Upper@example.com' }, { createdByUid: 'someone' }, { note: 'x' }]) {
+      await assertFails(setDoc(paymentDoc(staff.admin, 'bad'), payment(staff.admin, fields)))
+    }
+
+    await assertSucceeds(getDoc(paymentDoc(seller, 'm1')))
+    await assertFails(getDoc(paymentDoc(seller, 'm2')))
+    await assertFails(getDoc(doc(as(seller, false), 'sellerPayments', 'm1')))
+    await assertSucceeds(getDocs(query(collection(as(seller), 'sellerPayments'), where('sellerEmail', '==', seller.email))))
+    await assertFails(getDocs(collection(as(seller), 'sellerPayments')))
+    await assertFails(getDocs(collection(as(staff.manager), 'sellerPayments')))
+    await assertSucceeds(getDocs(collection(as(staff.admin), 'sellerPayments')))
+
+    await assertFails(updateDoc(paymentDoc(staff.admin, 'm1'), { amount: 800 }))
+    await assertFails(deleteDoc(paymentDoc(seller, 'm1')))
+    await assertSucceeds(deleteDoc(paymentDoc(staff.admin, 'm1')))
+  })
+
   test('the shared total is for sellers and admins; release markers for nobody', async () => {
     await assertSucceeds(getDoc(doc(as(seller), 'sellerStats', 'summary')))
     await assertSucceeds(getDoc(doc(as(staff.admin), 'sellerStats', 'summary')))
