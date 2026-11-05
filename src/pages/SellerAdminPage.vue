@@ -133,13 +133,16 @@
 
       <div class="panel">
         <div class="notify-header">
-          <h2>學弟領票</h2>
+          <h2>登記與領票</h2>
         </div>
         <p class="panel-copy">
-          學弟每次來拿票時，在「這次領」填張數後按記錄，已領張數會自動累加；記錯了就展開明細刪掉那一筆再重記
+          每位學弟一列。學弟來拿票時在「這次領」填張數後按記錄，已領張數會自動累加；按「明細」可以看每筆登記與領票紀錄：
+          登記張數可以直接修改（多的從庫存扣、少的退回庫存），交款後勾選已交款；學弟不能退票，刪除登記只用於修正錯誤，票會全部退回庫存；領票記錯就刪掉那一筆再重記
         </p>
 
-        <p v-if="leaderboard.length === 0" class="empty">還沒有人登記</p>
+        <input v-model="searchTerm" type="search" class="search" placeholder="搜尋姓名或 Email">
+
+        <p v-if="filteredRows.length === 0" class="empty">{{ leaderboard.length === 0 ? '還沒有人登記' : '沒有符合的學弟' }}</p>
         <div v-else class="table-wrap">
           <table>
             <thead>
@@ -149,12 +152,13 @@
                 <th>登記張數</th>
                 <th>已領</th>
                 <th>待領</th>
+                <th>應交金額</th>
                 <th>這次領</th>
                 <th>明細</th>
               </tr>
             </thead>
             <tbody>
-              <template v-for="row in leaderboard" :key="row.email">
+              <template v-for="row in filteredRows" :key="row.email">
                 <tr>
                   <td>
                     {{ row.name }}
@@ -166,6 +170,7 @@
                   <td class="num">{{ row.quantity }}</td>
                   <td class="num">{{ row.pickedUp }}</td>
                   <td class="num" :class="{ over: row.quantity - row.pickedUp < 0 }">{{ row.quantity - row.pickedUp }}</td>
+                  <td class="num">NT$ {{ row.amount.toLocaleString() }}</td>
                   <td>
                     <form class="inline-form" @submit.prevent="recordPickup(row)">
                       <input
@@ -185,113 +190,100 @@
                     </form>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      class="btn-outline btn-small"
-                      :disabled="row.pickups.length === 0"
-                      @click="toggleExpanded(row.email)"
-                    >
-                      {{ expanded.has(row.email) ? '收起' : `${row.pickups.length} 筆` }}
+                    <button type="button" class="btn-outline btn-small" @click="toggleExpanded(row.email)">
+                      {{ expanded.has(row.email) ? '收起' : `登記 ${row.registrations.length}・領票 ${row.pickups.length}` }}
                     </button>
                   </td>
                 </tr>
                 <tr v-if="expanded.has(row.email)" class="detail-row">
-                  <td colspan="7">
-                    <ul class="pickup-list">
-                      <li v-for="pickup in row.pickups" :key="pickup.id">
-                        <span class="num">{{ formatDateTime(pickup.createdAt) }}</span>
-                        <strong class="num">{{ pickup.quantity }} 張</strong>
-                        <button
-                          type="button"
-                          class="btn-outline danger btn-small"
-                          :disabled="busyPickups.has(pickup.id)"
-                          @click="removePickup(row, pickup)"
-                        >
-                          刪除
-                        </button>
-                      </li>
-                    </ul>
+                  <td colspan="8">
+                    <div class="detail-grid">
+                      <div>
+                        <h3 class="detail-title">登記紀錄</h3>
+                        <p v-if="row.registrations.length === 0" class="muted-note">沒有登記紀錄（已被刪除）</p>
+                        <table v-else class="detail-table">
+                          <thead>
+                            <tr>
+                              <th>時間</th>
+                              <th>張數</th>
+                              <th>金額</th>
+                              <th>已交款</th>
+                              <th>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="item in row.registrations" :key="item.id">
+                              <td class="num">{{ formatDateTime(item.createdAt) }}</td>
+                              <td class="num">
+                                <form v-if="editingId === item.id" class="inline-form" @submit.prevent="saveQuantity(item)">
+                                  <input
+                                    v-model.number="editQuantity"
+                                    type="number"
+                                    inputmode="numeric"
+                                    min="1"
+                                    :max="MAX_SELLER_TICKETS"
+                                    step="1"
+                                    class="qty-input"
+                                    :aria-label="`${item.sellerName} 的登記張數`"
+                                    :disabled="busyIds.has(item.id)"
+                                  >
+                                  <button type="submit" class="btn btn-small" :disabled="busyIds.has(item.id)">
+                                    {{ busyIds.has(item.id) ? '儲存中...' : '儲存' }}
+                                  </button>
+                                  <button type="button" class="btn-outline btn-small" :disabled="busyIds.has(item.id)" @click="editingId = ''">取消</button>
+                                </form>
+                                <span v-else class="qty-cell">
+                                  {{ item.quantity }}
+                                  <span
+                                    v-if="Number.isInteger(item.registeredQuantity) && item.registeredQuantity !== item.quantity"
+                                    class="muted-note"
+                                    :title="`學弟原本登記 ${item.registeredQuantity} 張`"
+                                  >（原 {{ item.registeredQuantity }}）</span>
+                                  <button type="button" class="btn-outline btn-small" :disabled="busyIds.has(item.id)" @click="startEdit(item)">修改</button>
+                                </span>
+                              </td>
+                              <td class="num">NT$ {{ amountOf(item).toLocaleString() }}</td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  :checked="item.paid"
+                                  :disabled="busyIds.has(item.id)"
+                                  :aria-label="`${item.sellerName} 已交款`"
+                                  @change="toggle(item, 'paid', $event.target)"
+                                >
+                              </td>
+                              <td>
+                                <button type="button" class="btn-outline danger btn-small" :disabled="busyIds.has(item.id)" @click="remove(item)">
+                                  刪除
+                                </button>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div>
+                        <h3 class="detail-title">領票紀錄</h3>
+                        <p v-if="row.pickups.length === 0" class="muted-note">還沒有領票</p>
+                        <ul v-else class="pickup-list">
+                          <li v-for="pickup in row.pickups" :key="pickup.id">
+                            <span class="num">{{ formatDateTime(pickup.createdAt) }}</span>
+                            <strong class="num">{{ pickup.quantity }} 張</strong>
+                            <button
+                              type="button"
+                              class="btn-outline danger btn-small"
+                              :disabled="busyPickups.has(pickup.id)"
+                              @click="removePickup(row, pickup)"
+                            >
+                              刪除
+                            </button>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               </template>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="notify-header">
-          <h2>登記紀錄</h2>
-        </div>
-        <p class="panel-copy">
-          學弟交款後在這裡勾選；張數可以直接修改，多的會從庫存扣、少的會退回庫存；學弟不能退票，刪除只用於修正登記錯誤，票會全部退回庫存
-        </p>
-
-        <input v-model="searchTerm" type="search" class="search" placeholder="搜尋姓名或 Email">
-
-        <p v-if="filteredRegistrations.length === 0" class="empty">沒有登記紀錄</p>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>時間</th>
-                <th>姓名</th>
-                <th>Email</th>
-                <th>張數</th>
-                <th>金額</th>
-                <th>已交款</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in filteredRegistrations" :key="item.id">
-                <td class="num">{{ formatDateTime(item.createdAt) }}</td>
-                <td>{{ item.sellerName }}</td>
-                <td class="mono">{{ item.sellerEmail }}</td>
-                <td class="num">
-                  <form v-if="editingId === item.id" class="inline-form" @submit.prevent="saveQuantity(item)">
-                    <input
-                      v-model.number="editQuantity"
-                      type="number"
-                      inputmode="numeric"
-                      min="1"
-                      :max="MAX_SELLER_TICKETS"
-                      step="1"
-                      class="qty-input"
-                      :aria-label="`${item.sellerName} 的登記張數`"
-                      :disabled="busyIds.has(item.id)"
-                    >
-                    <button type="submit" class="btn btn-small" :disabled="busyIds.has(item.id)">
-                      {{ busyIds.has(item.id) ? '儲存中...' : '儲存' }}
-                    </button>
-                    <button type="button" class="btn-outline btn-small" :disabled="busyIds.has(item.id)" @click="editingId = ''">取消</button>
-                  </form>
-                  <span v-else class="qty-cell">
-                    {{ item.quantity }}
-                    <span
-                      v-if="Number.isInteger(item.registeredQuantity) && item.registeredQuantity !== item.quantity"
-                      class="muted-note"
-                      :title="`學弟原本登記 ${item.registeredQuantity} 張`"
-                    >（原 {{ item.registeredQuantity }}）</span>
-                    <button type="button" class="btn-outline btn-small" :disabled="busyIds.has(item.id)" @click="startEdit(item)">修改</button>
-                  </span>
-                </td>
-                <td class="num">NT$ {{ amountOf(item).toLocaleString() }}</td>
-                <td>
-                  <input
-                    type="checkbox"
-                    :checked="item.paid"
-                    :disabled="busyIds.has(item.id)"
-                    :aria-label="`${item.sellerName} 已交款`"
-                    @change="toggle(item, 'paid', $event.target)"
-                  >
-                </td>
-                <td>
-                  <button type="button" class="btn-outline danger btn-small" :disabled="busyIds.has(item.id)" @click="remove(item)">
-                    刪除
-                  </button>
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -427,6 +419,7 @@ const leaderboard = computed(() => {
     quantity: 0,
     pickedUp: 0,
     pickups: [],
+    registrations: [],
     legacyDelivered: 0,
     paid: 0,
     amount: 0
@@ -436,6 +429,7 @@ const leaderboard = computed(() => {
   registrations.value.forEach((item) => {
     const row = rowOf(item.sellerEmail, item.sellerName)
     row.quantity += item.quantity
+    row.registrations.push(item)
     // ticked on the registration before pickups were counted
     if (item.delivered) row.legacyDelivered += item.quantity
     if (item.paid) row.paid += item.quantity
@@ -454,11 +448,15 @@ const quantityBySeller = computed(() => new Map(leaderboard.value.map((row) => [
 
 const sortedSellers = computed(() => [...sellers.value].sort((a, b) => a.email.localeCompare(b.email)))
 
-const filteredRegistrations = computed(() => {
+// a seller matches by the name on the list or on any registration
+const filteredRows = computed(() => {
   const q = searchTerm.value.trim().toLowerCase()
-  if (!q) return registrations.value
-  return registrations.value.filter(
-    (item) => item.sellerName?.toLowerCase().includes(q) || item.sellerEmail?.toLowerCase().includes(q)
+  if (!q) return leaderboard.value
+  return leaderboard.value.filter(
+    (row) =>
+      row.name.toLowerCase().includes(q) ||
+      row.email.toLowerCase().includes(q) ||
+      row.registrations.some((item) => item.sellerName?.toLowerCase().includes(q))
   )
 })
 
@@ -621,7 +619,6 @@ async function removePickup(row, pickup) {
   try {
     await deletePickup(pickup.id)
     pickups.value = pickups.value.filter((p) => p.id !== pickup.id)
-    if (row.pickups.length <= 1) expanded.delete(row.email)
     toast.show('已刪除領票紀錄')
   } catch (error) {
     console.error('Delete seller pickup error:', error)

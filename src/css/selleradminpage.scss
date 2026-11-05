@@ -194,3 +194,29 @@ td.over {
     gap: 16px;
   }
 }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 4px 0;
+
+  @media (max-width: 900px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.detail-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--lunar);
+}
+
+.detail-table {
+  th,
+  td {
+    padding: 6px 10px 6px 0;
+  }
+}
