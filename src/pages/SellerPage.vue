@@ -129,6 +129,10 @@
           <span class="card-index">04</span>
         </div>
         <h2 id="history-title">我的登記紀錄</h2>
+        <p v-if="registrations.length > 0 || pickups.length > 0" class="mine pickup-summary">
+          <strong class="num">{{ myPickedUp }}</strong> <span>已領票</span>
+          <strong class="num">{{ Math.max(0, myTotal - myPickedUp) }}</strong> <span>待領票</span>
+        </p>
         <p v-if="registrations.length === 0" class="muted">還沒有登記紀錄</p>
         <ul v-else class="history">
           <li v-for="item in registrations" :key="item.id">
@@ -139,11 +143,20 @@
               <p class="muted num">{{ formatDateTime(item.createdAt) }}</p>
             </div>
             <div class="badges">
-              <span class="badge" :class="{ on: item.delivered }">{{ item.delivered ? '已拿票' : '待拿票' }}</span>
               <span class="badge" :class="{ on: item.paid }">{{ item.paid ? '已交款' : '待交款' }}</span>
             </div>
           </li>
         </ul>
+
+        <template v-if="pickups.length > 0">
+          <h3>領票紀錄</h3>
+          <ul class="history">
+            <li v-for="pickup in pickups" :key="pickup.id">
+              <p class="history-main">領了 <span class="num">{{ pickup.quantity }}</span> 張</p>
+              <p class="muted num">{{ formatDateTime(pickup.createdAt) }}</p>
+            </li>
+          </ul>
+        </template>
       </section>
     </template>
   </div>
@@ -155,6 +168,7 @@ import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import {
+  fetchMyPickups,
   fetchMyRegistrations,
   fetchSellerEntry,
   fetchSellerProgram,
@@ -183,6 +197,7 @@ const program = ref({ enabled: false, ticketTypeId: '', goal: 0 })
 const ticketTypes = ref([])
 const total = ref(0)
 const registrations = ref([])
+const pickups = ref([])
 
 const sellerName = ref('')
 const quantity = ref(1)
@@ -191,6 +206,7 @@ const submitError = ref('')
 
 const ticketType = computed(() => ticketTypes.value.find((type) => type.id === program.value.ticketTypeId) || null)
 const myTotal = computed(() => registrations.value.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0))
+const myPickedUp = computed(() => pickups.value.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0))
 const goalPercent = computed(() =>
   program.value.goal > 0 ? Math.min(100, (total.value / program.value.goal) * 100) : 0
 )
@@ -207,17 +223,23 @@ async function load() {
   loadError.value = false
 
   try {
-    const [programData, types, totalCount, mine, entry] = await Promise.all([
+    const [programData, types, totalCount, mine, entry, myPickups] = await Promise.all([
       fetchSellerProgram(),
       fetchTicketTypes(),
       fetchSellerTotal(),
       fetchMyRegistrations(auth.user.uid),
-      fetchSellerEntry(auth.email)
+      fetchSellerEntry(auth.email),
+      // the pickups are extra: without them the page still works
+      fetchMyPickups(auth.email).catch((error) => {
+        console.error('Load seller pickups error:', error)
+        return []
+      })
     ])
     program.value = programData
     ticketTypes.value = types
     total.value = totalCount
     registrations.value = mine
+    pickups.value = myPickups
     // the registration whose response was lost did go through
     if (mine.some((item) => item.id === getPendingSellerRequest(auth.user.uid))) {
       setPendingSellerRequest(auth.user.uid, null)

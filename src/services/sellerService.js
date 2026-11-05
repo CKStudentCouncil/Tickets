@@ -1,4 +1,5 @@
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -22,9 +23,12 @@ import { RETRYABLE, byCreatedAtDesc } from 'src/services/orderService'
 //   sellers/{email}                 the list, kept by super admins
 //   sellerRegistrations/{id}        created by registerSellerTickets
 //   sellerStats/summary             { total } registered by everyone
+//   sellerPickups/{id}              { sellerEmail, quantity } each pickup,
+//                                   recorded by admins
 //   settings/sellerProgram          { enabled, ticketTypeId, goal }
 
 const registerCallable = httpsCallable(functions, 'registerSellerTickets')
+const updateQuantityCallable = httpsCallable(functions, 'updateSellerRegistrationQuantity')
 
 export const DEFAULT_SELLER_GOAL = 750
 
@@ -32,6 +36,7 @@ const programRef = () => doc(db, 'settings', 'sellerProgram')
 const summaryRef = () => doc(db, 'sellerStats', 'summary')
 const sellerRef = (email) => doc(db, 'sellers', email.trim().toLowerCase())
 const registrationRef = (id) => doc(db, 'sellerRegistrations', id)
+const pickupsRef = () => collection(db, 'sellerPickups')
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -76,6 +81,13 @@ export async function fetchSellerEntry(email) {
 // other sellers' registrations
 export async function fetchMyRegistrations(uid) {
   const snapshot = await getDocs(query(collection(db, 'sellerRegistrations'), where('sellerUid', '==', uid)))
+  return snapshot.docs.map(toRegistration).sort(byCreatedAtDesc)
+}
+
+// Must filter on sellerEmail: the rules reject queries that could return
+// other sellers' pickups
+export async function fetchMyPickups(email) {
+  const snapshot = await getDocs(query(pickupsRef(), where('sellerEmail', '==', email.trim().toLowerCase())))
   return snapshot.docs.map(toRegistration).sort(byCreatedAtDesc)
 }
 
@@ -124,6 +136,29 @@ export async function fetchSellers() {
 export async function fetchAllRegistrations() {
   const snapshot = await getDocs(query(collection(db, 'sellerRegistrations'), orderBy('createdAt', 'desc')))
   return snapshot.docs.map(toRegistration)
+}
+
+// Takes more tickets from the stock or gives some back, at once. Not
+// retried: a lost response shows up as the new quantity on the next load.
+export async function updateRegistrationQuantity(id, quantity, expectedQuantity) {
+  const { data } = await updateQuantityCallable({ registrationId: id, quantity, expectedQuantity })
+  return data
+}
+
+export async function fetchAllPickups() {
+  const snapshot = await getDocs(query(pickupsRef(), orderBy('createdAt', 'desc')))
+  return snapshot.docs.map(toRegistration)
+}
+
+// Returns the saved pickup, with the local time until the next load
+export async function addPickup(sellerEmail, quantity, createdByUid) {
+  const email = sellerEmail.trim().toLowerCase()
+  const ref = await addDoc(pickupsRef(), { sellerEmail: email, quantity, createdAt: serverTimestamp(), createdByUid })
+  return { id: ref.id, sellerEmail: email, quantity, createdAt: new Date(), createdByUid }
+}
+
+export function deletePickup(id) {
+  return deleteDoc(doc(db, 'sellerPickups', id))
 }
 
 // key: 'delivered' or 'paid'. Only that field is written, so two admins

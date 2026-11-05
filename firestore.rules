@@ -350,8 +350,10 @@ service cloud.firestore {
 
     // Created only by registerSellerTickets, which takes the tickets from
     // stock. Sellers read their own (lists must filter on sellerUid); admins
-    // record ticket pickup and payment, and may delete a mistaken one
-    // (releaseSellerStock gives the tickets back).
+    // record payment, may delete a mistaken one (releaseSellerStock gives
+    // the tickets back) and change its quantity through
+    // updateSellerRegistrationQuantity. `delivered` is from before pickups
+    // were counted in sellerPickups.
     match /sellerRegistrations/{registrationId} {
       allow get, list: if isAdmin() || (signedIn() && resource.data.sellerUid == request.auth.uid);
       allow create: if false;
@@ -367,6 +369,29 @@ service cloud.firestore {
     // Tickets registered by everyone, for the goal progress
     match /sellerStats/summary {
       allow get: if isAdmin() || isSeller();
+    }
+
+    // Each time a seller picks up tickets, recorded by an admin; how many
+    // varies, so the page adds them up. Sellers read their own (lists must
+    // filter on sellerEmail). A mistaken one is deleted, never edited.
+    // Keep the limit in sync with MAX_SELLER_TICKETS.
+    match /sellerPickups/{pickupId} {
+      allow get, list: if isAdmin() || (
+        signedIn()
+        && request.auth.token.email_verified == true
+        && resource.data.sellerEmail == signedInEmail()
+      );
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['sellerEmail', 'quantity', 'createdAt', 'createdByUid'])
+        && isShortString(request.resource.data.sellerEmail, 200)
+        && request.resource.data.sellerEmail == request.resource.data.sellerEmail.lower()
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 1
+        && request.resource.data.quantity <= 200
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // =========================
