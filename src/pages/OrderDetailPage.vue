@@ -160,8 +160,18 @@
           <p v-else-if="qrCheck === 'mismatch'" class="qr-check danger">
             ⚠ QR 驗證碼不符，可能是偽造的 QR Code。請核對購票人姓名與證件後再處理
           </p>
+          <template v-else-if="studentCard">
+            <p v-if="studentCard.match" class="qr-check ok">✓ 學生證學號 {{ studentCard.id }} 與訂單 Email 相符</p>
+            <p v-else class="qr-check danger" role="alert">
+              ⚠ 學生證學號 {{ studentCard.id }} 不是這筆訂單的帳號（{{ order.customerEmail || '沒有 Email' }}），請勿以學生證領票
+            </p>
+            <label v-if="studentCard.match" class="identity-confirm student-card-confirm">
+              <input v-model="studentCardChecked" type="checkbox">
+              <span>已核對學生證照片與本人相符{{ needsIdCheck ? '，背面有本學期註冊章' : '' }}</span>
+            </label>
+          </template>
           <p v-else-if="qrCheck === 'none'" class="qr-check warn">
-            請掃描購票人的票券 QR Code 後領票。管理員可核對身分並填寫原因後手動處理
+            請掃描購票人的票券 QR Code 或學生證後領票。管理員可核對身分並填寫原因後手動處理
           </p>
 
           <div v-if="idCheck" class="identity-check" :class="{ student: needsIdCheck }" role="status">
@@ -169,7 +179,7 @@
             <p v-if="idCheck.campus">建中學生票：請查驗建中學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
             <p v-else-if="idCheck.student">請查驗學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
             <p v-else>社會人士：不需查驗學生證</p>
-            <label v-if="needsIdCheck" class="identity-confirm">
+            <label v-if="needsIdCheck && !studentCard?.match" class="identity-confirm">
               <input v-model="identityChecked" type="checkbox">
               <span>已查驗身分</span>
             </label>
@@ -410,6 +420,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
 import { guestSourceText } from 'src/data/guests'
 import { fetchCancelledOrder, fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
+import { cleanStudentId, studentAccountEmail } from 'src/data/schools'
 import { CANCEL_EMAIL_LABELS, CANCEL_REASONS, REFUND_STATUS_LABELS } from 'src/data/cancellations'
 import { cancelBlockOf, noticeCountsOf } from 'src/utils/cancellations'
 import CancelOrderDialog from 'src/components/CancelOrderDialog.vue'
@@ -588,6 +599,16 @@ const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.i
 // ticketCode so a QR generated from a guessed order id is flagged (PARTY-19)
 const scannedCode = computed(() => String(route.query.c || ''))
 
+// 學號 read off the buyer's 建中 student card on /admin/scan (?sid=...): the
+// card stands in for the QR code once staff compared its photo with the person
+const studentCard = computed(() => {
+  const id = cleanStudentId(route.query.sid)
+  if (!isAdminView.value || !id || !order.value || qrCheck.value === 'ok') return null
+  return { id, match: String(order.value.customerEmail || '').toLowerCase() === studentAccountEmail(id) }
+})
+const studentCardChecked = ref(false)
+const studentCardReady = computed(() => !!studentCard.value?.match && studentCardChecked.value)
+
 const qrCheck = computed(() => {
   if (!isAdminView.value || !order.value?.ticketCode) return null
   if (!scannedCode.value) return 'none'
@@ -608,10 +629,11 @@ function onCancelled({ refundAmount }) {
   loadOrder()
 }
 
+// the student card check covers 已查驗身分 too: it is the same card
 const canCollect = computed(
   () =>
-    (qrCheck.value === 'ok' || (auth.isAdmin && !!overrideReason.value.trim())) &&
-    (!needsIdCheck.value || identityChecked.value)
+    (qrCheck.value === 'ok' || studentCardReady.value || (auth.isAdmin && !!overrideReason.value.trim())) &&
+    (!needsIdCheck.value || identityChecked.value || studentCardReady.value)
 )
 
 async function loadOrder() {
@@ -619,7 +641,10 @@ async function loadOrder() {
   const id = orderId.value
   loading.value = true
   loadError.value = false
-  if (order.value?.id !== id) identityChecked.value = false
+  if (order.value?.id !== id) {
+    identityChecked.value = false
+    studentCardChecked.value = false
+  }
 
   try {
     // staff can read any order, a buyer only their own (firestore.rules);
@@ -668,13 +693,15 @@ async function setDelivered(delivered) {
     const patch = await updateOrderDelivery(id, delivered, {
       ticketCode: scannedCode.value,
       expectedDelivered: order.value.delivered,
-      overrideReason: auth.isAdmin ? overrideReason.value.trim() : ''
+      overrideReason: auth.isAdmin ? overrideReason.value.trim() : '',
+      ...(delivered && studentCardReady.value ? { studentId: studentCard.value.id, studentCardChecked: true } : {})
     })
     if (orderId.value !== id) return
     order.value = { ...order.value, ...patch }
     overrideReason.value = ''
     // a later collection of the same order needs a new check
     identityChecked.value = false
+    studentCardChecked.value = false
     toast.show(delivered ? '已標記為已領票' : '已標記為未領票')
   } catch (error) {
     console.error(error)

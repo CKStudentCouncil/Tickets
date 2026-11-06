@@ -1420,6 +1420,11 @@ describe('scanLinks (手機掃描、電腦處理)', () => {
       phone: phone(phoneUser),
       scan: scan(phoneUser, { id: 'scan-2', orderId: 'CKS20261027ABCDEF', ticketCode: '' })
     }))
+    // found by scanning the buyer's student card
+    await assertSucceeds(updateDoc(linkDoc(phoneUser), {
+      phone: phone(phoneUser),
+      scan: scan(phoneUser, { id: 'scan-3', ticketCode: '', studentId: '1130524' })
+    }))
     await assertFails(updateDoc(doc(as(buyer), 'scanLinks', LINK_ID), { phone: phone(buyer), scan: scan(buyer) }))
     await assertFails(updateDoc(doc(anon(), 'scanLinks', LINK_ID), { phone: phone({ uid: 'anon' }) }))
   })
@@ -1457,6 +1462,10 @@ describe('scanLinks (手機掃描、電腦處理)', () => {
       scan(phoneUser, { id: '' }),
       scan(phoneUser, { id: 'x'.repeat(65) }),
       scan(phoneUser, { extra: 1 }),
+      scan(phoneUser, { studentId: '12345' }),
+      scan(phoneUser, { studentId: '123456789' }),
+      scan(phoneUser, { studentId: 'ck1130524' }),
+      scan(phoneUser, { studentId: 1130524 }),
       ...['id', 'orderId', 'ticketCode', 'at', 'byUid'].map(incomplete)
     ]) {
       await assertFails(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), scan: value }))

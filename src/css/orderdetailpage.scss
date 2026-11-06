@@ -299,6 +299,17 @@
 
 /* ---------- buyer identity (學生 / 社會人士, staff only) ---------- */
 
+/* found by scanning the buyer's student card: staff tick after comparing
+   the card's photo with the person */
+.student-card-confirm {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(119, 191, 139, .45);
+  background: rgba(119, 191, 139, .08);
+  font-size: 14px;
+}
+
+
 .identity-check {
   margin: 12px 0 0;
   padding: 12px 14px;

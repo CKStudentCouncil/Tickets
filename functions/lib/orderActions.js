@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { db, HttpsError } from './common.js'
 import { REGION, ROLE_RANK } from './constants.js'
 import { ORDER_ID_PATTERN } from './orderValidation.js'
+import { cleanStudentId, studentAccountEmail } from './studentCards.js'
 
 function actionInput(data, field, expectedField) {
   if (typeof data?.orderId !== 'string' || !ORDER_ID_PATTERN.test(data.orderId)) {
@@ -89,8 +90,14 @@ function verifyDelivery({ data, input, order, rank }) {
   if (typeof data.ticketCode === 'string' && typeof order.ticketCode === 'string' && order.ticketCode && data.ticketCode === order.ticketCode) {
     return { codeVerification: 'verified' }
   }
+  // 掃描學生證: the 學號 on the card is this order's school account, and the
+  // staff member compared the card's photo with the person collecting
+  const studentId = cleanStudentId(data.studentId)
+  if (studentId && data.studentCardChecked === true && order.customerEmail === studentAccountEmail(studentId)) {
+    return { codeVerification: 'student_card', studentId }
+  }
   if (rank < ROLE_RANK.admin) {
-    throw new HttpsError('permission-denied', '請掃描有效的票券 QR Code；驗證不符需由管理員核對身分')
+    throw new HttpsError('permission-denied', '請掃描有效的票券 QR Code 或購票人的學生證；驗證不符需由管理員核對身分')
   }
   return { codeVerification: 'admin_override', overrideReason: requireOverrideReason(data) }
 }

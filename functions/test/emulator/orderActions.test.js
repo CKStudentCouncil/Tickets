@@ -3,11 +3,13 @@ import assert from 'node:assert/strict'
 
 import { PROJECT_ID, db, fft, isEmulator } from './setup.js'
 import { updateOrderDelivery, updateOrderPayment } from '../../lib/orderActions.js'
+import { findStudentOrders } from '../../lib/studentCards.js'
 
 assert.ok(isEmulator, 'these tests clear the database: emulator only')
 
 const deliver = fft.wrap(updateOrderDelivery)
 const pay = fft.wrap(updateOrderPayment)
+const findByCard = fft.wrap(findStudentOrders)
 const ORDER_ID = 'CKS20261105ABC234'
 const TICKET_CODE = 'valid-code-12'
 const ref = () => db.doc(`orders/${ORDER_ID}`)
@@ -22,7 +24,10 @@ beforeEach(async () => {
   batch.set(db.doc('users/manager1'), { role: 'manager', name: 'Door One' })
   batch.set(db.doc('users/manager2'), { role: 'manager', name: 'Door Two' })
   batch.set(db.doc('users/admin'), { role: 'admin', name: 'Administrator' })
-  batch.set(ref(), { userId: 'buyer', delivered: false, paid: false, ticketCode: TICKET_CODE, finalTotal: 700 })
+  batch.set(ref(), {
+    userId: 'buyer', delivered: false, paid: false, ticketCode: TICKET_CODE, finalTotal: 700,
+    customerEmail: 'ck1130524@gl.ck.tp.edu.tw', customerName: '王小明', items: [{ name: '一階票', quantity: 1 }]
+  })
   await batch.commit()
 })
 
@@ -76,6 +81,34 @@ describe('atomic delivery', () => {
     await deliver({ orderId: ORDER_ID, delivered: false, expectedDelivered: true, overrideReason: 'Accidental collection corrected' }, as('admin'))
     assert.equal((await ref().get()).data().delivered, false)
     assert.equal((await ref().collection('history').get()).size, 2)
+  })
+})
+
+describe('掃描學生證', () => {
+  test('managers find the orders of ck{學號}@gl.ck.tp.edu.tw, nothing more', async () => {
+    await db.doc('orders/CKS20261105ABC235').set({ customerEmail: 'ck1130525@gl.ck.tp.edu.tw', delivered: false })
+    const found = await findByCard({ studentId: '1130524' }, as('manager1'))
+    assert.equal(found.email, 'ck1130524@gl.ck.tp.edu.tw')
+    assert.deepEqual(found.orders.map((order) => order.id), [ORDER_ID])
+    assert.equal(found.orders[0].customerName, '王小明')
+    assert.equal(found.orders[0].ticketCode, undefined)
+    assert.deepEqual((await findByCard({ studentId: '7654321' }, as('manager1'))).orders, [])
+    await assert.rejects(findByCard({ studentId: '1130524' }, as('buyer')), { code: 'permission-denied' })
+    await assert.rejects(findByCard({ studentId: '1130524' }, {}), { code: 'unauthenticated' })
+    await assert.rejects(findByCard({ studentId: 'ck1130524' }, as('manager1')), { code: 'invalid-argument' })
+  })
+
+  test('a matching, checked student card stands in for the QR code', async () => {
+    const card = (extra) => collect({ ticketCode: '', studentId: '1130524', studentCardChecked: true, ...extra })
+    for (const extra of [{ studentCardChecked: false }, { studentCardChecked: 'yes' }, { studentId: '1130525' }, { studentId: '113052' }]) {
+      await assert.rejects(deliver(card(extra), as('manager1')), { code: 'permission-denied' }, JSON.stringify(extra))
+    }
+    assert.equal((await ref().collection('history').get()).size, 0)
+    await deliver(card(), as('manager1'))
+    const event = (await ref().collection('history').get()).docs[0].data()
+    assert.equal(event.codeVerification, 'student_card')
+    assert.equal(event.studentId, '1130524')
+    assert.equal((await ref().get()).data().delivered, true)
   })
 })
 

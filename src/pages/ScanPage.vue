@@ -34,6 +34,21 @@
         <button type="button" class="secondary-button" @click="disconnect">中斷連線</button>
       </div>
 
+      <div class="mode-switch" role="tablist" aria-label="掃描方式">
+        <button type="button" role="tab" :aria-selected="mode === 'qr'" :class="{ active: mode === 'qr' }" @click="setMode('qr')">
+          票券 QR Code
+        </button>
+        <button type="button" role="tab" :aria-selected="mode === 'card'" :class="{ active: mode === 'card' }" @click="setMode('card')">
+          建中學生證
+        </button>
+      </div>
+
+      <template v-if="mode === 'card'">
+        <StudentCardScanner :device-id="savedCamera()" @open="openFromCard" />
+        <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
+      </template>
+
+      <template v-else>
       <div class="scanner-card">
         <div class="scanner-card-head">
           <span>掃描視窗</span>
@@ -84,8 +99,9 @@
           <button type="submit" class="secondary-button">{{ remoteLink ? '傳送到電腦' : '開啟訂單' }}</button>
         </div>
         <p v-if="manualError" class="manual-error" role="alert">{{ manualError }}</p>
-        <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。</p>
+        <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。購票人忘了帶 QR Code 時，可改掃建中學生證。</p>
       </form>
+      </template>
 
       <section v-if="!remoteLink" class="desk-entry">
         <h2>手機只掃描，在電腦上領票</h2>
@@ -104,10 +120,11 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleQuestionMark } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
+import StudentCardScanner from 'src/components/StudentCardScanner.vue'
 import { SITE_URL } from 'src/config/app'
 import { isScanLinkClosed, useScanRemote } from 'src/composables/useScanRemote'
 import { useAuthStore } from 'src/stores/auth'
@@ -150,6 +167,7 @@ const GUIDE_STEPS = [
     lines: [
       '按訂單頁的「掃描下一張」或返回，就會回到掃描畫面。',
       '無法掃描時，可在下方輸入訂單編號手動開啟，但需由管理員核對身分後才能領票。',
+      '建中學生沒帶 QR Code 時，切到上方的「建中學生證」掃學生證，會找出該生學校帳號的訂單；核對證件照片與本人後即可領票。',
       '想在電腦上核票：電腦開啟「電腦接收掃描」，手機用本頁掃描電腦上的配對 QR Code；之後手機只負責掃描，訂單會在電腦上開啟',
       '之後可隨時按標題旁的「?」再看一次教學。'
     ]
@@ -188,6 +206,8 @@ function saveCamera(deviceId) {
 const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 
 const video = ref(null)
+// qr: ticket QR codes | card: 建中 student cards (StudentCardScanner, its own camera)
+const mode = ref('qr')
 // guide (first visit, camera waits) | starting | scanning | paused (page hidden) | error
 const state = ref('starting')
 const guideOpen = ref(false)
@@ -306,6 +326,30 @@ async function pair(linkId) {
   }
 }
 
+function setMode(next) {
+  if (mode.value === next) return
+  mode.value = next
+  notice.value = ''
+  if (next === 'card') {
+    // one camera at a time: the card scanner opens its own
+    stop()
+    state.value = 'paused-card'
+  } else {
+    // the video element is back once the QR view renders
+    nextTick(() => start(currentCamera || savedCamera()))
+  }
+}
+
+// a buyer's order found from their student card
+function openFromCard({ orderId, studentId }) {
+  if (remoteLink.value) {
+    sendToDesk({ orderId, ticketCode: '', studentId })
+    return
+  }
+  stop()
+  router.push({ name: 'admin-order-detail', params: { id: orderId }, query: { sid: studentId } })
+}
+
 async function sendToDesk(ticket) {
   const sequence = ++sendSequence
   const linkId = remoteLink.value
@@ -409,7 +453,7 @@ function openManual() {
 // Phones stop the camera in the background; restart it on return
 function onVisibilityChange() {
   if (document.hidden) {
-    if (state.value === 'starting' || state.value === 'scanning') {
+    if (mode.value === 'qr' && (state.value === 'starting' || state.value === 'scanning')) {
       stop()
       state.value = 'paused'
     }
@@ -563,6 +607,30 @@ onBeforeUnmount(() => {
   color: var(--lunar);
   font-size: 14px;
   line-height: 1.7;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+}
+
+.mode-switch button {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--lunar);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.mode-switch button.active {
+  background: var(--ember);
+  color: #111;
 }
 
 .scanner-card {

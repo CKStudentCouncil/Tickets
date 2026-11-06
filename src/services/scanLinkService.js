@@ -5,7 +5,8 @@ import { db } from 'src/boot/firebase'
 // receiving scans at the check-in desk (src/stores/scanDesk.js):
 //   ownerUid, ownerName, createdAt  written once, by the computer
 //   phone: { uid, name, at }        the phone that last paired or scanned
-//   scan: { id, orderId, ticketCode, at, byUid }  the last ticket it read
+//   scan: { id, orderId, ticketCode, studentId?, at, byUid }  the last ticket
+//     it read; studentId when found by scanning the buyer's student card
 // Staff read a link by its id; after it is made only the phone fields
 // change, for SCAN_LINK_HOURS (src/utils/scanLink.js).
 const linksRef = () => collection(db, 'scanLinks')
@@ -40,7 +41,7 @@ export function joinScanLink(linkId, phone) {
   return updateDoc(linkRef(linkId), { phone: phoneField(phone) })
 }
 
-export function sendScan(linkId, phone, { orderId, ticketCode = '' }) {
+export function sendScan(linkId, phone, { orderId, ticketCode = '', studentId = '' }) {
   return updateDoc(linkRef(linkId), {
     phone: phoneField(phone),
     scan: {
@@ -48,6 +49,7 @@ export function sendScan(linkId, phone, { orderId, ticketCode = '' }) {
       id: doc(linksRef()).id,
       orderId,
       ticketCode,
+      ...(studentId ? { studentId } : {}),
       at: serverTimestamp(),
       byUid: phone.uid
     }

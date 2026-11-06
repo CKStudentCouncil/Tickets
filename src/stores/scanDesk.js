@@ -69,7 +69,7 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     const target = {
       name: 'admin-order-detail',
       params: { id: entry.orderId },
-      query: entry.ticketCode ? { c: entry.ticketCode } : {}
+      query: entry.ticketCode ? { c: entry.ticketCode } : entry.studentId ? { sid: entry.studentId } : {}
     }
     // one order replaces another, so 返回 leads back to this page
     if (router.currentRoute.value.name === 'admin-order-detail') router.replace(target)
@@ -81,6 +81,7 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
       id: scan.id,
       orderId: scan.orderId,
       ticketCode: scan.ticketCode || '',
+      studentId: scan.studentId || '',
       at: scan.at?.toDate?.() || new Date(),
       byName: phone?.name || ''
     }

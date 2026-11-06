@@ -3,7 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, MAX_SIGNUP_TITLE, MAX_SIGNUP_NOTE, STREET_SCHOOL, guestRelationText } from '../../lib/constants.js'
+import { SITE_URL, SHOP_OPEN_AT, SCHOOL_CODES, CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOL_ACCOUNT_DOMAIN, STUDENT_ACCOUNT_PREFIX, STUDENT_ID_PATTERN, ELIGIBLE_IDENTITIES, BUYER_TYPES, MAX_SELLER_TICKETS, MAX_GUEST_TICKETS, MAX_OFFICER_QUOTA, MAX_INVITE_NOTE, MAX_SIGNUP_TITLE, MAX_SIGNUP_NOTE, STREET_SCHOOL, guestRelationText } from '../../lib/constants.js'
 import { MAX_TICKETS_PER_ORDER } from '../../lib/orderValidation.js'
 import { LINK_ID_PATTERN, newInviteId, sanitizeQuantity } from '../../lib/guests.js'
 import { parseTaipeiDateTime } from '../../lib/time.js'
@@ -58,6 +58,19 @@ test('school lists match src/data/schools.js', async () => {
   assert.deepEqual(schools.CAMPUS_SCHOOLS, [...CAMPUS_SCHOOLS])
   assert.equal(schools.HOME_SCHOOL, HOME_SCHOOL)
   assert.equal(schools.SCHOOL_ACCOUNT_DOMAIN, SCHOOL_ACCOUNT_DOMAIN)
+})
+
+test('student card IDs and their school accounts match src/data/schools.js', async () => {
+  const schools = await import(srcFile('data/schools.js'))
+  const cards = await import('../../lib/studentCards.js')
+  assert.equal(schools.STUDENT_ACCOUNT_PREFIX, STUDENT_ACCOUNT_PREFIX)
+  assert.equal(String(schools.STUDENT_ID_PATTERN), String(STUDENT_ID_PATTERN))
+  const [min, max] = schools.STUDENT_ID_LENGTH
+  assert.ok(STUDENT_ID_PATTERN.test('1'.repeat(min)) && !STUDENT_ID_PATTERN.test('1'.repeat(min - 1)))
+  assert.ok(STUDENT_ID_PATTERN.test('1'.repeat(max)) && !STUDENT_ID_PATTERN.test('1'.repeat(max + 1)))
+  for (const id of ['1130524', ' 113 0524 ', '１１３０５２４', '12345', '123456789', 'B1234567', '', null]) {
+    assert.equal(schools.studentAccountEmail(id), typeof id === 'string' ? cards.studentAccountEmail(id) : '', String(id))
+  }
 })
 
 test('isEduAccount matches src/data/schools.js', async () => {

@@ -664,13 +664,15 @@ service cloud.firestore {
     function isValidScanLinkScan(scan) {
       return scan is map
         && scan.keys().hasAll(['id', 'orderId', 'ticketCode', 'at', 'byUid'])
-        && scan.keys().hasOnly(['id', 'orderId', 'ticketCode', 'at', 'byUid'])
+        && scan.keys().hasOnly(['id', 'orderId', 'ticketCode', 'studentId', 'at', 'byUid'])
         && isShortString(scan.id, 64)
         && scan.id.size() > 0
         // ORDER_ID_PATTERN in src/utils/ticketQr.js
         && scan.orderId is string
         && scan.orderId.matches('[A-Z]{1,4}[0-9]{8}([0-9]{4}|[A-HJ-NP-Z2-9]{6})')
         && isShortString(scan.ticketCode, 200)
+        // 學號 read off the buyer's student card (STUDENT_ID_PATTERN)
+        && (!('studentId' in scan) || (scan.studentId is string && scan.studentId.matches('[0-9]{6,8}')))
         && scan.at == request.time
         && scan.byUid == request.auth.uid;
     }
