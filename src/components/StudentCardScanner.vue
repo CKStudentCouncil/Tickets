@@ -5,86 +5,118 @@
         <span>學生證掃描</span>
         <span class="scanner-status" :class="{ busy: engine !== 'ready' }"><i />{{ engineLabel }}</span>
       </div>
-      <div class="viewfinder card-view">
+
+      <div class="viewfinder">
         <video ref="video" muted playsinline autoplay aria-label="相機畫面" />
-        <div v-if="cameraState === 'on'" class="card-frame" :class="{ seen: cardSeen }" aria-hidden="true" />
-        <p v-if="cameraState === 'starting'" class="overlay">正在開啟相機…</p>
-        <div v-else-if="cameraState === 'off'" class="overlay">
-          <p v-if="cameraError">{{ cameraError }}</p>
-          <p v-else-if="result">已讀到學號 <strong class="mono">{{ result.studentId }}</strong></p>
-          <p v-else>已停止掃描</p>
-          <button type="button" class="primary-button" @click="startCamera()">{{ result ? '掃描下一張學生證' : '重新開始掃描' }}</button>
+        <div v-if="phase === 'scanning'" class="card-frame" :class="{ seen: cardSeen }" aria-hidden="true" />
+        <p v-if="phase === 'scanning'" class="live-hint" role="status" aria-live="polite">{{ hint }}</p>
+
+        <div v-if="phase === 'starting'" class="overlay">
+          <p>正在開啟相機…</p>
+        </div>
+
+        <div v-else-if="phase === 'looking'" class="overlay">
+          <p class="overlay-label">學號</p>
+          <p class="big-id">{{ studentId }}</p>
+          <p><span class="spinner" aria-hidden="true" />查詢訂單中…</p>
+        </div>
+
+        <div v-else-if="phase === 'opening'" class="overlay ok">
+          <p class="overlay-label">✓ 找到訂單</p>
+          <p class="big-name">{{ opening?.customerName || studentId }}</p>
+          <p>{{ paired ? '已傳送到電腦' : '開啟訂單中…' }}</p>
+          <button v-if="paired" type="button" class="primary-button" @click="startCamera()">掃描下一張學生證</button>
+        </div>
+
+        <div v-else-if="phase === 'choose'" class="overlay choose" role="dialog" aria-label="選擇訂單">
+          <p class="overlay-label">學號 {{ result.studentId }} 有 {{ result.orders.length }} 筆訂單，請選擇</p>
+          <div class="order-list">
+            <button v-for="order in result.orders" :key="order.id" type="button" class="order-row" @click="open(order)">
+              <span class="order-main">
+                <strong>{{ order.customerName || '（未填姓名）' }}</strong>
+                <span class="order-state" :class="{ done: order.delivered }">
+                  {{ order.delivered ? '已領票' : '未領票' }}{{ order.paid ? '' : '・未付款' }}
+                </span>
+              </span>
+              <span class="order-items">{{ itemsText(order) }}</span>
+              <span class="order-id">{{ order.id }}</span>
+            </button>
+          </div>
+          <button type="button" class="secondary-button" @click="startCamera()">取消，重新掃描</button>
+        </div>
+
+        <div v-else-if="phase === 'none'" class="overlay danger" role="alert">
+          <p class="overlay-label">✕ 找不到訂單</p>
+          <p class="big-id">{{ result.studentId }}</p>
+          <p class="overlay-note">{{ result.email }} 沒有任何訂單。請核對學生證上的學號，或請對方出示票券 QR Code。</p>
+          <p v-if="otherReads.length" class="overlay-note">
+            是不是讀錯了？
+            <button v-for="text in otherReads" :key="text" type="button" class="chip" @click="lookup(text)">{{ text }}</button>
+          </p>
+          <div class="overlay-actions">
+            <button type="button" class="primary-button" @click="startCamera()">重新掃描</button>
+            <button type="button" class="secondary-button" @click="editId">手動改學號</button>
+          </div>
+        </div>
+
+        <div v-else-if="phase === 'error'" class="overlay danger" role="alert">
+          <p class="overlay-label">✕ 查詢失敗</p>
+          <p class="overlay-note">{{ errorText }}</p>
+          <div class="overlay-actions">
+            <button v-if="studentId" type="button" class="primary-button" @click="lookup(studentId)">再查一次</button>
+            <button type="button" class="secondary-button" @click="startCamera()">重新掃描</button>
+          </div>
+        </div>
+
+        <div v-else-if="phase === 'stopped'" class="overlay">
+          <p>{{ cameraError || '相機已暫停' }}</p>
+          <button type="button" class="primary-button" @click="startCamera()">開啟相機</button>
         </div>
       </div>
+
       <p class="scanner-caption">
-        <span>02</span> 學生證橫放在框內，拿穩即可；手指壓到卡片邊角也沒關係，別蓋住學號
+        <span>02</span> 學生證橫放在框內拿穩，讀到學號會自動查訂單；手指壓到卡片邊角沒關係，別蓋住學號
       </p>
     </div>
 
-    <p class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
-
-    <div class="card-actions">
-      <label class="secondary-button photo-button">
-        拍照辨識
-        <input type="file" accept="image/*" capture="environment" @change="readPhoto">
-      </label>
-    </div>
-
-    <section v-if="result" class="results" aria-live="polite">
-      <h2>{{ result.email }}</h2>
-      <p v-if="!result.orders.length" class="manual-help">這個帳號沒有訂單。請確認學號，或改掃票券 QR Code。</p>
-      <button
-        v-for="order in result.orders"
-        :key="order.id"
-        type="button"
-        class="order-row"
-        @click="emit('open', { orderId: order.id, studentId: result.studentId })"
-      >
-        <span class="order-main">
-          <strong>{{ order.customerName || '（未填姓名）' }}</strong>
-          <span class="mono">{{ order.id }}</span>
-        </span>
-        <span class="order-items">{{ itemsText(order) }}</span>
-        <span class="order-state" :class="{ done: order.delivered }">
-          {{ order.delivered ? '已領票' : '未領票' }}{{ order.paid ? '' : '・未付款' }}
-        </span>
-      </button>
-    </section>
-
     <form class="manual" @submit.prevent="lookup(studentId)">
-      <label for="student-id">學號（辨識結果，可修改）</label>
+      <label for="student-id">讀不到時，輸入學號</label>
       <div class="manual-row">
         <input
           id="student-id"
+          ref="idInput"
           v-model="studentId"
           inputmode="numeric"
           autocomplete="off"
           spellcheck="false"
           placeholder="例如 1130524"
-          :aria-invalid="!!lookupError"
+          :aria-invalid="!!formError"
+          @input="formError = ''"
         >
-        <button type="submit" class="secondary-button" :disabled="looking">查詢訂單</button>
+        <button type="submit" class="secondary-button" :disabled="phase === 'looking'">查詢訂單</button>
+        <label class="secondary-button photo-button">
+          拍照
+          <input type="file" accept="image/*" capture="environment" @change="readPhoto">
+        </label>
       </div>
-      <p v-if="otherReads.length" class="manual-help">
-        其他可能：
-        <button v-for="text in otherReads" :key="text" type="button" class="chip" @click="lookup(text)">{{ text }}</button>
-      </p>
-      <p v-if="lookupError" class="manual-error" role="alert">{{ lookupError }}</p>
+      <p v-if="formError" class="manual-error" role="alert">{{ formError }}</p>
       <p class="manual-help">會查 Email 為 ck{學號}@gl.ck.tp.edu.tw 的訂單。學生證可以影印或翻拍，領票前務必核對證件照片與本人。</p>
     </form>
-
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { findStudentOrders } from 'src/services/orderService'
 import { cleanStudentId, STUDENT_ID_LENGTH } from 'src/data/schools'
 import { cameraErrorMessage } from 'src/utils/qrScanner'
 import { createStudentIdReader } from 'src/utils/studentIdOcr'
 
 const props = defineProps({
-  deviceId: { type: String, default: '' }
+  deviceId: { type: String, default: '' },
+  // paired with a computer: an order found is sent there, and this page
+  // stays for the next card
+  paired: { type: Boolean, default: false }
 })
 const emit = defineEmits(['open'])
 
@@ -94,19 +126,20 @@ const FRAME_GAP_MS = 150
 const SURE_CONFIDENCE = 92
 
 const video = ref(null)
-// starting | on | off
-const cameraState = ref('starting')
+const idInput = ref(null)
+// starting | scanning | looking | opening | choose | none | error | stopped
+const phase = ref('starting')
 const cameraError = ref('')
 // loading | ready | failed
 const engine = ref('loading')
 const cardSeen = ref(false)
-const notice = ref('')
-const noticeTone = ref('info')
+const hint = ref('')
 const studentId = ref('')
 const otherReads = ref([])
-const looking = ref(false)
-const lookupError = ref('')
+const formError = ref('')
+const errorText = ref('')
 const result = ref(null)
+const opening = ref(null)
 
 const engineLabel = computed(() => ({ loading: '載入辨識引擎…', ready: '辨識引擎就緒', failed: '辨識引擎載入失敗' })[engine.value])
 
@@ -116,20 +149,18 @@ let sequence = 0
 let lastRead = ''
 let unmounted = false
 
-function say(text, tone = 'info') {
-  notice.value = text
-  noticeTone.value = tone
-}
-
 function itemsText(order) {
   return order.items.map((item) => `${item.name} × ${item.quantity}`).join('、')
 }
 
 async function startCamera(deviceId = props.deviceId) {
   stopCamera()
-  const run = ++sequence
-  cameraState.value = 'starting'
+  const run = sequence
+  phase.value = 'starting'
   cameraError.value = ''
+  result.value = null
+  opening.value = null
+  otherReads.value = []
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw Object.assign(new Error('getUserMedia unavailable'), { name: 'NotSupportedError' })
@@ -149,26 +180,25 @@ async function startCamera(deviceId = props.deviceId) {
     stream = media
     video.value.srcObject = media
     await video.value.play().catch(() => {})
-    cameraState.value = 'on'
+    phase.value = 'scanning'
     lastRead = ''
-    result.value = null
-    say(engine.value === 'ready' ? '把學生證放進框內' : '第一次使用要下載辨識引擎（約 15 MB），請稍候…')
+    hint.value = engine.value === 'ready' ? '把學生證放進框內' : '第一次使用要下載辨識引擎（約 15 MB），請稍候…'
     loop(run)
   } catch (error) {
     if (run !== sequence) return
     console.error('Camera failed to start', error)
     cameraError.value = cameraErrorMessage(error)
-    cameraState.value = 'off'
+    phase.value = 'stopped'
   }
 }
 
+// stops the camera and any reading in progress (the loop sees `sequence`)
 function stopCamera() {
   sequence++
   stream?.getTracks().forEach((track) => track.stop())
   stream = null
   if (video.value) video.value.srcObject = null
   cardSeen.value = false
-  if (cameraState.value !== 'starting') cameraState.value = 'off'
 }
 
 // a still copy of the frame: the video moves on while it is being read
@@ -192,36 +222,34 @@ async function loop(run) {
       const frame = snapshot()
       if (frame) {
         const read = await reader.recognize(frame, { quick: true })
-        if (run !== sequence || unmounted) break
+        if (run !== sequence || unmounted) return
         cardSeen.value = read.cardFound
         if (read.id) {
           const sure = read.confidence >= SURE_CONFIDENCE && read.votes >= 2
           if (sure || read.id === lastRead) {
             accept(read.id, read.candidates)
-            break
+            return
           }
-          say(`讀到 ${read.id}，再確認一次…`)
+          hint.value = `讀到 ${read.id}，確認中…`
         } else {
-          say(read.cardFound ? '找到學生證，正在讀學號…' : '把學生證放進框內')
+          hint.value = read.cardFound ? '找到學生證，讀取學號中…' : '把學生證放進框內'
         }
         lastRead = read.id || ''
       }
       await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
     }
   } catch (error) {
+    if (run !== sequence) return
     console.error('Student card OCR failed', error)
     engine.value = 'failed'
-    say('辨識引擎無法載入，請檢查網路，或直接輸入學號', 'danger')
+    hint.value = '辨識引擎無法載入，請檢查網路，或在下方輸入學號'
   }
 }
 
 function accept(id, candidates = []) {
   navigator.vibrate?.(60)
-  stopCamera()
-  studentId.value = id
   otherReads.value = candidates.map((c) => c.text).filter((text) => text !== id).slice(0, 3)
-  say(`讀到學號 ${id}`, 'ok')
-  lookup(id)
+  lookup(id, { keepReads: true })
 }
 
 async function readPhoto(event) {
@@ -229,40 +257,80 @@ async function readPhoto(event) {
   event.target.value = ''
   if (!file) return
   stopCamera()
-  say('辨識照片中…')
+  phase.value = 'looking'
+  studentId.value = '辨識中…'
   try {
     const read = await reader.recognize(file)
     engine.value = 'ready'
-    if (read.id) accept(read.id, read.candidates)
-    else say('讀不到學號；請重拍（學號不要被手指或反光擋住），或直接輸入', 'danger')
+    if (read.id) {
+      accept(read.id, read.candidates)
+      return
+    }
+    studentId.value = ''
+    errorText.value = '照片裡讀不到學號。請重拍（學號不要被手指或反光擋住），或直接輸入學號。'
   } catch (error) {
     console.error('Student card OCR failed', error)
     engine.value = 'failed'
-    say('辨識失敗，請直接輸入學號', 'danger')
+    studentId.value = ''
+    errorText.value = '辨識引擎無法載入，請檢查網路，或直接輸入學號。'
+  }
+  phase.value = 'error'
+}
+
+function lookupErrorText(error) {
+  const code = String(error?.code || '').replace('functions/', '')
+  if (code === 'permission-denied') return '這個帳號沒有查詢權限，請用工作人員帳號登入。'
+  if (code === 'unauthenticated') return '請先登入工作人員帳號。'
+  if (code === 'unavailable' || !navigator.onLine) return '網路連線不穩，請稍後再試。'
+  // the callable missing on the server answers 404 without CORS headers
+  if (code === 'not-found' || code === 'internal') return `伺服器沒有學生證查詢功能（${code}），可能還沒部署。請先改掃票券 QR Code。`
+  return `伺服器沒有回應（${code || 'unknown'}）。請稍後再試，或改掃票券 QR Code。`
+}
+
+async function lookup(value, { keepReads = false } = {}) {
+  const id = cleanStudentId(value)
+  if (!id) {
+    formError.value = '學號是 6 到 8 位數字'
+    return
+  }
+  stopCamera()
+  formError.value = ''
+  if (!keepReads) otherReads.value = otherReads.value.filter((text) => text !== id)
+  studentId.value = id
+  result.value = null
+  phase.value = 'looking'
+  const run = sequence
+  try {
+    const found = await findStudentOrders(id)
+    if (run !== sequence || unmounted) return
+    result.value = found
+    if (found.orders.length === 1) open(found.orders[0])
+    else phase.value = found.orders.length ? 'choose' : 'none'
+  } catch (error) {
+    if (run !== sequence || unmounted) return
+    console.error('Student order lookup failed', error)
+    errorText.value = lookupErrorText(error)
+    phase.value = 'error'
   }
 }
 
-async function lookup(value) {
-  const id = cleanStudentId(value)
-  lookupError.value = ''
-  if (!id) {
-    lookupError.value = '學號格式不正確'
-    return
-  }
-  studentId.value = id
-  looking.value = true
-  try {
-    result.value = await findStudentOrders(id)
-  } catch (error) {
-    console.error('Student order lookup failed', error)
-    lookupError.value = error.message || '查詢失敗，請稍後再試'
-  } finally {
-    looking.value = false
-  }
+function open(order) {
+  opening.value = order
+  phase.value = 'opening'
+  emit('open', { orderId: order.id, studentId: result.value.studentId })
+}
+
+async function editId() {
+  await nextTick()
+  idInput.value?.focus()
+  idInput.value?.select()
 }
 
 function onVisibilityChange() {
-  if (document.hidden && cameraState.value === 'on') stopCamera()
+  if (document.hidden && (phase.value === 'scanning' || phase.value === 'starting')) {
+    stopCamera()
+    phase.value = 'stopped'
+  }
 }
 
 onMounted(() => {
@@ -398,26 +466,9 @@ onBeforeUnmount(() => {
   font-family: monospace;
 }
 
-.scan-notice {
-  min-height: 1.6em;
-  margin: 12px 0 0;
-  color: var(--danger);
-  font-size: 14px;
-}
 
-.scan-notice.ok {
-  color: #77bf8b;
-}
 
-.scan-notice.info {
-  color: var(--lunar);
-}
 
-.card-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 6px;
-}
 
 .photo-button {
   display: inline-flex;
@@ -466,7 +517,7 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, .02);
 }
 
-.manual label {
+.manual > label {
   display: block;
   margin-bottom: 10px;
   color: var(--off-white);
@@ -522,18 +573,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.results {
-  margin-top: 16px;
-}
 
-.results h2 {
-  margin: 0 0 10px;
-  color: var(--off-white);
-  font-family: monospace;
-  font-size: 13px;
-  font-weight: 600;
-  word-break: break-all;
-}
 
 .order-row {
   display: grid;
@@ -561,11 +601,6 @@ onBeforeUnmount(() => {
   font-size: 15px;
 }
 
-.order-main .mono {
-  color: var(--lunar);
-  font-family: monospace;
-  font-size: 12px;
-}
 
 .order-items {
   color: var(--lunar);
@@ -580,6 +615,109 @@ onBeforeUnmount(() => {
 
 .order-state.done {
   color: var(--lunar);
+}
+
+.live-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  padding: 6px 14px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(5, 6, 8, .78);
+  color: var(--off-white);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay.ok {
+  background: rgba(16, 40, 24, .92);
+}
+
+.overlay.danger {
+  background: rgba(48, 14, 14, .93);
+}
+
+.overlay.choose {
+  justify-content: flex-start;
+  overflow-y: auto;
+}
+
+.overlay-label {
+  color: var(--off-white);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.overlay.ok .overlay-label {
+  color: #8fd6a3;
+}
+
+.overlay.danger .overlay-label {
+  color: #f0a3a3;
+}
+
+.big-id {
+  color: var(--off-white);
+  font-family: monospace;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.big-name {
+  color: var(--off-white);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.overlay-note {
+  max-width: 340px;
+  font-size: 13px;
+}
+
+.overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid rgba(242, 240, 233, .25);
+  border-top-color: var(--ember);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.order-list {
+  width: 100%;
+}
+
+.order-list .order-row {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+}
+
+.order-id {
+  color: var(--lunar);
+  font-family: monospace;
+  font-size: 11.5px;
 }
 
 @media (max-width: 420px) {

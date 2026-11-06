@@ -44,7 +44,7 @@
       </div>
 
       <template v-if="mode === 'card'">
-        <StudentCardScanner :device-id="savedCamera()" @open="openFromCard" />
+        <StudentCardScanner :device-id="savedCamera()" :paired="!!remoteLink" @open="openFromCard" />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
       </template>
 
@@ -184,12 +184,22 @@ const SLOW_SEND_MS = 5000
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen'
 // The camera picked with 切換鏡頭, reused on this device's next visits
 const CAMERA_KEY = 'cksc.scanCamera'
+// QR codes or student cards: 掃描下一張 comes back to the one last used
+const MODE_KEY = 'cksc.scanMode'
 
 function savedCamera() {
   try {
     return localStorage.getItem(CAMERA_KEY) || ''
   } catch {
     return ''
+  }
+}
+
+function savedMode() {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'card' ? 'card' : 'qr'
+  } catch {
+    return 'qr'
   }
 }
 
@@ -207,7 +217,7 @@ const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 
 const video = ref(null)
 // qr: ticket QR codes | card: 建中 student cards (StudentCardScanner, its own camera)
-const mode = ref('qr')
+const mode = ref(savedMode())
 // guide (first visit, camera waits) | starting | scanning | paused (page hidden) | error
 const state = ref('starting')
 const guideOpen = ref(false)
@@ -330,6 +340,11 @@ function setMode(next) {
   if (mode.value === next) return
   mode.value = next
   notice.value = ''
+  try {
+    localStorage.setItem(MODE_KEY, next)
+  } catch {
+    // ignore
+  }
   if (next === 'card') {
     // one camera at a time: the card scanner opens its own
     stop()
@@ -475,7 +490,10 @@ onMounted(() => {
     remote.restore()
   }
 
-  if (isGuideSeen(GUIDE_SEEN_KEY)) {
+  if (mode.value === 'card') {
+    // the student card scanner opens its own camera
+    state.value = 'paused-card'
+  } else if (isGuideSeen(GUIDE_SEEN_KEY)) {
     start()
   } else {
     state.value = 'guide'
