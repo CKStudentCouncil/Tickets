@@ -7,7 +7,7 @@
           <span class="live-badge" :class="{ off: !connected }"><i />{{ connected ? '接收中' : '未連線' }}</span>
         </div>
         <h1>電腦接收掃描</h1>
-        <p class="lead">使用系統內建相機掃描本頁QR Code，手機作為條碼掃描器；掃到的票券會在這台電腦上開啟，在這裡核對並領票</p>
+        <p class="lead">手機負責掃描，這台電腦負責核對與領票：手機掃到的票券 QR Code 或建中學生證，會在這台電腦上自動開啟訂單</p>
       </header>
 
       <div class="desk-grid">
@@ -37,7 +37,8 @@
           <ol class="steps">
             <li>手機登入後台，開啟「掃描票券」</li>
             <li>用掃描畫面對準這個 QR Code（用手機的相機 App 掃也可以）</li>
-            <li>手機顯示「已連線到電腦」後，就可以開始掃描票券</li>
+            <li>手機顯示「已連線到電腦」後，對準購票人的 QR Code 或建中學生證，這台電腦就會開啟訂單</li>
+            <li>一售票、早鳥票還缺學生證時，手機會顯示「電腦正在等：某某 的學生證」，直接掃就好</li>
           </ol>
         </section>
 
@@ -58,7 +59,7 @@
               <button type="button" @click="desk.open(item)">
                 <span class="mono">{{ item.orderId }}</span>
                 <span class="recent-meta">
-                  {{ formatTime(item.at) }}{{ item.byName ? ` · ${item.byName}` : '' }}{{ item.ticketCode ? '' : ' · 手動輸入' }}
+                  {{ formatTime(item.at) }}{{ item.byName ? ` · ${item.byName}` : '' }}{{ item.ticketCode ? ' · QR Code' : item.studentId ? ` · 學生證 ${item.studentId}` : ' · 手動輸入' }}
                 </span>
               </button>
             </li>
@@ -71,7 +72,7 @@
         </section>
       </div>
 
-      <p class="desk-hint">收到票券時，這台電腦會自動開啟訂單；處理完按訂單頁的「掃描下一張」回到這裡；重新產生 QR Code 或結束連線後，已配對的手機會改回自己開啟訂單</p>
+      <p class="desk-hint">收到掃描時，這台電腦會自動開啟訂單；領完票不用回到這頁，手機掃下一位就會自動換過去。正在處理的訂單還沒完成時，掃到別人的票會先問你要不要切換。重新產生 QR Code 或結束連線後，已配對的手機會改回自己開啟訂單</p>
       <router-link :to="{ name: 'admin-scan' }" class="desk-link">改用這台裝置的相機掃描 →</router-link>
     </main>
   </div>

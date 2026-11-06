@@ -6,7 +6,7 @@
         <span v-if="card" class="scanner-status" :class="{ busy: engine !== 'ready' }"><i />{{ engineLabel }}</span>
       </div>
 
-      <p v-if="prompt" class="scanner-prompt" role="status">{{ prompt }}</p>
+      <p v-if="prompt && !compact" class="scanner-prompt" role="status">{{ prompt }}</p>
 
       <div class="viewfinder">
         <video ref="video" muted playsinline autoplay aria-label="相機畫面" />
@@ -26,8 +26,7 @@
         <div v-else-if="phase === 'opening'" class="overlay ok">
           <p class="overlay-label">✓ 找到訂單</p>
           <p class="big-name">{{ opening?.customerName || studentId }}</p>
-          <p>{{ paired ? '已傳送到電腦' : '開啟訂單中…' }}</p>
-          <button v-if="paired" type="button" class="primary-button" @click="startCamera()">掃描下一張</button>
+          <p>{{ paired ? '已傳送到電腦，請看電腦畫面' : '開啟訂單中…' }}</p>
         </div>
 
         <div v-else-if="phase === 'choose'" class="overlay choose" role="dialog" aria-label="選擇訂單">
@@ -85,7 +84,7 @@
         </select>
       </div>
 
-      <p class="scanner-caption">
+      <p v-if="!compact" class="scanner-caption">
         <span>{{ card && qr ? '01' : card ? '02' : '01' }}</span>
         <template v-if="card && qr">票券 QR Code 或學生證都可以，放進框內會自動辨識；學生證橫放拿穩，別蓋住學號</template>
         <template v-else-if="card">學生證橫放在框內拿穩，讀到學號會自動{{ lookupEnabled ? '查訂單' : '核對' }}；手指壓到卡片邊角沒關係，別蓋住學號</template>
@@ -114,7 +113,7 @@
         </label>
       </div>
       <p v-if="formError" class="manual-error" role="alert">{{ formError }}</p>
-      <p class="manual-help">
+      <p v-if="!compact" class="manual-help">
         {{ lookupEnabled ? '會查 Email 為 ck{學號}@gl.ck.tp.edu.tw 的訂單。' : '學號要和訂單 Email ck{學號}@gl.ck.tp.edu.tw 相符。' }}學生證可以影印或翻拍，領票前務必核對證件照片與本人。
       </p>
     </form>
@@ -144,6 +143,8 @@ const props = defineProps({
   // an order the lookup opens at once when the student has it
   preferOrderId: { type: String, default: '' },
   title: { type: String, default: '' },
+  // inside the order page, whose checklist already says what to scan
+  compact: { type: Boolean, default: false },
   // what staff are asked for, above the camera (e.g. whose card)
   prompt: { type: String, default: '' }
 })
@@ -437,10 +438,18 @@ async function lookup(value, { keepReads = false } = {}) {
   }
 }
 
+// paired, the phone sends the order and goes on reading by itself
+const PAIRED_NEXT_MS = 1500
 function open(order) {
   opening.value = order
   phase.value = 'opening'
   emit('open', { orderId: order.id, studentId: result.value.studentId })
+  if (props.paired) {
+    const run = sequence
+    setTimeout(() => {
+      if (run === sequence && phase.value === 'opening' && !unmounted) startCamera()
+    }, PAIRED_NEXT_MS)
+  }
 }
 
 async function editId() {

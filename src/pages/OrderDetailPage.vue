@@ -28,7 +28,7 @@
             class="btn"
             @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
           >
-            掃描下一張
+            {{ scanDesk.active ? '回到接收畫面' : '掃描下一張' }}
           </button>
         </div>
       </header>
@@ -143,7 +143,7 @@
             class="btn"
             @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
           >
-            掃描下一張
+            {{ scanDesk.active ? '回到接收畫面' : '掃描下一張' }}
           </button>
         </div>
       </header>
@@ -156,40 +156,45 @@
         </div>
 
         <template v-if="isAdminView">
-          <!-- 領票檢查: the ticket QR code, and for 限建中在學學生 types the
-               buyer's student card; either may come first -->
+          <!-- 領票檢查: one list, one action. The ticket QR code, then who
+               collects (the student card for 限建中在學學生 types, the student
+               check for types sold to students first); either may come first -->
           <div v-if="!order.delivered" class="pickup-checks">
+            <p class="pickup-buyer">
+              <strong>{{ order.customerName || '（未填姓名）' }}</strong>
+              <span v-if="buyerTypeLabel">・{{ buyerTypeLabel }}</span>
+              <span v-if="itemsSummary">・{{ itemsSummary }}</span>
+            </p>
+
             <div class="check-row" :class="codeDone ? 'done' : qrCheck === 'mismatch' ? 'bad' : 'wait'">
               <span class="check-mark" aria-hidden="true">{{ codeDone ? '✓' : qrCheck === 'mismatch' ? '!' : '1' }}</span>
               <div class="check-body">
                 <p class="check-title">票券 QR Code</p>
                 <p v-if="qrCheck === 'ok'" class="check-text">驗證碼相符</p>
-                <p v-else-if="codeDone" class="check-text">管理員以學生證代替 QR Code</p>
-                <p v-else-if="qrCheck === 'mismatch'" class="check-text">⚠ 驗證碼不符，可能是偽造的 QR Code。請重新掃描，或交由管理員核對身分</p>
+                <p v-else-if="codeDone" class="check-text">忘了 QR Code：以學生證代替（管理員）</p>
+                <p v-else-if="qrCheck === 'mismatch'" class="check-text">驗證碼不符，可能是偽造的 QR Code。請重新掃描</p>
                 <p v-else class="check-text">{{ waitingText('qr') }}</p>
-                <label v-if="auth.isAdmin && qrCheck !== 'ok' && cardReady" class="identity-confirm">
-                  <input v-model="skipQr" type="checkbox">
-                  <span>購票人忘了 QR Code：以學生證代替（管理員）</span>
-                </label>
+                <p v-if="!codeDone && cardReady && !auth.isAdmin" class="check-hint">忘了 QR Code？請管理員登入處理，可用學生證代替</p>
               </div>
             </div>
 
-            <div v-if="needsCard || studentCard" class="check-row" :class="idDone ? 'done' : studentCard && !studentCard.match ? 'bad' : 'wait'">
-              <span class="check-mark" aria-hidden="true">{{ idDone ? '✓' : studentCard && !studentCard.match ? '!' : '2' }}</span>
+            <div v-if="idRow" class="check-row" :class="idRowState">
+              <span class="check-mark" aria-hidden="true">{{ idRowState === 'done' ? '✓' : idRowState === 'bad' ? '!' : '2' }}</span>
               <div class="check-body">
-                <p class="check-title">建中學生證{{ needsCard ? '' : '（此訂單不需要）' }}</p>
+                <p class="check-title">{{ idRowTitle }}</p>
                 <template v-if="studentCard?.match">
                   <p class="check-text">學號 <strong class="mono">{{ studentCard.id }}</strong> 與訂單 Email 相符</p>
-                  <label class="identity-confirm">
-                    <input v-model="studentCardChecked" type="checkbox">
-                    <span>已核對學生證照片與本人相符，背面有本學期註冊章</span>
-                  </label>
+                  <p class="check-hint">看一下照片是不是本人、背面有沒有本學期註冊章</p>
                 </template>
                 <p v-else-if="studentCard" class="check-text" role="alert">
-                  ⚠ 學號 <strong class="mono">{{ studentCard.id }}</strong> 不是這筆訂單的帳號（{{ order.customerEmail || '沒有 Email' }}）。請重新掃描購票人本人的學生證
+                  學號 <strong class="mono">{{ studentCard.id }}</strong> 不是這筆訂單的帳號（{{ order.customerEmail || '沒有 Email' }}），請掃購票人本人的學生證
                 </p>
-                <p v-else-if="idDone" class="check-text">以{{ idMethodLabel }}查驗{{ idNote.trim() ? `：${idNote.trim()}` : '' }}</p>
-                <p v-else class="check-text">{{ waitingText('card') }}</p>
+                <p v-else-if="needsCard && exceptionReady" class="check-text">以{{ idMethodLabel }}查驗{{ idNote.trim() ? `：${idNote.trim()}` : '' }}</p>
+                <p v-else-if="needsCard" class="check-text">{{ waitingText('card') }}</p>
+                <template v-else-if="needsIdCheck">
+                  <p class="check-text">學生優先票：請購票人出示學生證（背面有本學期註冊章）或酷課雲，資格不符不得領票</p>
+                  <p v-if="idCheck?.campus" class="check-hint">建中學生證也可以用下方按鈕掃描，自動核對學號</p>
+                </template>
 
                 <template v-if="needsCard && !cardReady">
                   <button v-if="!exceptionOpen" type="button" class="link-button" @click="exceptionOpen = true">
@@ -223,19 +228,23 @@
 
             <div v-if="scannerWanted" class="pickup-scanner">
               <StudentCardScanner
-                v-if="scannerOn"
+                v-if="scannerOn && (wantQr || wantCard || optionalScan)"
                 :key="order.id"
-                :card="wantCard"
+                :card="wantCard || (optionalCard && (optionalScan || wantQr))"
                 :qr="wantQr"
                 :lookup="false"
                 :device-id="savedCamera()"
-                :title="wantCard && wantQr ? '掃描 QR Code 或學生證' : wantCard ? '掃描學生證' : '掃描票券 QR Code'"
+                :title="(wantCard || optionalCard) && wantQr ? '掃描 QR Code 或學生證' : wantCard || optionalCard ? '掃描學生證' : '掃描票券 QR Code'"
                 :prompt="scannerPrompt"
+                compact
                 @read="onCardRead"
                 @qr="onQrRead"
                 @camera="saveCamera"
               />
-              <div class="scanner-toggle">
+              <div v-if="!wantQr && !wantCard && !optionalScan" class="scanner-toggle">
+                <button type="button" class="btn-sm" @click="optionalScan = true; scannerOn = true">掃建中學生證核對</button>
+              </div>
+              <div v-else class="scanner-toggle">
                 <p v-if="!scannerOn && scanDesk.active" class="check-meta">已通知連線的手機：{{ scannerPrompt }}</p>
                 <button type="button" class="btn-sm muted" @click="scannerOn = !scannerOn">
                   {{ scannerOn ? '關閉這台的相機' : '用這台的相機掃描' }}
@@ -243,32 +252,52 @@
               </div>
             </div>
 
+            <p v-if="!order.paid" class="pickup-warning" role="status">此訂單尚未付款</p>
+
             <button
-              v-if="canCollect"
               type="button"
               class="btn collect-button"
-              :disabled="changingStatus || loading || loadError"
+              :disabled="!canCollect || changingStatus || loading || loadError"
               @click="setDelivered(true)"
             >
-              ✓ 檢查完成，領票
+              {{ collectLabel }}
+            </button>
+
+            <details v-if="auth.isAdmin" class="admin-override" :open="!!overrideReason">
+              <summary>管理員：無法完成檢查時手動處理</summary>
+              <label class="manual-reason">
+                核對身分的方式與原因（會記錄在訂單）
+                <input v-model="overrideReason" maxlength="500" placeholder="例如：忘了 QR Code，核對身分證">
+              </label>
+            </details>
+          </div>
+
+          <div v-else class="pickup-done" role="status">
+            <p class="pickup-done-title">✓ 已領票</p>
+            <p>{{ order.customerName || '（未填姓名）' }}・{{ itemsSummary }}；請交付紙本票券</p>
+            <template v-if="scanDesk.active">
+              <p>用手機掃下一位的 QR Code 或學生證，這台電腦會自動開啟</p>
+            </template>
+            <button v-else type="button" class="btn collect-button" @click="router.push({ name: 'admin-scan' })">
+              掃描下一張
             </button>
           </div>
 
-          <div v-if="idCheck && !needsCard" class="identity-check" :class="{ student: needsIdCheck }" role="status">
-            <p class="identity-title">{{ buyerTypeLabel || '購票身分未知' }}</p>
-            <p v-if="idCheck.student">請查驗學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
-            <p v-else>社會人士：不需查驗學生證</p>
-            <label v-if="needsIdCheck && !cardReady" class="identity-confirm">
-              <input v-model="identityChecked" type="checkbox">
-              <span>已查驗身分</span>
+          <details v-if="order.delivered && auth.isAdmin" class="admin-override">
+            <summary>管理員：重設為未領票</summary>
+            <label class="manual-reason">
+              重設原因（會記錄在訂單）
+              <input v-model="overrideReason" maxlength="500" placeholder="例如：誤按領票">
             </label>
-          </div>
-          <p v-else-if="buyerTypeLabel" class="identity-check general">購票身分：{{ buyerTypeLabel }}</p>
-
-          <label v-if="auth.isAdmin" class="manual-reason">
-            手動領票或重設的原因（管理員）
-            <input v-model="overrideReason" maxlength="500" placeholder="核對身分的方式或重設原因；填寫後可略過上面的檢查">
-          </label>
+            <button
+              type="button"
+              class="btn-sm muted"
+              :disabled="changingStatus || !overrideReason.trim() || loading || loadError"
+              @click="setDelivered(false)"
+            >
+              標記未領票
+            </button>
+          </details>
 
           <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
         </template>
@@ -277,24 +306,6 @@
           <div class="delivery-bar" :class="order.delivered ? 'delivered' : 'pending'">
             <span class="status-dot" />
             <span>領票狀態：{{ order.delivered ? '已領票' : '未領票' }}</span>
-            <div v-if="isAdminView" class="delivery-actions">
-              <button
-                type="button"
-                class="btn-sm muted"
-                :disabled="changingStatus || !order.delivered || !auth.isAdmin || !overrideReason.trim() || loading || loadError"
-                @click="setDelivered(false)"
-              >
-                標記未領票
-              </button>
-              <button
-                type="button"
-                class="btn-sm"
-                :disabled="changingStatus || order.delivered || !canCollect || loading || loadError"
-                @click="setDelivered(true)"
-              >
-                標記已領票
-              </button>
-            </div>
           </div>
 
           <div class="delivery-bar" :class="order.paid ? 'paid' : 'pending'">
@@ -689,7 +700,6 @@ const scannedCode = computed(() => scanned.value.c)
 // adds a scan; the address follows, so a reload keeps it
 function addScan({ c = '', sid = '' }) {
   if (!c && !sid) return
-  if (sid && sid !== scanned.value.sid) studentCardChecked.value = false
   scanned.value = { c: c || scanned.value.c, sid: sid || scanned.value.sid }
   const query = { ...route.query, ...(scanned.value.c ? { c: scanned.value.c } : {}), ...(scanned.value.sid ? { sid: scanned.value.sid } : {}) }
   window.history.replaceState(window.history.state, '', router.resolve({ name: route.name, params: route.params, query }).href)
@@ -702,8 +712,9 @@ const studentCard = computed(() => {
   if (!isAdminView.value || !id || !order.value) return null
   return { id, match: String(order.value.customerEmail || '').toLowerCase() === studentAccountEmail(id) }
 })
-const studentCardChecked = ref(false)
-const cardReady = computed(() => !!studentCard.value?.match && studentCardChecked.value)
+// A matching card counts at once: staff confirm its photo with the one tap
+// that collects (the button says so), not with a separate tick
+const cardReady = computed(() => !!studentCard.value?.match)
 
 const qrCheck = computed(() => {
   if (!isAdminView.value || !order.value?.ticketCode) return null
@@ -711,19 +722,16 @@ const qrCheck = computed(() => {
   return scannedCode.value === order.value.ticketCode ? 'ok' : 'mismatch'
 })
 // 學生 / 社會人士 (staff only). 學生 buyers of types sold to students first
-// need 已查驗身分 ticked before the tickets can be collected
+// show their student ID (any school's, or 酷課雲) before collecting
 const buyerTypeLabel = computed(() => getBuyerTypeLabel(order.value))
 const idCheck = computed(() => getIdCheck(order.value))
 const needsIdCheck = computed(() => !!idCheck.value?.student)
-const identityChecked = ref(false)
 
-// 限建中在學學生 types (一售票、早鳥票) need the student card too. Until the
+// 限建中在學學生 types (一售票、早鳥票) need the 建中 card scanned. Until the
 // ticket types load (or if they can't), a 建中 student's order counts
 const ticketTypes = ref([])
 const needsCard = computed(() => isAdminView.value && requiresStudentCard(order.value, ticketTypes.value))
 
-// admins: the student card stands in for a forgotten QR code
-const skipQr = ref(false)
 // another way staff checked who collects, when the card can't be scanned
 const exceptionOpen = ref(false)
 const idMethod = ref('')
@@ -732,29 +740,65 @@ const idMethodLabel = computed(() => ID_CHECK_METHODS.find((method) => method.va
 const exceptionReady = computed(() => !!idMethod.value && (idMethod.value !== 'other' || !!idNote.value.trim()))
 const adminOverride = computed(() => auth.isAdmin && !!overrideReason.value.trim())
 
-const codeDone = computed(() => qrCheck.value === 'ok' || (auth.isAdmin && skipQr.value && cardReady.value))
-const idDone = computed(() => cardReady.value || (needsCard.value && exceptionReady.value))
+// 忘了 QR Code: an admin may let a matching student card stand in for it;
+// the collect button says so
+const qrByCard = computed(() => qrCheck.value !== 'ok' && auth.isAdmin && cardReady.value)
+const codeDone = computed(() => qrCheck.value === 'ok' || qrByCard.value)
+// who collects: the scanned card, another recorded check, or (types sold
+// to students first) staff looking at a student ID, confirmed by the button
+const idDone = computed(() => cardReady.value || (needsCard.value ? exceptionReady.value : true))
+
+// the second row: shown when the order needs it, or when a card was
+// scanned (an admin may use it for a forgotten QR code)
+const idRow = computed(() => needsCard.value || needsIdCheck.value || (!!studentCard.value && qrCheck.value !== 'ok'))
+const idRowTitle = computed(() => (needsCard.value || studentCard.value ? '建中學生證' : '學生證'))
+const itemsSummary = computed(() => (order.value?.items || []).map((item) => `${item.name} × ${item.quantity}`).join('、'))
 
 // both checks, in either order; an admin's reason covers both
 // (updateOrderDelivery checks the same)
 const canCollect = computed(() => {
   if (!order.value || order.value.delivered) return false
-  const codeOk = codeDone.value || adminOverride.value
-  const idOk = needsCard.value
-    ? idDone.value || adminOverride.value
-    : !needsIdCheck.value || identityChecked.value || cardReady.value
-  return codeOk && idOk
+  return (codeDone.value || adminOverride.value) && (idDone.value || adminOverride.value)
 })
 
 // What the scanner on this page (or the paired phone) still waits for
 const wantQr = computed(() => !codeDone.value)
 const wantCard = computed(() => needsCard.value && !studentCard.value?.match && !exceptionReady.value)
-const scannerWanted = computed(() => isAdminView.value && !!order.value && !order.value.delivered && !loadError.value && (wantQr.value || wantCard.value))
+// a 建中 student's order of a type sold to students first: scanning the
+// card checks it for staff, though looking at it is enough
+const optionalCard = computed(() => !needsCard.value && needsIdCheck.value && !!idCheck.value?.campus && !studentCard.value)
+// staff chose to scan it (the camera does not open for it by itself)
+const optionalScan = ref(false)
+const idRowState = computed(() => {
+  if (studentCard.value) return studentCard.value.match ? 'done' : 'bad'
+  if (needsCard.value) return exceptionReady.value ? 'done' : 'wait'
+  return 'wait'
+})
+
+// The one action, saying what tapping it confirms
+const collectLabel = computed(() => {
+  if (!canCollect.value) {
+    if (!codeDone.value && !adminOverride.value) return qrCheck.value === 'mismatch' ? 'QR Code 不符，不能領票' : '等待掃描票券 QR Code'
+    return '等待掃描學生證'
+  }
+  if (!codeDone.value || (!idDone.value && needsCard.value)) return '以管理員身分領票'
+  if (cardReady.value && (needsCard.value || needsIdCheck.value || qrByCard.value)) {
+    return qrByCard.value ? '照片是本人，以學生證代替 QR Code 領票' : '照片是本人，領票'
+  }
+  if (needsCard.value) return `已用${idMethodLabel.value}查驗，領票`
+  if (needsIdCheck.value) return '已看過學生證，領票'
+  return '領票'
+})
+const scannerWanted = computed(() =>
+  isAdminView.value && !!order.value && !order.value.delivered && !loadError.value &&
+  (wantQr.value || wantCard.value || optionalCard.value)
+)
 const buyerName = computed(() => order.value?.customerName || '購票人')
 const scannerPrompt = computed(() => {
   if (wantQr.value && wantCard.value) return `請掃 ${buyerName.value} 的票券 QR Code 和學生證（順序不拘）`
   if (wantCard.value) return `請掃 ${buyerName.value} 的學生證`
-  return `請掃 ${buyerName.value} 的票券 QR Code`
+  if (wantQr.value) return `請掃 ${buyerName.value} 的票券 QR Code`
+  return `可以掃 ${buyerName.value} 的建中學生證自動核對，或看過證件後直接領票`
 })
 function waitingText(kind) {
   const where = scannerOn.value ? '用下方相機掃描' : scanDesk.active ? '用手機掃描' : '開啟相機掃描'
@@ -869,9 +913,6 @@ function onCancelled({ refundAmount }) {
 }
 
 function resetChecks() {
-  identityChecked.value = false
-  studentCardChecked.value = false
-  skipQr.value = false
   otherQr.value = null
   ignoredQr = ''
   closeException()
@@ -937,7 +978,7 @@ async function setDelivered(delivered) {
       expectedDelivered: order.value.delivered,
       overrideReason: auth.isAdmin ? overrideReason.value.trim() : '',
       ...(delivered && cardReady.value ? { studentId: studentCard.value.id, studentCardChecked: true } : {}),
-      ...(delivered && auth.isAdmin && skipQr.value && cardReady.value && qrCheck.value !== 'ok' ? { skipQr: true } : {}),
+      ...(delivered && qrByCard.value ? { skipQr: true } : {}),
       ...(delivered && needsCard.value && !cardReady.value && exceptionReady.value
         ? { idCheck: { method: idMethod.value, note: idNote.value.trim() } }
         : {})

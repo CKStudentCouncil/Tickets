@@ -1,15 +1,15 @@
 <template>
   <div class="scan-page">
     <main class="scan-content">
-      <header class="page-heading">
-        <div class="heading-topline">
+      <header class="page-heading" :class="{ compact: remoteLink }">
+        <div v-if="!remoteLink" class="heading-topline">
           <p class="eyebrow">領票服務 <span>／ CHECK-IN</span></p>
           <span class="live-badge"><i />現場模式</span>
         </div>
         <div class="title-row">
           <div>
             <h1>掃描票券</h1>
-            <p class="lead">對準購票人的 QR Code 或建中學生證，快速完成核票與領票。</p>
+            <p v-if="!remoteLink" class="lead">對準購票人的 QR Code 或建中學生證，快速完成核票與領票。</p>
           </div>
           <button
             type="button"
@@ -28,10 +28,10 @@
         <div>
           <p class="remote-title"><i />已連線到電腦</p>
           <p class="remote-meta">
-            {{ remoteOwner ? `${remoteOwner}的電腦` : '連線中…' }}；掃到的票券會在電腦上開啟
+            {{ remoteOwner ? `${remoteOwner}的電腦` : '連線中…' }}・掃到的會在電腦上開啟
           </p>
         </div>
-        <button type="button" class="secondary-button" @click="disconnect">中斷連線</button>
+        <button type="button" class="remote-disconnect" @click="disconnect">中斷連線</button>
       </div>
 
       <div class="mode-switch" role="tablist" aria-label="掃描方式">
@@ -46,6 +46,8 @@
         </button>
       </div>
 
+      <p v-if="needPrompt" class="need-prompt" role="status">{{ needPrompt }}</p>
+
       <template v-if="activeMode !== 'qr'">
         <StudentCardScanner
           v-if="state !== 'guide'"
@@ -53,7 +55,6 @@
           :paired="!!remoteLink"
           :qr="activeMode === 'auto'"
           :prefer-order-id="need?.orderId || ''"
-          :prompt="needPrompt"
           @open="openFromCard"
           @qr="handleCode"
           @camera="saveCamera"
@@ -63,7 +64,6 @@
       </template>
 
       <template v-else>
-      <p v-if="needPrompt" class="need-prompt" role="status">{{ needPrompt }}</p>
       <div class="scanner-card">
         <div class="scanner-card-head">
           <span>掃描視窗</span>
@@ -98,8 +98,11 @@
       </div>
       <p v-if="state === 'scanning' && cameraInfo" class="camera-info">{{ cameraInfo }}</p>
 
-      <form class="manual" @submit.prevent="openManual">
-        <label for="manual-order-id">無法掃描時，輸入訂單編號</label>
+      </template>
+
+      <details class="manual order-entry" :open="!!manualError">
+        <summary>QR Code 和學生證都沒辦法掃？輸入訂單編號</summary>
+        <form @submit.prevent="openManual">
         <div class="manual-row">
           <input
             id="manual-order-id"
@@ -114,9 +117,9 @@
           <button type="submit" class="secondary-button">{{ remoteLink ? '傳送到電腦' : '開啟訂單' }}</button>
         </div>
         <p v-if="manualError" class="manual-error" role="alert">{{ manualError }}</p>
-        <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。建中學生忘了帶 QR Code 時，可掃學生證找到訂單，再交由管理員處理。</p>
-      </form>
-      </template>
+        <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。</p>
+        </form>
+      </details>
 
       <section v-if="!remoteLink" class="desk-entry">
         <h2>手機只掃描，在電腦上領票</h2>
@@ -154,39 +157,54 @@ const auth = useAuthStore()
 
 const GUIDE_STEPS = [
   {
-    title: '允許使用相機',
+    title: '領一張票：掃描 → 核對 → 按一下',
+    lines: [
+      '掃購票人的票券 QR Code，訂單會自動開啟。',
+      '一售票、早鳥票還要掃建中學生證；先掃哪個都可以，訂單頁會自動開相機等另一個。',
+      '訂單頁最下方的大按鈕會寫出要確認的事，例如「照片是本人，領票」。確認後按下，交付紙本票券。不用另外打勾。'
+    ]
+  },
+  {
+    title: '每種票要檢查什麼',
+    lines: [
+      '一般票：只要 QR Code。',
+      '學生優先票：QR Code，再看學生證（背面有本學期註冊章）或酷課雲。建中學生證可以直接掃，系統會核對學號。',
+      '一售票、早鳥票：QR Code＋掃建中學生證，學號要和訂單的學校帳號相符。',
+      '訂單頁會列出這張票要的檢查：綠色打勾是完成，橘色是還在等。'
+    ]
+  },
+  {
+    title: '掃描小技巧',
+    lines: [
+      '上方選「自動辨識」，QR Code 和學生證都直接放進框內就好。',
+      '畫面模糊時，把手機拿遠一點（約 20–30 公分）讓鏡頭對焦；讀不到 QR Code 就請對方調亮螢幕。',
+      '學生證橫放拿穩；手指壓到卡片邊角沒關係，別蓋住學號。',
+      '有多顆鏡頭時，可以在畫面下方換鏡頭。'
+    ]
+  },
+  {
+    title: '遇到狀況',
+    lines: [
+      '學生證讀不到：在相機下方輸入學號。',
+      '沒帶學生證：按「沒有學生證？其他方式查驗」，選酷課雲、其他證件，或「其他」並寫說明。',
+      '忘了 QR Code：掃學生證找到訂單，請管理員按「以學生證代替 QR Code 領票」。',
+      'QR Code 或學號不符：不要發票，請管理員處理。'
+    ]
+  },
+  {
+    title: '手機掃描、電腦領票',
+    lines: [
+      '電腦開啟「電腦接收掃描」，手機用本頁對準電腦上的配對 QR Code。',
+      '之後手機只負責掃，訂單會在電腦上開啟；還缺學生證時，手機會顯示「電腦正在等：某某 的學生證」。',
+      '領完票直接掃下一位，電腦會自動換過去；目前的訂單還沒完成時掃到別人的票，電腦會先問要不要切換。'
+    ]
+  },
+  {
+    title: '開始之前：允許使用相機',
     lines: [
       '關閉教學後，瀏覽器會詢問是否允許使用相機，請按「允許」。',
-      '若不小心拒絕了，請到瀏覽器的網站設定開啟相機權限，再按「重新開啟相機」。'
-    ]
-  },
-  {
-    title: '對準票券 QR Code 或學生證',
-    lines: [
-      '請購票人打開確認信，或網站「已購門票」裡的 QR Code。',
-      '「自動辨識」模式下，QR Code 和建中學生證都可以直接放進框內，讀到後會自動開啟訂單。',
-      '手機鏡頭太近會對不到焦：畫面模糊時，把手機拿遠一點（約 20–30 公分）。',
-      '還是讀不到時，請購票人調高螢幕亮度，或按「切換鏡頭」換一顆鏡頭試試。'
-    ]
-  },
-  {
-    title: '核對並領票',
-    lines: [
-      '確認畫面顯示「✓ QR 驗證碼相符」，並核對購票人姓名與票種。',
-      '一售票、早鳥票等限建中在學學生的票，還要掃購票人的學生證：訂單頁會自動開相機等學生證，先掃學生證再掃 QR Code 也可以。',
-      '學生證讀不到時可輸入學號；沒帶學生證時選「其他方式查驗」並寫下說明。',
-      '兩項都打勾後，按「領票」並交付紙本票券。',
-      '若顯示驗證碼不符，請勿發票，交由管理員核對身分處理。'
-    ]
-  },
-  {
-    title: '繼續下一位',
-    lines: [
-      '按訂單頁的「掃描下一張」或返回，就會回到掃描畫面。',
-      '無法掃描時，可在下方輸入訂單編號手動開啟，但需由管理員核對身分後才能領票。',
-      '建中學生忘了帶 QR Code 時，掃學生證可以找到訂單，再請管理員以學生證代替 QR Code 領票。',
-      '想在電腦上核票：電腦開啟「電腦接收掃描」，手機用本頁掃描電腦上的配對 QR Code；之後手機只負責掃描，訂單會在電腦上開啟',
-      '之後可隨時按標題旁的「?」再看一次教學。'
+      '不小心拒絕了，請到瀏覽器的網站設定開啟相機權限，再按「開啟相機」。',
+      '之後可隨時按標題旁的「教學」再看一次。'
     ]
   }
 ]
@@ -683,6 +701,17 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 
+.order-entry summary {
+  color: var(--off-white);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.order-entry form {
+  margin-top: 12px;
+}
+
 .mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -820,8 +849,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 16px;
-  padding: 14px 16px;
+  margin-bottom: 12px;
+  padding: 10px 12px 10px 14px;
   border: 1px solid rgba(119, 191, 139, .35);
   background: rgba(119, 191, 139, .07);
 }
@@ -854,11 +883,37 @@ onBeforeUnmount(() => {
   line-height: 1.6;
 }
 
-@media (max-width: 420px) {
-  .remote-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
+/* Paired with a computer: the phone only scans, so the scanner moves up */
+.page-heading.compact {
+  margin-bottom: 12px;
+  padding: 12px 0;
+}
+
+.page-heading.compact h1 {
+  font-size: 1.5rem;
+}
+
+.page-heading.compact .title-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.remote-disconnect {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--lunar);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.remote-disconnect:hover,
+.remote-disconnect:focus-visible {
+  border-color: var(--off-white);
+  color: var(--off-white);
 }
 
 .desk-entry {

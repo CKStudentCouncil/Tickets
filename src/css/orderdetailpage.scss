@@ -384,6 +384,13 @@
   color: var(--off-white);
 }
 
+.check-hint {
+  margin: 6px 0 0;
+  color: rgba(242, 240, 233, .5);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .link-button {
   margin: 10px 0 0;
   padding: 0;
@@ -445,7 +452,7 @@
   gap: 8px;
 }
 
-.pickup-scanner {
+.pickup-scanner > :not(.scanner-toggle) {
   max-width: 520px;
 }
 
@@ -460,6 +467,75 @@
 
 .scanner-toggle .check-meta {
   margin: 0;
+}
+
+.pickup-buyer {
+  margin: 0 0 4px;
+  color: rgba(242, 240, 233, .62);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pickup-buyer strong {
+  color: var(--off-white);
+  font-size: 16px;
+}
+
+.pickup-warning {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(201, 120, 120, .45);
+  background: rgba(201, 120, 120, .08);
+  color: #e0a0a0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-override {
+  margin-top: 6px;
+  color: rgba(242, 240, 233, .55);
+  font-size: 12px;
+}
+
+.admin-override summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.admin-override .manual-reason {
+  margin-top: 8px;
+}
+
+.admin-override .btn-sm {
+  margin-top: 10px;
+}
+
+.btn.collect-button:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: rgba(242, 240, 233, .45);
+  cursor: not-allowed;
+}
+
+.pickup-done {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 18px;
+  border: 1px solid rgba(119, 191, 139, .45);
+  background: rgba(119, 191, 139, .08);
+  color: rgba(242, 240, 233, .75);
+  font-size: 14px;
+}
+
+.pickup-done p {
+  margin: 0;
+}
+
+.pickup-done-title {
+  color: #9ad0a8;
+  font-size: 20px;
+  font-weight: 800;
 }
 
 .btn.collect-button {
