@@ -9,7 +9,7 @@
         <div class="title-row">
           <div>
             <h1>掃描票券</h1>
-            <p class="lead">對準購票人的 QR Code，快速完成核票與領票。</p>
+            <p class="lead">對準購票人的 QR Code 或建中學生證，快速完成核票與領票。</p>
           </div>
           <button
             type="button"
@@ -34,6 +34,36 @@
         <button type="button" class="secondary-button" @click="disconnect">中斷連線</button>
       </div>
 
+      <div class="mode-switch" role="tablist" aria-label="掃描方式">
+        <button type="button" role="tab" :aria-selected="mode === 'auto'" :class="{ active: mode === 'auto' }" @click="setMode('auto')">
+          自動辨識
+        </button>
+        <button type="button" role="tab" :aria-selected="mode === 'qr'" :class="{ active: mode === 'qr' }" @click="setMode('qr')">
+          只掃 QR Code
+        </button>
+        <button type="button" role="tab" :aria-selected="mode === 'card'" :class="{ active: mode === 'card' }" @click="setMode('card')">
+          只掃學生證
+        </button>
+      </div>
+
+      <template v-if="activeMode !== 'qr'">
+        <StudentCardScanner
+          v-if="state !== 'guide'"
+          :device-id="savedCamera()"
+          :paired="!!remoteLink"
+          :qr="activeMode === 'auto'"
+          :prefer-order-id="need?.orderId || ''"
+          :prompt="needPrompt"
+          @open="openFromCard"
+          @qr="handleCode"
+          @camera="saveCamera"
+        />
+        <p v-else class="scan-notice info">看完使用教學後會開啟相機</p>
+        <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
+      </template>
+
+      <template v-else>
+      <p v-if="needPrompt" class="need-prompt" role="status">{{ needPrompt }}</p>
       <div class="scanner-card">
         <div class="scanner-card-head">
           <span>掃描視窗</span>
@@ -84,8 +114,9 @@
           <button type="submit" class="secondary-button">{{ remoteLink ? '傳送到電腦' : '開啟訂單' }}</button>
         </div>
         <p v-if="manualError" class="manual-error" role="alert">{{ manualError }}</p>
-        <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。</p>
+        <p id="manual-help" class="manual-help">手動開啟的訂單沒有 QR 驗證碼，需由管理員核對身分後才能領票。建中學生忘了帶 QR Code 時，可掃學生證找到訂單，再交由管理員處理。</p>
       </form>
+      </template>
 
       <section v-if="!remoteLink" class="desk-entry">
         <h2>手機只掃描，在電腦上領票</h2>
@@ -104,10 +135,11 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleQuestionMark } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
+import StudentCardScanner from 'src/components/StudentCardScanner.vue'
 import { SITE_URL } from 'src/config/app'
 import { isScanLinkClosed, useScanRemote } from 'src/composables/useScanRemote'
 import { useAuthStore } from 'src/stores/auth'
@@ -129,10 +161,10 @@ const GUIDE_STEPS = [
     ]
   },
   {
-    title: '對準票券 QR Code',
+    title: '對準票券 QR Code 或學生證',
     lines: [
       '請購票人打開確認信，或網站「已購門票」裡的 QR Code。',
-      '將 QR Code 放進畫面中的框內，讀到後會自動開啟訂單。',
+      '「自動辨識」模式下，QR Code 和建中學生證都可以直接放進框內，讀到後會自動開啟訂單。',
       '手機鏡頭太近會對不到焦：畫面模糊時，把手機拿遠一點（約 20–30 公分）。',
       '還是讀不到時，請購票人調高螢幕亮度，或按「切換鏡頭」換一顆鏡頭試試。'
     ]
@@ -141,7 +173,9 @@ const GUIDE_STEPS = [
     title: '核對並領票',
     lines: [
       '確認畫面顯示「✓ QR 驗證碼相符」，並核對購票人姓名與票種。',
-      '按「已領票」後，交付紙本票券。',
+      '一售票、早鳥票等限建中在學學生的票，還要掃購票人的學生證：訂單頁會自動開相機等學生證，先掃學生證再掃 QR Code 也可以。',
+      '學生證讀不到時可輸入學號；沒帶學生證時選「其他方式查驗」並寫下說明。',
+      '兩項都打勾後，按「領票」並交付紙本票券。',
       '若顯示驗證碼不符，請勿發票，交由管理員核對身分處理。'
     ]
   },
@@ -150,6 +184,7 @@ const GUIDE_STEPS = [
     lines: [
       '按訂單頁的「掃描下一張」或返回，就會回到掃描畫面。',
       '無法掃描時，可在下方輸入訂單編號手動開啟，但需由管理員核對身分後才能領票。',
+      '建中學生忘了帶 QR Code 時，掃學生證可以找到訂單，再請管理員以學生證代替 QR Code 領票。',
       '想在電腦上核票：電腦開啟「電腦接收掃描」，手機用本頁掃描電腦上的配對 QR Code；之後手機只負責掃描，訂單會在電腦上開啟',
       '之後可隨時按標題旁的「?」再看一次教學。'
     ]
@@ -166,12 +201,25 @@ const SLOW_SEND_MS = 5000
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen'
 // The camera picked with 切換鏡頭, reused on this device's next visits
 const CAMERA_KEY = 'cksc.scanCamera'
+// auto (QR codes and student cards), qr or card: 掃描下一張 comes back to
+// the one last used
+const MODE_KEY = 'cksc.scanMode2'
 
 function savedCamera() {
   try {
     return localStorage.getItem(CAMERA_KEY) || ''
   } catch {
     return ''
+  }
+}
+
+const MODES = ['auto', 'qr', 'card']
+function savedMode() {
+  try {
+    const saved = localStorage.getItem(MODE_KEY)
+    return MODES.includes(saved) ? saved : 'auto'
+  } catch {
+    return 'auto'
   }
 }
 
@@ -188,6 +236,10 @@ function saveCamera(deviceId) {
 const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 
 const video = ref(null)
+// auto: ticket QR codes and 建中 student cards | qr: QR codes only (the
+// viewfinder below) | card: student cards only. auto and card use
+// StudentCardScanner, which opens the camera itself
+const mode = ref(savedMode())
 // guide (first visit, camera waits) | starting | scanning | paused (page hidden) | error
 const state = ref('starting')
 const guideOpen = ref(false)
@@ -213,7 +265,21 @@ const remote = useScanRemote({
   getPhone: () => ({ uid: auth.user?.uid, name: auth.displayName }),
   onEnded: (message) => showNotice(message, 'danger', 6000)
 })
-const { linkId: remoteLink, ownerName: remoteOwner } = remote
+const { linkId: remoteLink, ownerName: remoteOwner, need } = remote
+
+// Paired, the computer says what the order it shows still needs; a phone
+// set to scan only the other kind reads both until it has it
+const activeMode = computed(() => {
+  if (!need.value || mode.value === 'auto') return mode.value
+  if ((mode.value === 'qr' && need.value.card) || (mode.value === 'card' && need.value.qr)) return 'auto'
+  return mode.value
+})
+const needPrompt = computed(() => {
+  const wanted = need.value
+  if (!wanted) return ''
+  const what = wanted.card && wanted.qr ? '票券 QR Code 和學生證' : wanted.card ? '學生證' : '票券 QR Code'
+  return `電腦正在等：${wanted.name || wanted.orderId} 的${what}`
+})
 const repeats = createRepeatFilter(REPEAT_GAP_MS)
 let pairing = false
 let sendSequence = 0
@@ -306,6 +372,40 @@ async function pair(linkId) {
   }
 }
 
+function setMode(next) {
+  if (mode.value === next) return
+  mode.value = next
+  notice.value = ''
+  try {
+    localStorage.setItem(MODE_KEY, next)
+  } catch {
+    // ignore
+  }
+}
+
+// the QR-only viewfinder runs here; the other modes' scanner opens the camera
+// itself (both share it, src/utils/camera.js)
+watch(activeMode, (next, previous) => {
+  if (state.value === 'guide' || next === previous) return
+  if (next !== 'qr') {
+    stop()
+    state.value = 'paused-card'
+  } else {
+    // the video element is back once the QR view renders
+    nextTick(() => start(currentCamera || savedCamera()))
+  }
+})
+
+// a buyer's order found from their student card
+function openFromCard({ orderId, studentId }) {
+  if (remoteLink.value) {
+    sendToDesk({ orderId, ticketCode: '', studentId })
+    return
+  }
+  stop()
+  router.push({ name: 'admin-order-detail', params: { id: orderId }, query: { sid: studentId } })
+}
+
 async function sendToDesk(ticket) {
   const sequence = ++sendSequence
   const linkId = remoteLink.value
@@ -352,7 +452,9 @@ function openGuide() {
 function onGuideHide() {
   markGuideSeen(GUIDE_SEEN_KEY)
   // first visit: ask for the camera only after the guide explained it
-  if (state.value === 'guide') start()
+  if (state.value !== 'guide') return
+  if (activeMode.value === 'qr') start()
+  else state.value = 'paused-card'
 }
 
 function handleCode(text) {
@@ -409,7 +511,7 @@ function openManual() {
 // Phones stop the camera in the background; restart it on return
 function onVisibilityChange() {
   if (document.hidden) {
-    if (state.value === 'starting' || state.value === 'scanning') {
+    if (activeMode.value === 'qr' && (state.value === 'starting' || state.value === 'scanning')) {
       stop()
       state.value = 'paused'
     }
@@ -424,18 +526,23 @@ onMounted(() => {
   // opened from a pairing QR code with the phone's own camera app
   if (route.query.link !== undefined) {
     const linkId = String(route.query.link)
-    router.replace({ query: {} })
+    // out of the address without router.replace, which would remake the
+    // page (MainLayout keys it by the full path) and drop the pairing
+    window.history.replaceState(window.history.state, '', router.resolve({ name: route.name }).href)
     if (isScanLinkId(linkId)) pair(linkId)
     else showNotice('配對連結不正確，請重新掃描電腦上的 QR Code')
   } else {
     remote.restore()
   }
 
-  if (isGuideSeen(GUIDE_SEEN_KEY)) {
-    start()
-  } else {
+  if (!isGuideSeen(GUIDE_SEEN_KEY)) {
     state.value = 'guide'
     guideOpen.value = true
+  } else if (activeMode.value !== 'qr') {
+    // the scanner component opens the camera itself
+    state.value = 'paused-card'
+  } else {
+    start()
   }
 })
 
@@ -563,6 +670,41 @@ onBeforeUnmount(() => {
   color: var(--lunar);
   font-size: 14px;
   line-height: 1.7;
+}
+
+.need-prompt {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--ember);
+  background: rgba(228, 164, 104, .1);
+  color: var(--off-white);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+}
+
+.mode-switch button {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--lunar);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.mode-switch button.active {
+  background: var(--ember);
+  color: #111;
 }
 
 .scanner-card {

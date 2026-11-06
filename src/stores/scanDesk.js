@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { createScanLink, deleteScanLink, watchScanLink } from 'src/services/scanLinkService'
+import { createScanLink, deleteScanLink, setScanLinkNeed, watchScanLink } from 'src/services/scanLinkService'
 import { isScanLinkExpired, isScanLinkId } from 'src/utils/scanLink'
 
 // The computer side of 手機掃描、電腦處理 (/admin/scan/desk). A store, so the
@@ -43,6 +43,14 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
   const status = ref('idle')
   // tickets received in this tab, newest first
   const recent = ref([])
+  // what the order page open here still needs, as told to the phones:
+  // { orderId, name, qr, card } or null
+  const need = ref(null)
+  // a scan of another order that came while that order page was waiting:
+  // the page asks before switching, so two buyers' scans don't mix
+  const pending = ref(null)
+  // a scan for the order page open here, for it to add
+  const incoming = ref(null)
 
   const active = computed(() => !!linkId.value)
 
@@ -61,15 +69,31 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     link.value = null
     status.value = 'idle'
     recent.value = []
+    need.value = null
+    pending.value = null
+    incoming.value = null
     saveLink('')
+  }
+
+  // The order page says what it still needs (null: nothing, or it closed)
+  function setNeed(value) {
+    const next = value && (value.qr || value.card)
+      ? { orderId: value.orderId, name: value.name || '', qr: !!value.qr, card: !!value.card }
+      : null
+    if (JSON.stringify(next) === JSON.stringify(need.value)) return
+    need.value = next
+    if (!next) pending.value = null
+    const id = linkId.value
+    if (id) setScanLinkNeed(id, next).catch((error) => console.error('Failed to tell the phone what is needed', error))
   }
 
   function open(entry) {
     if (!router) return
+    pending.value = null
     const target = {
       name: 'admin-order-detail',
       params: { id: entry.orderId },
-      query: entry.ticketCode ? { c: entry.ticketCode } : {}
+      query: entry.ticketCode ? { c: entry.ticketCode } : entry.studentId ? { sid: entry.studentId } : {}
     }
     // one order replaces another, so 返回 leads back to this page
     if (router.currentRoute.value.name === 'admin-order-detail') router.replace(target)
@@ -81,12 +105,24 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
       id: scan.id,
       orderId: scan.orderId,
       ticketCode: scan.ticketCode || '',
+      studentId: scan.studentId || '',
       at: scan.at?.toDate?.() || new Date(),
       byName: phone?.name || ''
     }
     recent.value = [entry, ...recent.value.filter((item) => item.id !== entry.id)].slice(0, RECENT_LIMIT)
 
-    if (FOLLOW_ROUTES.includes(router?.currentRoute.value.name)) open(entry)
+    const route = router?.currentRoute.value
+    if (route?.name === 'admin-order-detail' && String(route.params.id) === entry.orderId) {
+      // the order shown: the scan adds the QR code or the student card to
+      // it (OrderDetailPage.vue takes it from here)
+      incoming.value = entry
+      return
+    }
+    if (route?.name === 'admin-order-detail' && need.value?.orderId === String(route.params.id)) {
+      pending.value = entry
+      return
+    }
+    if (FOLLOW_ROUTES.includes(route?.name)) open(entry)
     else toast.show(`手機傳來訂單 ${entry.orderId}；到「電腦接收」開啟`, 5000)
   }
 
@@ -197,5 +233,12 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     }
   )
 
-  return { linkId, link, status, recent, active, start, resume, end, renew, retry, open, expired }
+  const dismissPending = () => { pending.value = null }
+  const takeIncoming = () => {
+    const entry = incoming.value
+    incoming.value = null
+    return entry
+  }
+
+  return { linkId, link, status, recent, active, need, pending, incoming, takeIncoming, start, resume, end, renew, retry, open, setNeed, dismissPending, expired }
 })

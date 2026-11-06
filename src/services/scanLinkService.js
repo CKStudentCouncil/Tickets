@@ -5,9 +5,13 @@ import { db } from 'src/boot/firebase'
 // receiving scans at the check-in desk (src/stores/scanDesk.js):
 //   ownerUid, ownerName, createdAt  written once, by the computer
 //   phone: { uid, name, at }        the phone that last paired or scanned
-//   scan: { id, orderId, ticketCode, at, byUid }  the last ticket it read
-// Staff read a link by its id; after it is made only the phone fields
-// change, for SCAN_LINK_HOURS (src/utils/scanLink.js).
+//   scan: { id, orderId, ticketCode, studentId?, at, byUid }  the last ticket
+//     it read; studentId when read off the buyer's student card
+//   need: { orderId, name, qr, card, at } | null  written by the computer:
+//     what the order it shows still needs (the QR code, the student card),
+//     so the phone asks for it
+// Staff read a link by its id; after it is made only the phone fields and
+// the computer's `need` change, for SCAN_LINK_HOURS (src/utils/scanLink.js).
 const linksRef = () => collection(db, 'scanLinks')
 const linkRef = (linkId) => doc(db, 'scanLinks', linkId)
 
@@ -40,7 +44,7 @@ export function joinScanLink(linkId, phone) {
   return updateDoc(linkRef(linkId), { phone: phoneField(phone) })
 }
 
-export function sendScan(linkId, phone, { orderId, ticketCode = '' }) {
+export function sendScan(linkId, phone, { orderId, ticketCode = '', studentId = '' }) {
   return updateDoc(linkRef(linkId), {
     phone: phoneField(phone),
     scan: {
@@ -48,8 +52,18 @@ export function sendScan(linkId, phone, { orderId, ticketCode = '' }) {
       id: doc(linksRef()).id,
       orderId,
       ticketCode,
+      ...(studentId ? { studentId } : {}),
       at: serverTimestamp(),
       byUid: phone.uid
     }
+  })
+}
+
+// The computer's request to its phones; null clears it
+export function setScanLinkNeed(linkId, need) {
+  return updateDoc(linkRef(linkId), {
+    need: need
+      ? { orderId: need.orderId, name: shortName(need.name), qr: !!need.qr, card: !!need.card, at: serverTimestamp() }
+      : null
   })
 }
