@@ -1,6 +1,5 @@
 // Reads QR codes from the device camera inside the page, so door staff don't
 // need the phone's own scanner app.
-import { acquireCamera, releaseCamera } from './camera.js'
 
 const SCAN_INTERVAL_MS = 150
 // jsQR reads the centre square the viewfinder shows, downscaled to at most
@@ -12,7 +11,7 @@ const MAX_FRAME_SIZE = 800
 // and read by the browser's BarcodeDetector (when it has one) and by jsQR.
 // jsQR always runs, so a BarcodeDetector that exists but finds nothing in
 // camera frames (seen on iOS) can't stop scanning.
-export async function createDecoder() {
+async function createDecoder() {
   const { default: jsQR } = await import('jsqr')
 
   let detector = null
@@ -96,21 +95,37 @@ export async function listCameras() {
 
 // Starts the camera on `video` (the back camera, or `deviceId`) and calls
 // onCode(text) for every QR read. Resolves to { stop, deviceId }; rejects
-// with the camera error. The stream is shared (src/utils/camera.js): stop()
-// lets it go, and it stays open a while for the next page.
+// with the camera error.
 export async function startQrScanner(video, onCode, { deviceId = '' } = {}) {
-  const { stream } = await acquireCamera(deviceId)
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw Object.assign(new Error('getUserMedia unavailable'), { name: 'NotSupportedError' })
+  }
+
+  // A high resolution keeps a QR held far enough away to be in focus
+  // readable; the browser picks the closest size the camera offers
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    }
+  })
   const [track] = stream.getVideoTracks()
+
+  // Chrome on Android can be asked to keep refocusing; Safari focuses itself
+  if (track?.getCapabilities?.().focusMode?.includes('continuous')) {
+    track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
+  }
 
   let stopped = false
   let timer = 0
   let decoder = null
   const stop = () => {
-    if (stopped) return
     stopped = true
     clearTimeout(timer)
+    stream.getTracks().forEach((track) => track.stop())
     if (video.srcObject === stream) video.srcObject = null
-    releaseCamera()
   }
 
   try {

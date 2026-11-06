@@ -23,24 +23,6 @@ export const STREET_SCHOOL = '路宣'
 export const HOME_SCHOOL = '建國中學'
 export const SCHOOL_ACCOUNT_DOMAIN = 'gl.ck.tp.edu.tw'
 
-// A 建中 student's school account is ck{學號}@gl.ck.tp.edu.tw: scanning a
-// student card at the door finds that account's orders. Keep in sync with
-// functions/lib/constants.js
-export const STUDENT_ACCOUNT_PREFIX = 'ck'
-export const STUDENT_ID_LENGTH = [6, 8]
-export const STUDENT_ID_PATTERN = /^[0-9]{6,8}$/
-
-// The 學號 typed or read off a card, or '' when it is not one
-export function cleanStudentId(value) {
-  const id = String(value ?? '').normalize('NFKC').replace(/\s+/g, '')
-  return STUDENT_ID_PATTERN.test(id) ? id : ''
-}
-
-export function studentAccountEmail(studentId) {
-  const id = cleanStudentId(studentId)
-  return id ? `${STUDENT_ACCOUNT_PREFIX}${id}@${SCHOOL_ACCOUNT_DOMAIN}` : ''
-}
-
 // Students of these schools give their class and seat number
 export const CAMPUS_SCHOOLS = [
   '建國中學',
