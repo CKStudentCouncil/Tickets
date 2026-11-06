@@ -2,13 +2,15 @@
   <div class="card-scanner">
     <div class="scanner-card">
       <div class="scanner-card-head">
-        <span>學生證掃描</span>
-        <span class="scanner-status" :class="{ busy: engine !== 'ready' }"><i />{{ engineLabel }}</span>
+        <span>{{ title || (card && qr ? '自動辨識 QR Code／學生證' : card ? '學生證掃描' : '票券 QR Code 掃描') }}</span>
+        <span v-if="card" class="scanner-status" :class="{ busy: engine !== 'ready' }"><i />{{ engineLabel }}</span>
       </div>
+
+      <p v-if="prompt" class="scanner-prompt" role="status">{{ prompt }}</p>
 
       <div class="viewfinder">
         <video ref="video" muted playsinline autoplay aria-label="相機畫面" />
-        <div v-if="phase === 'scanning'" class="card-frame" :class="{ seen: cardSeen }" aria-hidden="true" />
+        <div v-if="phase === 'scanning'" :class="card ? 'card-frame' : 'qr-frame'" :data-seen="cardSeen || null" aria-hidden="true" />
         <p v-if="phase === 'scanning'" class="live-hint" role="status" aria-live="polite">{{ hint }}</p>
 
         <div v-if="phase === 'starting'" class="overlay">
@@ -25,7 +27,7 @@
           <p class="overlay-label">✓ 找到訂單</p>
           <p class="big-name">{{ opening?.customerName || studentId }}</p>
           <p>{{ paired ? '已傳送到電腦' : '開啟訂單中…' }}</p>
-          <button v-if="paired" type="button" class="primary-button" @click="startCamera()">掃描下一張學生證</button>
+          <button v-if="paired" type="button" class="primary-button" @click="startCamera()">掃描下一張</button>
         </div>
 
         <div v-else-if="phase === 'choose'" class="overlay choose" role="dialog" aria-label="選擇訂單">
@@ -60,10 +62,10 @@
         </div>
 
         <div v-else-if="phase === 'error'" class="overlay danger" role="alert">
-          <p class="overlay-label">✕ 查詢失敗</p>
+          <p class="overlay-label">✕ {{ lookupEnabled ? '查詢失敗' : '讀不到學號' }}</p>
           <p class="overlay-note">{{ errorText }}</p>
           <div class="overlay-actions">
-            <button v-if="studentId" type="button" class="primary-button" @click="lookup(studentId)">再查一次</button>
+            <button v-if="lookupEnabled && studentId" type="button" class="primary-button" @click="lookup(studentId)">再查一次</button>
             <button type="button" class="secondary-button" @click="startCamera()">重新掃描</button>
           </div>
         </div>
@@ -75,8 +77,8 @@
       </div>
 
       <div v-if="cameras.length > 1" class="camera-row">
-        <label for="card-camera">鏡頭</label>
-        <select id="card-camera" :value="currentCamera" @change="switchCamera($event.target.value)">
+        <label :for="`camera-${uid}`">鏡頭</label>
+        <select :id="`camera-${uid}`" :value="currentCamera" @change="switchCamera($event.target.value)">
           <option v-for="(camera, index) in cameras" :key="camera.deviceId" :value="camera.deviceId">
             {{ camera.label || `鏡頭 ${index + 1}` }}
           </option>
@@ -84,15 +86,18 @@
       </div>
 
       <p class="scanner-caption">
-        <span>02</span> 學生證橫放在框內拿穩，讀到學號會自動查訂單；手指壓到卡片邊角沒關係，別蓋住學號
+        <span>{{ card && qr ? '01' : card ? '02' : '01' }}</span>
+        <template v-if="card && qr">票券 QR Code 或學生證都可以，放進框內會自動辨識；學生證橫放拿穩，別蓋住學號</template>
+        <template v-else-if="card">學生證橫放在框內拿穩，讀到學號會自動{{ lookupEnabled ? '查訂單' : '核對' }}；手指壓到卡片邊角沒關係，別蓋住學號</template>
+        <template v-else>將票券 QR Code 放入框線內，系統會自動辨識</template>
       </p>
     </div>
 
-    <form class="manual" @submit.prevent="lookup(studentId)">
-      <label for="student-id">讀不到時，輸入學號</label>
+    <form v-if="card" class="manual" @submit.prevent="submitId">
+      <label :for="`student-id-${uid}`">讀不到時，輸入學號</label>
       <div class="manual-row">
         <input
-          id="student-id"
+          :id="`student-id-${uid}`"
           ref="idInput"
           v-model="studentId"
           inputmode="numeric"
@@ -102,39 +107,58 @@
           :aria-invalid="!!formError"
           @input="formError = ''"
         >
-        <button type="submit" class="secondary-button" :disabled="phase === 'looking'">查詢訂單</button>
+        <button type="submit" class="secondary-button" :disabled="phase === 'looking'">{{ lookupEnabled ? '查詢訂單' : '核對學號' }}</button>
         <label class="secondary-button photo-button">
           拍照
           <input type="file" accept="image/*" capture="environment" @change="readPhoto">
         </label>
       </div>
       <p v-if="formError" class="manual-error" role="alert">{{ formError }}</p>
-      <p class="manual-help">會查 Email 為 ck{學號}@gl.ck.tp.edu.tw 的訂單。學生證可以影印或翻拍，領票前務必核對證件照片與本人。</p>
+      <p class="manual-help">
+        {{ lookupEnabled ? '會查 Email 為 ck{學號}@gl.ck.tp.edu.tw 的訂單。' : '學號要和訂單 Email ck{學號}@gl.ck.tp.edu.tw 相符。' }}學生證可以影印或翻拍，領票前務必核對證件照片與本人。
+      </p>
     </form>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { findStudentOrders } from 'src/services/orderService'
 import { cleanStudentId, STUDENT_ID_LENGTH } from 'src/data/schools'
-import { cameraErrorMessage } from 'src/utils/qrScanner'
+import { acquireCamera, releaseCamera } from 'src/utils/camera'
+import { cameraErrorMessage, createDecoder, listCameras } from 'src/utils/qrScanner'
 import { createStudentIdReader } from 'src/utils/studentIdOcr'
 
+// The check-in camera: reads 建中 student cards (`card`), ticket QR codes
+// (`qr`), or both at once, so staff can scan either first.
 const props = defineProps({
   deviceId: { type: String, default: '' },
   // paired with a computer: an order found is sent there, and this page
   // stays for the next card
-  paired: { type: Boolean, default: false }
+  paired: { type: Boolean, default: false },
+  card: { type: Boolean, default: true },
+  qr: { type: Boolean, default: false },
+  // look up the orders of a card's 學號 (`open`); off, the 學號 is handed
+  // over as read (`read`), for the order page to compare
+  lookup: { type: Boolean, default: true },
+  // an order the lookup opens at once when the student has it
+  preferOrderId: { type: String, default: '' },
+  title: { type: String, default: '' },
+  // what staff are asked for, above the camera (e.g. whose card)
+  prompt: { type: String, default: '' }
 })
-// `camera`: the deviceId picked, so the page reuses it next time
-const emit = defineEmits(['open', 'camera'])
+// `open({ orderId, studentId })`: found by lookup | `read({ studentId, candidates })`:
+// lookup off | `qr(text)`: every QR code in view (the page decides) |
+// `camera(deviceId)`: the one picked, so the page reuses it next time
+const emit = defineEmits(['open', 'read', 'qr', 'camera'])
 
 // a pause between camera frames, so the phone stays responsive
 const FRAME_GAP_MS = 150
+const QR_GAP_MS = 150
 // one reading this sure is enough; otherwise two frames in a row must agree
 const SURE_CONFIDENCE = 92
 
+const uid = Math.random().toString(36).slice(2, 8)
 const video = ref(null)
 const idInput = ref(null)
 // starting | scanning | looking | opening | choose | none | error | stopped
@@ -153,20 +177,24 @@ const opening = ref(null)
 const cameras = ref([])
 const currentCamera = ref('')
 
+const lookupEnabled = computed(() => props.lookup)
 const engineLabel = computed(() => ({ loading: '載入辨識引擎…', ready: '辨識引擎就緒', failed: '辨識引擎載入失敗' })[engine.value])
+const idleHint = () => (props.card && props.qr ? '把 QR Code 或學生證放進框內' : props.card ? '把學生證放進框內' : '把票券 QR Code 放進框內')
 
-const reader = createStudentIdReader({ idLength: STUDENT_ID_LENGTH })
+let reader = null
 let stream = null
 let sequence = 0
 let lastRead = ''
 let unmounted = false
+let qrDecoder = null
 
 function itemsText(order) {
   return order.items.map((item) => `${item.name} × ${item.quantity}`).join('、')
 }
 
-// The camera stays open between cards: some browsers (Firefox) ask for
-// permission again every time it is reopened
+// The camera is shared with the other check-in pages (src/utils/camera.js)
+// and stays open between cards: some browsers (Firefox) ask for permission
+// again every time it is reopened
 async function startCamera(deviceId = currentCamera.value || props.deviceId) {
   pauseReading()
   const run = sequence
@@ -175,42 +203,24 @@ async function startCamera(deviceId = currentCamera.value || props.deviceId) {
   opening.value = null
   otherReads.value = []
   if (stream?.getVideoTracks().some((track) => track.readyState === 'live')) {
-    phase.value = 'scanning'
-    lastRead = ''
-    hint.value = '把學生證放進框內'
-    loop(run)
+    beginReading(run)
     return
   }
-  stopTracks()
+  dropStream()
   phase.value = 'starting'
   try {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw Object.assign(new Error('getUserMedia unavailable'), { name: 'NotSupportedError' })
-    }
-    const media = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      }
-    })
+    const camera = await acquireCamera(deviceId)
     if (run !== sequence || unmounted) {
-      media.getTracks().forEach((track) => track.stop())
+      releaseCamera()
       return
     }
-    stream = media
-    currentCamera.value = media.getVideoTracks()[0]?.getSettings().deviceId || deviceId
+    stream = camera.stream
+    currentCamera.value = camera.deviceId
     // names are known once access is granted
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
-      cameras.value = devices.filter((device) => device.kind === 'videoinput' && device.deviceId)
-    }).catch(() => {})
-    video.value.srcObject = media
+    listCameras().then((list) => { cameras.value = list }).catch(() => {})
+    video.value.srcObject = stream
     await video.value.play().catch(() => {})
-    phase.value = 'scanning'
-    lastRead = ''
-    hint.value = engine.value === 'ready' ? '把學生證放進框內' : '第一次使用要下載辨識引擎（約 15 MB），請稍候…'
-    loop(run)
+    beginReading(run)
   } catch (error) {
     if (run !== sequence) return
     // the saved camera is gone (another phone, unplugged): use the default
@@ -226,30 +236,35 @@ async function startCamera(deviceId = currentCamera.value || props.deviceId) {
   }
 }
 
+function beginReading(run) {
+  phase.value = 'scanning'
+  lastRead = ''
+  hint.value = props.card && engine.value !== 'ready' ? '第一次使用要下載辨識引擎（約 15 MB），請稍候…' : idleHint()
+  if (props.card) loop(run)
+  if (props.qr) qrLoop(run)
+}
+
 // another camera: the open one is closed first (phones allow one at a time)
 function switchCamera(deviceId) {
   if (!deviceId || deviceId === currentCamera.value) return
-  stopCamera()
+  pauseReading()
+  dropStream()
   currentCamera.value = deviceId
   emit('camera', deviceId)
   startCamera(deviceId)
 }
 
-// stops reading frames (the loop sees `sequence`); the camera stays open
+// stops reading frames (the loops see `sequence`); the camera stays open
 function pauseReading() {
   sequence++
   cardSeen.value = false
 }
 
-function stopTracks() {
-  stream?.getTracks().forEach((track) => track.stop())
+function dropStream() {
+  if (!stream) return
   stream = null
   if (video.value) video.value.srcObject = null
-}
-
-function stopCamera() {
-  pauseReading()
-  stopTracks()
+  releaseCamera()
 }
 
 // a still copy of the frame: the video moves on while it is being read
@@ -263,13 +278,19 @@ function snapshot() {
   return canvas
 }
 
+function getReader() {
+  reader ||= createStudentIdReader({ idLength: STUDENT_ID_LENGTH })
+  return reader
+}
+
 // one frame at a time; a slow phone just reads fewer frames. A restarted
 // camera starts a new loop and the old one ends at its next frame
 async function loop(run) {
   try {
-    await reader.ready()
+    await getReader().ready()
     engine.value = 'ready'
-    while (run === sequence && !unmounted) {
+    if (run === sequence && hint.value.startsWith('第一次')) hint.value = idleHint()
+    while (run === sequence && !unmounted && props.card) {
       const frame = snapshot()
       if (frame) {
         const read = await reader.recognize(frame, { quick: true })
@@ -283,7 +304,7 @@ async function loop(run) {
           }
           hint.value = `讀到 ${read.id}，確認中…`
         } else {
-          hint.value = read.cardFound ? '找到學生證，讀取學號中…' : '把學生證放進框內'
+          hint.value = read.cardFound ? '找到學生證，讀取學號中…' : idleHint()
         }
         lastRead = read.id || ''
       }
@@ -293,14 +314,63 @@ async function loop(run) {
     if (run !== sequence) return
     console.error('Student card OCR failed', error)
     engine.value = 'failed'
-    hint.value = '辨識引擎無法載入，請檢查網路，或在下方輸入學號'
+    hint.value = props.qr ? '學生證辨識引擎無法載入；QR Code 仍可掃描，學號請在下方輸入' : '辨識引擎無法載入，請檢查網路，或在下方輸入學號'
+  }
+}
+
+// QR codes are quick to find: checked on their own, much more often than
+// the card is read
+async function qrLoop(run) {
+  try {
+    qrDecoder ||= await createDecoder()
+  } catch (error) {
+    console.error('QR decoder failed to load', error)
+    return
+  }
+  while (run === sequence && !unmounted && props.qr) {
+    const source = video.value
+    if (source?.readyState >= source?.HAVE_CURRENT_DATA && source.videoWidth) {
+      try {
+        const text = await qrDecoder.decode(source)
+        if (text && run === sequence && !unmounted) emit('qr', text)
+      } catch (error) {
+        console.error('QR decode failed', error)
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, QR_GAP_MS))
   }
 }
 
 function accept(id, candidates = []) {
   navigator.vibrate?.(60)
   otherReads.value = candidates.map((c) => c.text).filter((text) => text !== id).slice(0, 3)
-  lookup(id, { keepReads: true })
+  if (props.lookup) {
+    lookup(id, { keepReads: true })
+    return
+  }
+  hand(id)
+}
+
+// lookup off: the page takes the 學號 from here and keeps reading what it
+// still needs
+function hand(id) {
+  studentId.value = id
+  emit('read', { studentId: id, candidates: otherReads.value })
+  startCamera()
+}
+
+function submitId() {
+  if (props.lookup) {
+    lookup(studentId.value)
+    return
+  }
+  const id = cleanStudentId(studentId.value)
+  if (!id) {
+    formError.value = '學號是 6 到 8 位數字'
+    return
+  }
+  formError.value = ''
+  hand(id)
 }
 
 async function readPhoto(event) {
@@ -311,7 +381,7 @@ async function readPhoto(event) {
   phase.value = 'looking'
   studentId.value = '辨識中…'
   try {
-    const read = await reader.recognize(file)
+    const read = await getReader().recognize(file)
     engine.value = 'ready'
     if (read.id) {
       accept(read.id, read.candidates)
@@ -355,7 +425,9 @@ async function lookup(value, { keepReads = false } = {}) {
     const found = await findStudentOrders(id)
     if (run !== sequence || unmounted) return
     result.value = found
-    if (found.orders.length === 1) open(found.orders[0])
+    const preferred = found.orders.find((order) => order.id === props.preferOrderId)
+    if (preferred) open(preferred)
+    else if (found.orders.length === 1) open(found.orders[0])
     else phase.value = found.orders.length ? 'choose' : 'none'
   } catch (error) {
     if (run !== sequence || unmounted) return
@@ -376,6 +448,11 @@ async function editId() {
   idInput.value?.focus()
   idInput.value?.select()
 }
+
+// what to read changed (the page got one of the two): read the rest
+watch(() => [props.card, props.qr], () => {
+  if (phase.value === 'scanning') startCamera()
+})
 
 // in the background only reading pauses: closing the camera would make
 // some browsers ask for permission again. Back in view, a camera the phone
@@ -399,9 +476,13 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unmounted = true
   document.removeEventListener('visibilitychange', onVisibilityChange)
-  stopCamera()
-  reader.terminate()
+  pauseReading()
+  dropStream()
+  reader?.terminate()
 })
+
+// the page restarts reading after it handled a QR code it could not use
+defineExpose({ restart: () => startCamera() })
 </script>
 
 <style scoped>
@@ -459,6 +540,30 @@ onBeforeUnmount(() => {
   display: block;
 }
 
+/* ticket QR codes: the centre square the decoder reads */
+.qr-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 70%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--ember);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .35);
+  pointer-events: none;
+}
+
+.scanner-prompt {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--ember);
+  background: rgba(228, 164, 104, .1);
+  color: var(--off-white);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 /* the 85.6 × 54 mm card shape */
 .card-frame {
   position: absolute;
@@ -474,7 +579,7 @@ onBeforeUnmount(() => {
   transition: border-color .2s;
 }
 
-.card-frame.seen {
+.card-frame[data-seen] {
   border-style: solid;
   border-color: #77bf8b;
 }

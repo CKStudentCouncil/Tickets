@@ -235,15 +235,23 @@ async function statusCall(callable, payload) {
 export function updateOrderDelivery(
   orderId,
   delivered,
-  { ticketCode = '', expectedDelivered, overrideReason = '', studentId = '', studentCardChecked = false } = {}
+  {
+    ticketCode = '', expectedDelivered, overrideReason = '', studentId = '', studentCardChecked = false,
+    skipQr = false, idCheck = null
+  } = {}
 ) {
+  // studentId: the buyer's student card, its photo checked; skipQr: an admin
+  // lets it stand in for a forgotten QR code; idCheck: { method, note },
+  // another check of who collects (src/data/pickup.js)
   return statusCall(deliveryCallable, {
     orderId,
     delivered,
     ticketCode,
     expectedDelivered,
     overrideReason,
-    ...(studentId ? { studentId, studentCardChecked } : {})
+    ...(studentId ? { studentId, studentCardChecked } : {}),
+    ...(skipQr ? { skipQr: true } : {}),
+    ...(idCheck ? { idCheck } : {})
   })
 }
 

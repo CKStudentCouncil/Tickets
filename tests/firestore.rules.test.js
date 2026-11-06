@@ -1429,6 +1429,35 @@ describe('scanLinks (手機掃描、電腦處理)', () => {
     await assertFails(updateDoc(doc(anon(), 'scanLinks', LINK_ID), { phone: phone({ uid: 'anon' }) }))
   })
 
+  test('the computer tells its phones what the order it shows still needs, the way setScanLinkNeed does', async () => {
+    await seed()
+    const need = (fields = {}) => ({ orderId: ORDER_ID, name: '王小明', qr: false, card: true, at: serverTimestamp(), ...fields })
+    await assertSucceeds(updateDoc(linkDoc(desk), { need: need() }))
+    await assertSucceeds(updateDoc(linkDoc(desk), { need: null }))
+    // only the computer that made the link, only `need`, and well formed
+    await assertFails(updateDoc(linkDoc(phoneUser), { need: need() }))
+    await assertFails(updateDoc(linkDoc(desk), { need: need(), phone: phone(desk) }))
+    await assertFails(updateDoc(linkDoc(desk), { need: need(), ownerName: 'x' }))
+    for (const fields of [
+      { orderId: 'not-an-order' },
+      { name: 'x'.repeat(201) },
+      { card: 'yes' },
+      { qr: 1 },
+      { at: Timestamp.now() },
+      { extra: 1 }
+    ]) {
+      await assertFails(updateDoc(linkDoc(desk), { need: need(fields) }), JSON.stringify(fields))
+    }
+    const missing = need()
+    delete missing.qr
+    await assertFails(updateDoc(linkDoc(desk), { need: missing }))
+    // a phone still cannot write it alongside a scan
+    await assertFails(updateDoc(linkDoc(phoneUser), { phone: phone(phoneUser), scan: scan(phoneUser), need: need() }))
+    // an expired link takes nothing
+    await env.withSecurityRulesDisabled((context) => updateDoc(doc(context.firestore(), 'scanLinks', LINK_ID), { createdAt: hoursAgo(13) }))
+    await assertFails(updateDoc(linkDoc(desk), { need: null }))
+  })
+
   test('a scan must say which phone sent it, as itself, at the server time', async () => {
     await seed()
     for (const data of [

@@ -193,3 +193,33 @@ test('取消訂單 reasons, limits and notice counting match src/data/cancellati
     }
   }
 })
+
+test('the order page and updateOrderDelivery agree on which orders need the student card and how else to check', async () => {
+  const page = await import(srcFile('utils/buyerIdentity.js'))
+  const pickup = await import(srcFile('data/pickup.js'))
+  const { requiresStudentCard, ticketTypeMap } = await import('../../lib/studentCards.js')
+  const { ID_CHECK_METHODS, ID_NOTE_MAX } = await import('../../lib/orderActions.js')
+  assert.deepEqual(pickup.ID_CHECK_METHODS.map((method) => method.value), [...ID_CHECK_METHODS])
+  assert.equal(pickup.ID_NOTE_MAX, ID_NOTE_MAX)
+
+  const types = [
+    { id: 'early', name: '早鳥票', eligibleBuyerIdentity: 'campus_students' },
+    { id: 'open', name: '一階票', eligibleBuyerIdentity: 'all' }
+  ]
+  const campus = { school: '建國中學', customerEmail: 'ck1130524@gl.ck.tp.edu.tw' }
+  const orders = [
+    { ...campus, items: [{ ticketTypeId: 'early', quantity: 1 }] },
+    { ...campus, items: [{ ticketTypeId: 'open', quantity: 1 }] },
+    { ...campus, items: [{ ticketTypeId: 'open' }, { id: 'early' }] },
+    { ...campus, items: [{ ticketTypeId: 'removed' }] },
+    { school: '北一女中', customerEmail: 'x@gl.fg.tp.edu.tw', items: [{ ticketTypeId: 'removed' }] },
+    { ...campus, complimentary: true, items: [{ ticketTypeId: 'early' }] },
+    { ...campus, streetSale: true, items: [{ ticketTypeId: 'removed' }] },
+    { ...campus }
+  ]
+  const expected = [true, false, true, true, false, false, false, false]
+  orders.forEach((order, index) => {
+    assert.equal(page.requiresStudentCard(order, types), expected[index], `page ${index}`)
+    assert.equal(requiresStudentCard(order, ticketTypeMap({ types })), expected[index], `server ${index}`)
+  })
+})

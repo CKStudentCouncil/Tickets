@@ -8,6 +8,9 @@ import { isScanLinkExpired, isScanLinkId } from 'src/utils/scanLink'
 // a trip to another page stays paired. `getPhone()` gives { uid, name };
 // `onEnded(message)` is called when the computer ends or the link expires.
 const STORAGE_KEY = 'cksc.scanRemoteLink'
+// what the computer asks for is dropped after this long, in case its tab
+// closed without clearing it
+const NEED_MAX_AGE_MS = 15 * 60 * 1000
 
 function savedLink() {
   try {
@@ -26,6 +29,13 @@ function saveLink(linkId) {
   }
 }
 
+function currentNeed(value) {
+  if (!value?.orderId || (!value.qr && !value.card)) return null
+  const at = value.at?.toDate?.()
+  if (at && Date.now() - at.getTime() > NEED_MAX_AGE_MS) return null
+  return { orderId: value.orderId, name: value.name || '', qr: value.qr === true, card: value.card === true }
+}
+
 // The link is gone or no longer takes scans (the rules deny the write)
 export function isScanLinkClosed(error) {
   return error?.code === 'permission-denied' || error?.code === 'not-found'
@@ -35,6 +45,9 @@ export function useScanRemote({ getPhone, onEnded }) {
   // '' = not paired: this phone opens the orders it scans itself
   const linkId = ref('')
   const ownerName = ref('')
+  // what the order open on the computer still needs:
+  // { orderId, name, qr, card } (scanLinkService.js), or null
+  const need = ref(null)
 
   let unwatch = null
   let pairSequence = 0
@@ -45,6 +58,7 @@ export function useScanRemote({ getPhone, onEnded }) {
     unwatch = null
     linkId.value = ''
     ownerName.value = ''
+    need.value = null
     saveLink('')
   }
 
@@ -62,6 +76,7 @@ export function useScanRemote({ getPhone, onEnded }) {
           onEnded('配對已過期，請在電腦上重新產生 QR Code 再掃一次')
         } else {
           ownerName.value = link.ownerName || ''
+          need.value = currentNeed(link.need)
         }
       },
       (error) => console.error('Scan link listener failed', error)
@@ -101,5 +116,5 @@ export function useScanRemote({ getPhone, onEnded }) {
     unwatch = null
   })
 
-  return { linkId, ownerName, pair, restore, leave, send }
+  return { linkId, ownerName, need, pair, restore, leave, send }
 }

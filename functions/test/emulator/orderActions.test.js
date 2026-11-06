@@ -98,17 +98,68 @@ describe('掃描學生證', () => {
     await assert.rejects(findByCard({ studentId: 'ck1130524' }, as('manager1')), { code: 'invalid-argument' })
   })
 
-  test('a matching, checked student card stands in for the QR code', async () => {
-    const card = (extra) => collect({ ticketCode: '', studentId: '1130524', studentCardChecked: true, ...extra })
-    for (const extra of [{ studentCardChecked: false }, { studentCardChecked: 'yes' }, { studentId: '1130525' }, { studentId: '113052' }]) {
-      await assert.rejects(deliver(card(extra), as('manager1')), { code: 'permission-denied' }, JSON.stringify(extra))
+  test('a ticket type for 建中 students needs the student card as well as the QR code', async () => {
+    await db.doc('settings/ticketTypes').set({ types: [{ id: 'early', name: '早鳥票', eligibleBuyerIdentity: 'campus_students' }] })
+    await ref().update({ items: [{ id: 'early', ticketTypeId: 'early', name: '早鳥票', quantity: 1 }] })
+    const card = { studentId: '1130524', studentCardChecked: true }
+    // the QR code alone, or with a card that is not this buyer's or not checked
+    for (const extra of [{}, { ...card, studentCardChecked: false }, { ...card, studentId: '1130525' }, { overrideReason: 'manager cannot' }]) {
+      await assert.rejects(deliver(collect(extra), as('manager1')), { code: 'failed-precondition' }, JSON.stringify(extra))
+    }
+    // the card alone: a manager still needs the QR code
+    await assert.rejects(deliver(collect({ ticketCode: '', ...card }), as('manager1')), { code: 'permission-denied' })
+    await assert.rejects(deliver(collect({ ticketCode: '', ...card, skipQr: true }), as('manager1')), { code: 'permission-denied' })
+    // other checks: a known method, and a note for 其他
+    for (const idCheck of [{ method: 'passport' }, 'kuclass', { method: 'other' }, { method: 'other', note: '   ' }, { method: 'kuclass', note: 'x'.repeat(201) }]) {
+      await assert.rejects(deliver(collect({ idCheck }), as('manager1')), (error) => ['invalid-argument', 'failed-precondition'].includes(error.code), JSON.stringify(idCheck))
     }
     assert.equal((await ref().collection('history').get()).size, 0)
-    await deliver(card(), as('manager1'))
+
+    await deliver(collect(card), as('manager1'))
     const event = (await ref().collection('history').get()).docs[0].data()
-    assert.equal(event.codeVerification, 'student_card')
+    assert.equal(event.codeVerification, 'verified')
+    assert.equal(event.idVerification, 'student_card')
     assert.equal(event.studentId, '1130524')
-    assert.equal((await ref().get()).data().delivered, true)
+  })
+
+  test('staff record another check when the card cannot be scanned', async () => {
+    await db.doc('settings/ticketTypes').set({ types: [{ id: 'early', name: '早鳥票', eligibleBuyerIdentity: 'campus_students' }] })
+    await ref().update({ items: [{ id: 'early', ticketTypeId: 'early', name: '早鳥票', quantity: 1 }] })
+    await deliver(collect({ idCheck: { method: 'other', note: '  學生證補辦中，核對身分證  ' } }), as('manager1'))
+    const event = (await ref().collection('history').get()).docs[0].data()
+    assert.equal(event.codeVerification, 'verified')
+    assert.equal(event.idVerification, 'other')
+    assert.equal(event.idNote, '學生證補辦中，核對身分證')
+  })
+
+  test('admins: the student card stands in for a forgotten QR code; an override covers both', async () => {
+    await db.doc('settings/ticketTypes').set({ types: [{ id: 'early', name: '早鳥票', eligibleBuyerIdentity: 'campus_students' }] })
+    await ref().update({ items: [{ id: 'early', ticketTypeId: 'early', name: '早鳥票', quantity: 1 }] })
+    const card = { ticketCode: '', studentId: '1130524', studentCardChecked: true }
+    // without saying the card stands in, an admin is asked for a reason
+    await assert.rejects(deliver(collect(card), as('admin')), { code: 'failed-precondition' })
+    await assert.rejects(deliver(collect({ ...card, studentId: '1130525', skipQr: true }), as('admin')), { code: 'failed-precondition' })
+    await deliver(collect({ ...card, skipQr: true }), as('admin'))
+    let event = (await ref().collection('history').get()).docs[0].data()
+    assert.equal(event.codeVerification, 'student_card')
+    assert.equal(event.idVerification, 'student_card')
+
+    await deliver({ orderId: ORDER_ID, delivered: false, expectedDelivered: true, overrideReason: 'Reset' }, as('admin'))
+    await deliver(collect({ ticketCode: '', overrideReason: '核對身分證' }), as('admin'))
+    const history = await ref().collection('history').orderBy('occurredAt', 'desc').limit(1).get()
+    event = history.docs[0].data()
+    assert.equal(event.codeVerification, 'admin_override')
+    assert.equal(event.idVerification, 'admin_override')
+  })
+
+  test('other orders: the QR code is enough; a manager\'s student card no longer replaces it', async () => {
+    await db.doc('settings/ticketTypes').set({ types: [{ id: 'open', name: '一階票', eligibleBuyerIdentity: 'all' }] })
+    await ref().update({ items: [{ id: 'open', ticketTypeId: 'open', name: '一階票', quantity: 1 }] })
+    await assert.rejects(deliver(collect({ ticketCode: '', studentId: '1130524', studentCardChecked: true }), as('manager1')), { code: 'permission-denied' })
+    await deliver(collect(), as('manager1'))
+    const event = (await ref().collection('history').get()).docs[0].data()
+    assert.equal(event.codeVerification, 'verified')
+    assert.equal(event.idVerification, undefined)
   })
 })
 

@@ -677,6 +677,18 @@ service cloud.firestore {
         && scan.byUid == request.auth.uid;
     }
 
+    function isValidScanLinkNeed(need) {
+      return need == null || (need is map
+        && need.keys().hasAll(['orderId', 'name', 'qr', 'card', 'at'])
+        && need.keys().hasOnly(['orderId', 'name', 'qr', 'card', 'at'])
+        && need.orderId is string
+        && need.orderId.matches('[A-Z]{1,4}[0-9]{8}([0-9]{4}|[A-HJ-NP-Z2-9]{6})')
+        && isShortString(need.name, 200)
+        && need.qr is bool
+        && need.card is bool
+        && need.at == request.time);
+    }
+
     match /scanLinks/{linkId} {
       allow get: if isManager();
       allow list: if false;
@@ -688,13 +700,17 @@ service cloud.firestore {
         && isShortString(request.resource.data.ownerName, 200)
         && request.resource.data.createdAt == request.time;
 
-      // phones: every write says which phone it is; a scan comes with one
+      // phones: every write says which phone it is; a scan comes with one.
+      // The computer: what the order it shows still needs (scanLinkService.js)
       allow update: if isManager()
         && request.time < resource.data.createdAt + duration.value(12, 'h')
-        && onlyChanges(['phone', 'scan'])
-        && isValidScanLinkPhone(request.resource.data.phone)
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['scan'])
-          || isValidScanLinkScan(request.resource.data.scan));
+        && ((onlyChanges(['phone', 'scan'])
+            && isValidScanLinkPhone(request.resource.data.phone)
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['scan'])
+              || isValidScanLinkScan(request.resource.data.scan)))
+          || (resource.data.ownerUid == request.auth.uid
+            && onlyChanges(['need'])
+            && isValidScanLinkNeed(request.resource.data.need)));
 
       // the computer ends its own link; super admins clear old ones
       allow delete: if (isManager() && resource.data.ownerUid == request.auth.uid)
