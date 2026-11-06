@@ -74,6 +74,15 @@
         </div>
       </div>
 
+      <div v-if="cameras.length > 1" class="camera-row">
+        <label for="card-camera">鏡頭</label>
+        <select id="card-camera" :value="currentCamera" @change="switchCamera($event.target.value)">
+          <option v-for="(camera, index) in cameras" :key="camera.deviceId" :value="camera.deviceId">
+            {{ camera.label || `鏡頭 ${index + 1}` }}
+          </option>
+        </select>
+      </div>
+
       <p class="scanner-caption">
         <span>02</span> 學生證橫放在框內拿穩，讀到學號會自動查訂單；手指壓到卡片邊角沒關係，別蓋住學號
       </p>
@@ -118,7 +127,8 @@ const props = defineProps({
   // stays for the next card
   paired: { type: Boolean, default: false }
 })
-const emit = defineEmits(['open'])
+// `camera`: the deviceId picked, so the page reuses it next time
+const emit = defineEmits(['open', 'camera'])
 
 // a pause between camera frames, so the phone stays responsive
 const FRAME_GAP_MS = 150
@@ -140,6 +150,8 @@ const formError = ref('')
 const errorText = ref('')
 const result = ref(null)
 const opening = ref(null)
+const cameras = ref([])
+const currentCamera = ref('')
 
 const engineLabel = computed(() => ({ loading: '載入辨識引擎…', ready: '辨識引擎就緒', failed: '辨識引擎載入失敗' })[engine.value])
 
@@ -155,7 +167,7 @@ function itemsText(order) {
 
 // The camera stays open between cards: some browsers (Firefox) ask for
 // permission again every time it is reopened
-async function startCamera(deviceId = props.deviceId) {
+async function startCamera(deviceId = currentCamera.value || props.deviceId) {
   pauseReading()
   const run = sequence
   cameraError.value = ''
@@ -188,6 +200,11 @@ async function startCamera(deviceId = props.deviceId) {
       return
     }
     stream = media
+    currentCamera.value = media.getVideoTracks()[0]?.getSettings().deviceId || deviceId
+    // names are known once access is granted
+    navigator.mediaDevices.enumerateDevices().then((devices) => {
+      cameras.value = devices.filter((device) => device.kind === 'videoinput' && device.deviceId)
+    }).catch(() => {})
     video.value.srcObject = media
     await video.value.play().catch(() => {})
     phase.value = 'scanning'
@@ -196,10 +213,26 @@ async function startCamera(deviceId = props.deviceId) {
     loop(run)
   } catch (error) {
     if (run !== sequence) return
+    // the saved camera is gone (another phone, unplugged): use the default
+    if (deviceId) {
+      currentCamera.value = ''
+      emit('camera', '')
+      startCamera('')
+      return
+    }
     console.error('Camera failed to start', error)
     cameraError.value = cameraErrorMessage(error)
     phase.value = 'stopped'
   }
+}
+
+// another camera: the open one is closed first (phones allow one at a time)
+function switchCamera(deviceId) {
+  if (!deviceId || deviceId === currentCamera.value) return
+  stopCamera()
+  currentCamera.value = deviceId
+  emit('camera', deviceId)
+  startCamera(deviceId)
 }
 
 // stops reading frames (the loop sees `sequence`); the camera stays open
@@ -475,6 +508,28 @@ onBeforeUnmount(() => {
 
 .mono {
   font-family: monospace;
+}
+
+.camera-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 4px 0;
+  color: var(--lunar);
+  font-size: 12px;
+}
+
+.camera-row select {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface-soft);
+  color: var(--off-white);
+  font-family: inherit;
+  font-size: 13px;
 }
 
 .scanner-caption {

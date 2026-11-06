@@ -44,7 +44,7 @@
       </div>
 
       <template v-if="mode === 'card'">
-        <StudentCardScanner :device-id="savedCamera()" :paired="!!remoteLink" @open="openFromCard" />
+        <StudentCardScanner :device-id="savedCamera()" :paired="!!remoteLink" @open="openFromCard" @camera="saveCamera" />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
       </template>
 
