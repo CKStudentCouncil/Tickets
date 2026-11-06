@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { db, HttpsError } from './common.js'
 import { REGION, ROLE_RANK } from './constants.js'
 import { ORDER_ID_PATTERN } from './orderValidation.js'
+import { cleanStudentId, requiresStudentCard, studentAccountEmail, ticketTypeMap } from './studentCards.js'
 
 function actionInput(data, field, expectedField) {
   if (typeof data?.orderId !== 'string' || !ORDER_ID_PATTERN.test(data.orderId)) {
@@ -80,19 +81,59 @@ async function changeStatus(data, context, { field, expectedField, prefix, minRo
   })
 }
 
-function verifyDelivery({ data, input, order, rank }) {
+// Other ways staff may check who is collecting, when the student card can't
+// be scanned (ID_CHECK_METHODS in src/data/pickup.js)
+export const ID_CHECK_METHODS = new Set(['kuclass', 'other_id', 'other'])
+export const ID_NOTE_MAX = 200
+
+// { idVerification, idNote? } from data.idCheck, or null when none was given
+function idCheckException(data) {
+  const check = data.idCheck
+  if (check === undefined || check === null) return null
+  if (typeof check !== 'object' || !ID_CHECK_METHODS.has(check.method)) {
+    throw new HttpsError('invalid-argument', '查驗方式無效')
+  }
+  const note = typeof check.note === 'string' ? check.note.trim() : ''
+  if (note.length > ID_NOTE_MAX) throw new HttpsError('invalid-argument', `查驗說明最多 ${ID_NOTE_MAX} 字`)
+  if (check.method === 'other' && !note) throw new HttpsError('failed-precondition', '選「其他」時請寫下怎麼查驗身分')
+  return { idVerification: check.method, ...(note ? { idNote: note } : {}) }
+}
+
+// Collecting checks two things. The ticket: its QR code, or an admin's
+// override. Who collects, for orders with a 限建中在學學生 type: the buyer's
+// student card (學號 = the order's school account, photo checked by staff),
+// another check staff record (酷課雲, another ID), or an admin's override.
+// Either may come first at the desk; both arrive together here.
+function verifyDelivery({ data, input, order, rank }, ticketTypes) {
   if (!input.value) {
     if (rank < ROLE_RANK.admin) throw new HttpsError('permission-denied', '只有管理員可以重設領票狀態')
     return { codeVerification: 'not_required', overrideReason: requireOverrideReason(data) }
   }
 
+  const isAdmin = rank >= ROLE_RANK.admin
+  const studentId = cleanStudentId(data.studentId)
+  const cardOk = !!studentId && data.studentCardChecked === true && order.customerEmail === studentAccountEmail(studentId)
+  const override = isAdmin && typeof data.overrideReason === 'string' && data.overrideReason.trim()
+
+  let code
   if (typeof data.ticketCode === 'string' && typeof order.ticketCode === 'string' && order.ticketCode && data.ticketCode === order.ticketCode) {
-    return { codeVerification: 'verified' }
+    code = { codeVerification: 'verified' }
+  } else if (isAdmin && cardOk && data.skipQr === true) {
+    // 忘了 QR Code: an admin lets the student card stand in for it
+    code = { codeVerification: 'student_card' }
+  } else if (isAdmin) {
+    code = { codeVerification: 'admin_override', overrideReason: requireOverrideReason(data) }
+  } else {
+    throw new HttpsError('permission-denied', '請掃描有效的票券 QR Code；購票人忘了 QR Code 或驗證不符需由管理員處理')
   }
-  if (rank < ROLE_RANK.admin) {
-    throw new HttpsError('permission-denied', '請掃描有效的票券 QR Code；驗證不符需由管理員核對身分')
-  }
-  return { codeVerification: 'admin_override', overrideReason: requireOverrideReason(data) }
+
+  const card = cardOk ? { idVerification: 'student_card', studentId } : null
+  if (!requiresStudentCard(order, ticketTypes)) return { ...code, ...card }
+  if (card) return { ...code, ...card }
+  const exception = idCheckException(data)
+  if (exception) return { ...code, ...exception }
+  if (override) return { ...code, idVerification: 'admin_override', overrideReason: requireOverrideReason(data) }
+  throw new HttpsError('failed-precondition', '此訂單含限建中在學學生的票種：請掃描購票人的學生證，或選擇其他查驗方式')
 }
 
 function requireOverrideReason(data) {
@@ -102,11 +143,20 @@ function requireOverrideReason(data) {
   return data.overrideReason.trim()
 }
 
-export const updateOrderDelivery = functions.region(REGION).https.onCall((data, context) =>
-  changeStatus(data, context, {
-    field: 'delivered', expectedField: 'expectedDelivered', prefix: 'delivery', minRole: 'manager', verify: verifyDelivery
+export const updateOrderDelivery = functions.region(REGION).https.onCall(async (data, context) => {
+  // which ticket types need the student card; read once, outside the
+  // transaction, as createOrder's stock transactions read it too
+  const ticketTypes = data?.delivered === true && context.auth?.uid
+    ? ticketTypeMap((await db.doc('settings/ticketTypes').get()).data())
+    : new Map()
+  return changeStatus(data, context, {
+    field: 'delivered',
+    expectedField: 'expectedDelivered',
+    prefix: 'delivery',
+    minRole: 'manager',
+    verify: (args) => verifyDelivery(args, ticketTypes)
   })
-)
+})
 
 export const updateOrderPayment = functions.region(REGION).https.onCall((data, context) =>
   changeStatus(data, context, {
