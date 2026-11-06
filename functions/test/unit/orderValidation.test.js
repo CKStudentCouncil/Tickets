@@ -214,6 +214,25 @@ describe('checkTicketType', () => {
     }
   })
 
+  test('測試票: admins (建班幹部 and above) only, before anything else is checked', () => {
+    const testType = { ...ticketType, eligibleBuyerIdentity: 'admins_only' }
+    const buyer = { ...ok, email: 'a@gmail.com' }
+    for (const roleRank of [2, 3, 4]) {
+      assert.doesNotThrow(() => checkTicketType(testType, 1, { ...buyer, roleRank }))
+    }
+    for (const roleRank of [undefined, 0, 1, '2', NaN]) {
+      expectHttpsError(() => checkTicketType(testType, 1, { ...buyer, roleRank }), 'permission-denied')
+    }
+    // other buyers are not told when its sale opens
+    const later = { ...testType, salesStartTime: '2026-11-20T12:00:00+08:00' }
+    expectHttpsError(() => checkTicketType(later, 1, buyer), 'permission-denied')
+    expectHttpsError(() => checkTicketType(later, 1, { ...buyer, roleRank: 2 }), 'failed-precondition')
+    // the sale window and per-person limit still hold for admins
+    expectHttpsError(() => checkTicketType(testType, 1, { ...buyer, roleRank: 2, alreadyBought: 4 }), 'failed-precondition')
+    // other types don't need a rank
+    assert.doesNotThrow(() => checkTicketType(ticketType, 1, buyer))
+  })
+
   test('isSchoolAccount matches the whole domain only', () => {
     assert.equal(isSchoolAccount('S1234@GL.CK.TP.EDU.TW'), true)
     assert.equal(isSchoolAccount('s1234@gl.ck.tp.edu.tw.evil.com'), false)

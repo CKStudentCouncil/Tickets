@@ -41,6 +41,10 @@
           每人限購 {{ purchaseLimit }} 張
         </p>
 
+        <p v-if="isTestTicket" class="ticket-limit">
+          測試票：只有管理員看得到、也只有管理員能購買，一般使用者不會看到這個票種
+        </p>
+
         <p v-if="isCampusTicket" class="ticket-limit">
           限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，領票時須出示建中學生證
         </p>
@@ -259,6 +263,7 @@ import {
   fetchTicketTypes,
   getPurchaseLimit,
   getTicketStatus,
+  isAdminOnlyType,
   isTicketTypeListed
 } from 'src/services/ticketTypeService'
 import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
@@ -281,12 +286,15 @@ const loadError = ref(false)
 // ticks every second so the buy button appears the moment sales open (PARTY-24)
 const now = useNow(1000)
 
-// a type hidden until sales open reads as 找不到 until then
+// a type hidden until sales open reads as 找不到 until then; so does a
+// 測試票 for anyone but admins
 const ticketType = computed(() => {
   const type = ticketTypes.value.find((t) => t.id === route.params.id)
 
-  return type && isTicketTypeListed(type, now.value) ? type : null
+  return type && isTicketTypeListed(type, now.value, { isAdmin: auth.isAdmin }) ? type : null
 })
+
+const isTestTicket = computed(() => isAdminOnlyType(ticketType.value))
 
 const status = computed(() =>
   ticketType.value ? getTicketStatus(ticketType.value, now.value, soldOut.value) : null

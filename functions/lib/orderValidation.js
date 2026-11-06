@@ -8,7 +8,8 @@ import {
   HOME_SCHOOL,
   SCHOOL_ACCOUNT_DOMAIN,
   ELIGIBLE_IDENTITIES,
-  BUYER_TYPES
+  BUYER_TYPES,
+  ROLE_RANK
 } from './constants.js'
 import { parseTaipeiDateTime } from './time.js'
 
@@ -68,6 +69,11 @@ export function isEduAccount(email) {
 // (`studentDeclared`) to buy a type sold to students first
 export function getBuyerType(email, studentDeclared = false) {
   return isEduAccount(email) || studentDeclared === true ? BUYER_TYPES.STUDENT : BUYER_TYPES.PUBLIC
+}
+
+// 測試票: only admins (建班幹部 and above) see and buy it
+export function isAdminOnlyType(ticketType) {
+  return ticketType?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.ADMINS_ONLY
 }
 
 // 學生優先購買至: before this time only school accounts may buy the type
@@ -269,9 +275,17 @@ export function planShards({ caps, sold, quantity, random }) {
 }
 
 // Throws when this type is not on sale now or not for this buyer. `email` is
-// the verified account email. Also checked before the transaction, so a
-// buyer is told this rather than that the type is sold out.
-export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared }) {
+// the verified account email, `roleRank` the buyer's staff rank (ROLE_RANK,
+// 0 for buyers who are not staff; only needed for 測試票). Also checked
+// before the transaction, so a buyer is told this rather than that the type
+// is sold out.
+export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared, roleRank = 0 }) {
+  // 測試票: checked first, so other buyers learn nothing about its sale
+  // window; the storefront doesn't list it for them either
+  if (isAdminOnlyType(ticketType) && !(Number.isInteger(roleRank) && roleRank >= ROLE_RANK.admin)) {
+    throw new HttpsError('permission-denied', `${ticketType.name}為測試票，僅限管理員購買`)
+  }
+
   const start = parseTaipeiDateTime(ticketType.salesStartTime)
   const end = parseTaipeiDateTime(ticketType.salesEndTime)
 
@@ -316,8 +330,8 @@ export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed
 // Throws when this buyer may not buy `quantity` tickets of this type now.
 // `alreadyBought` comes from the counter read in the transaction. Stock is
 // checked by allocateStock.
-export function checkTicketType(ticketType, quantity, { now, school, email, studentConfirmed, studentDeclared, alreadyBought }) {
-  checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared })
+export function checkTicketType(ticketType, quantity, { now, school, email, studentConfirmed, studentDeclared, roleRank, alreadyBought }) {
+  checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared, roleRank })
 
   const limit = getPurchaseLimit(ticketType)
 

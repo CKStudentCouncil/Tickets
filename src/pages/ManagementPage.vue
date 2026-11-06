@@ -178,7 +178,15 @@
                 <option value="all_users">
                   所有使用者
                 </option>
+
+                <option value="admins_only">
+                  測試票（僅管理員）
+                </option>
               </select>
+
+              <small v-if="ticketType.eligibleBuyerIdentity === 'admins_only'" class="time-summary">
+                只有管理員（建班幹部以上）看得到、也只有管理員能買，一般使用者看不到
+              </small>
             </label>
 
             <div class="field ticket-time-field">

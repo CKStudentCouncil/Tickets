@@ -83,7 +83,7 @@
             <span>扣除票種（二售）</span>
             <select v-model="programForm.ticketTypeId" class="select-field" :disabled="!auth.isSuperAdmin">
               <option value="">請選擇票種</option>
-              <option v-for="type in ticketTypes" :key="type.id" :value="type.id">
+              <option v-for="type in sellableTypes" :key="type.id" :value="type.id">
                 {{ type.name }}{{ type.unlimitedStock ? '（不限量）' : `（總量 ${type.totalTicketQuantity || 0}）` }}
               </option>
             </select>
@@ -396,7 +396,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { fetchTicketTypes } from 'src/services/ticketTypeService'
+import { fetchTicketTypes, isAdminOnlyType } from 'src/services/ticketTypeService'
 import {
   addPayment,
   addPickup,
@@ -460,6 +460,8 @@ const EMAIL_PATTERN = /^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/
 
 const amountOf = (item) => (Number(item.price) || 0) * (Number(item.quantity) || 0)
 const ticketTypeName = (id) => ticketTypes.value.find((type) => type.id === id)?.name || ''
+// 測試票 are for admins only (registerSellerTickets refuses them)
+const sellableTypes = computed(() => ticketTypes.value.filter((type) => !isAdminOnlyType(type)))
 
 const goalPercent = computed(() =>
   savedProgram.value.goal > 0 ? Math.min(100, (total.value / savedProgram.value.goal) * 100) : 0
