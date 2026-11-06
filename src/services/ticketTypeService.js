@@ -5,7 +5,9 @@ import { parseDate } from 'src/utils/datetime'
 // Single source of ticket configuration; also read by functions/lib/orders.js
 const ticketTypesRef = () => doc(db, 'settings', 'ticketTypes')
 
-export { ELIGIBLE_IDENTITIES } from 'src/data/ticketTypes'
+import { isAdminOnlyType } from 'src/data/ticketTypes'
+
+export { ELIGIBLE_IDENTITIES, isAdminOnlyType } from 'src/data/ticketTypes'
 
 export async function fetchTicketTypes() {
   const snapshot = await getDoc(ticketTypesRef())
@@ -80,7 +82,11 @@ export function getTicketStatus(ticketType, now = new Date(), soldOut = {}) {
 // out before the announcement, unless the admin unticked 開賣前隱藏
 // (hideUntilSale: false). A missing flag counts as hidden. Once sales have
 // opened the type stays listed, also after they end; it just can't be bought.
-export function isTicketTypeListed(ticketType, now = new Date()) {
+// 測試票 are listed for admins only (`isAdmin`); createOrder refuses them to
+// everyone else.
+export function isTicketTypeListed(ticketType, now = new Date(), { isAdmin = false } = {}) {
+  if (isAdminOnlyType(ticketType) && !isAdmin) return false
+
   const { state } = getTicketStatus(ticketType, now)
 
   if (state !== 'upcoming' && state !== 'unavailable') return true

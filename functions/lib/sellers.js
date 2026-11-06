@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 
 import { db, HttpsError } from './common.js'
 import { MAX_SELLER_TICKETS, REGION, ROLE_RANK } from './constants.js'
-import { TICKET_TYPE_ID_PATTERN, isValidRequestId } from './orderValidation.js'
+import { TICKET_TYPE_ID_PATTERN, isAdminOnlyType, isValidRequestId } from './orderValidation.js'
 import { STOCK_GATE_SECRETS, resetStockGate } from './stockGate.js'
 import {
   clearSoldOut,
@@ -106,6 +106,10 @@ export const registerSellerTickets = functions
 
         const ticketTypes = ticketTypesOf(settingsSnap)
         const ticketType = ticketTypeOf(ticketTypes, ticketTypeId)
+        // 測試票 are for admins only, and sellers are students
+        if (isAdminOnlyType(ticketType)) {
+          throw new HttpsError('failed-precondition', `${ticketType.name}為測試票，不能登記賣票`)
+        }
         const legacySnap = await tx.get(legacyRef(ticketTypeId))
 
         // Every shard is locked: registrations are rare, and this makes

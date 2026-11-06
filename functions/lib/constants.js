@@ -43,9 +43,12 @@ export const CAMPUS_SCHOOLS = new Set([
   '師大附中'
 ])
 
+// Keep in sync with src/data/ticketTypes.js
 export const ELIGIBLE_IDENTITIES = {
   CAMPUS_STUDENTS: 'campus_students',
-  ALL_USERS: 'all_users'
+  ALL_USERS: 'all_users',
+  // 測試票: only admins (建班幹部 and above) may buy it
+  ADMINS_ONLY: 'admins_only'
 }
 
 // orders.buyerType, set by createOrder from the account email and shown to

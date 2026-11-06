@@ -14,6 +14,7 @@ import {
   checkSaleOpen,
   checkTicketType,
   getBuyerType,
+  isAdminOnlyType,
   isEduAccount,
   getStudentOnlyUntil,
   generateOrderId,
@@ -200,6 +201,13 @@ function planStaleCaps() {
   })
 }
 
+// The buyer's staff rank, read only when the order has a 測試票 (only admins
+// may buy one), so other checkouts read nothing more. `getRank` reads it
+// once per checkout.
+async function roleRankFor(ticketTypes, ticketTypeIds, getRank) {
+  return ticketTypeIds.some((id) => isAdminOnlyType(ticketTypes.get(id))) ? getRank() : 0
+}
+
 // Unlocked look before the transaction, so a sold-out type turns buyers away
 // without opening one and the transaction locks only shards with room.
 // Returns null when this requestId was already resolved (the transaction
@@ -213,13 +221,14 @@ function planStaleCaps() {
 // checkout at once would fight over all of them. `seed` maps the types the
 // stock gate has no count for to the generation it reported; their counts are
 // set from this look (once), unless the type was reset since.
-async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed, planned = false }) {
+async function chooseShards({ ticketTypeIds, quantities, requestRef, order, account, getRank, seed, planned = false }) {
   const refs = [settingsRef, soldOutRef, ...ticketTypeIds.map(legacyRef), ...(requestRef ? [requestRef] : [])]
   const [settingsSnap, soldOutSnap, ...snaps] = await db.getAll(...refs)
   const legacySnaps = snaps.slice(0, ticketTypeIds.length)
   if (requestRef && snaps.at(-1).exists) return null
 
   const ticketTypes = ticketTypesOf(settingsSnap)
+  const roleRank = await roleRankFor(ticketTypes, ticketTypeIds, getRank)
   const now = new Date()
   const limited = []
 
@@ -230,7 +239,8 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
       school: order.school,
       email: account.email,
       studentConfirmed: order.studentConfirmed,
-      studentDeclared: order.studentDeclared
+      studentDeclared: order.studentDeclared,
+      roleRank
     })
     const stock = getStockLimit(ticketType)
     if (stock !== null) limited.push({ id, ticketType, stock, legacySnap: legacySnaps[i] })
@@ -238,7 +248,7 @@ async function chooseShards({ ticketTypeIds, quantities, requestRef, order, acco
   if (limited.length === 0) return { chosen: {}, emptied: [] }
   if (!planned && limited.some(({ stock, legacySnap }) => !currentCapsOf(legacySnap, stock))) {
     await planStaleCaps()
-    return chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed, planned: true })
+    return chooseShards({ ticketTypeIds, quantities, requestRef, order, account, getRank, seed, planned: true })
   }
 
   const shardSnaps = await db.getAll(...limited.flatMap(({ id }) => ALL_SHARDS.map((k) => shardRef(id, k))))
@@ -448,7 +458,9 @@ export const createOrder = onCall(
     const legacyRefs = ticketTypeIds.map(legacyRef)
     // types the gate has no count for -> its generation when this checkout was let through
     const seed = new Map()
-    const choose = () => log.time('lookMs', () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, seed }))
+    let rankRead = null
+    const getRank = () => (rankRead ??= getRoleRank(account.uid))
+    const choose = () => log.time('lookMs', () => chooseShards({ ticketTypeIds, quantities, requestRef, order, account, getRank, seed }))
     let idAttempt = 1
     let stockAttempt = 1
     let admission = null
@@ -508,6 +520,7 @@ export const createOrder = onCall(
             if (orderSnap.exists) throw new OrderIdTaken()
 
             const ticketTypes = ticketTypesOf(settingsSnap)
+            const roleRank = await roleRankFor(ticketTypes, ticketTypeIds, getRank)
 
             const now = new Date()
             const bought = buyerSnap.data()?.quantities || {}
@@ -521,6 +534,7 @@ export const createOrder = onCall(
                 email: account.email,
                 studentConfirmed: order.studentConfirmed,
                 studentDeclared: order.studentDeclared,
+                roleRank,
                 alreadyBought: Number(bought[id] || 0)
               })
 
