@@ -153,14 +153,24 @@ function itemsText(order) {
   return order.items.map((item) => `${item.name} × ${item.quantity}`).join('、')
 }
 
+// The camera stays open between cards: some browsers (Firefox) ask for
+// permission again every time it is reopened
 async function startCamera(deviceId = props.deviceId) {
-  stopCamera()
+  pauseReading()
   const run = sequence
-  phase.value = 'starting'
   cameraError.value = ''
   result.value = null
   opening.value = null
   otherReads.value = []
+  if (stream?.getVideoTracks().some((track) => track.readyState === 'live')) {
+    phase.value = 'scanning'
+    lastRead = ''
+    hint.value = '把學生證放進框內'
+    loop(run)
+    return
+  }
+  stopTracks()
+  phase.value = 'starting'
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw Object.assign(new Error('getUserMedia unavailable'), { name: 'NotSupportedError' })
@@ -192,13 +202,21 @@ async function startCamera(deviceId = props.deviceId) {
   }
 }
 
-// stops the camera and any reading in progress (the loop sees `sequence`)
-function stopCamera() {
+// stops reading frames (the loop sees `sequence`); the camera stays open
+function pauseReading() {
   sequence++
+  cardSeen.value = false
+}
+
+function stopTracks() {
   stream?.getTracks().forEach((track) => track.stop())
   stream = null
   if (video.value) video.value.srcObject = null
-  cardSeen.value = false
+}
+
+function stopCamera() {
+  pauseReading()
+  stopTracks()
 }
 
 // a still copy of the frame: the video moves on while it is being read
@@ -256,7 +274,7 @@ async function readPhoto(event) {
   const [file] = event.target.files || []
   event.target.value = ''
   if (!file) return
-  stopCamera()
+  pauseReading()
   phase.value = 'looking'
   studentId.value = '辨識中…'
   try {
@@ -293,7 +311,7 @@ async function lookup(value, { keepReads = false } = {}) {
     formError.value = '學號是 6 到 8 位數字'
     return
   }
-  stopCamera()
+  pauseReading()
   formError.value = ''
   if (!keepReads) otherReads.value = otherReads.value.filter((text) => text !== id)
   studentId.value = id
@@ -326,10 +344,17 @@ async function editId() {
   idInput.value?.select()
 }
 
+// in the background only reading pauses: closing the camera would make
+// some browsers ask for permission again. Back in view, a camera the phone
+// closed meanwhile is reopened
+let resumeOnShow = false
 function onVisibilityChange() {
-  if (document.hidden && (phase.value === 'scanning' || phase.value === 'starting')) {
-    stopCamera()
-    phase.value = 'stopped'
+  if (document.hidden) {
+    resumeOnShow = phase.value === 'scanning'
+    if (resumeOnShow) pauseReading()
+  } else if (resumeOnShow) {
+    resumeOnShow = false
+    startCamera()
   }
 }
 
