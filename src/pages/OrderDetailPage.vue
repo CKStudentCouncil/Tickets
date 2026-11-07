@@ -399,6 +399,7 @@ import { useAuthStore } from 'src/stores/auth'
 import { useScanDeskStore } from 'src/stores/scanDesk'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
+import { withTimeout } from 'src/utils/withTimeout'
 import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import { escapeHtml } from 'src/utils/text'
 import { downloadElementAsPdf } from 'src/utils/pdf'
@@ -560,6 +561,8 @@ const downloadingReceipt = ref(false)
 const statusError = ref('')
 const overrideReason = ref('')
 let loadSequence = 0
+// past this, the page offers 重新載入 instead of 載入訂單中… for good
+const LOAD_TIMEOUT_MS = 15000
 
 const orderId = computed(() => String(route.params.id || ''))
 
@@ -605,8 +608,8 @@ async function loadOrder() {
   try {
     // staff can read any order, a buyer only their own (firestore.rules);
     // a cancelled one moved to cancelledOrders, where the same holds
-    const result = await fetchOrder(id)
-    const cancelled = result ? null : await fetchCancelledOrder(id)
+    const result = await withTimeout(fetchOrder(id), LOAD_TIMEOUT_MS)
+    const cancelled = result ? null : await withTimeout(fetchCancelledOrder(id), LOAD_TIMEOUT_MS)
     if (sequence !== loadSequence) return
 
     order.value = result ? { ...result, delivered: Boolean(result.delivered) } : null
