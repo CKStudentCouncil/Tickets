@@ -110,6 +110,12 @@ function verifyDelivery({ data, input, order, rank }, ticketTypes) {
     return { codeVerification: 'not_required', overrideReason: requireOverrideReason(data) }
   }
 
+  // the money first: an unpaid order is marked paid (admins) before it is
+  // collected, so nobody walks in on a ticket that was never paid for
+  if (order.paid !== true && order.complimentary !== true) {
+    throw new HttpsError('failed-precondition', '此訂單尚未付款：請先收款並標記已付款，再領票')
+  }
+
   const isAdmin = rank >= ROLE_RANK.admin
   const studentId = cleanStudentId(data.studentId)
   const cardOk = !!studentId && data.studentCardChecked === true && order.customerEmail === studentAccountEmail(studentId)

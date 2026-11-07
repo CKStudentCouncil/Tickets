@@ -26,7 +26,7 @@
         <div v-else-if="phase === 'opening'" class="overlay ok">
           <p class="overlay-label">✓ 找到訂單</p>
           <p class="big-name">{{ opening?.customerName || studentId }}</p>
-          <p>{{ paired ? '已傳送到電腦，請看電腦畫面' : '開啟訂單中…' }}</p>
+          <p>{{ paired ? '已傳送到電腦' : '開啟訂單中…' }}</p>
         </div>
 
         <div v-else-if="phase === 'choose'" class="overlay choose" role="dialog" aria-label="選擇訂單">
@@ -92,7 +92,33 @@
       </p>
     </div>
 
-    <form v-if="card" class="manual" @submit.prevent="submitId">
+    <!-- compact: folded away, so the page's own content sits right under the camera -->
+    <details v-if="card && compact" ref="manualFold" class="manual-fold" :open="!!formError">
+      <summary>讀不到學號？手動輸入或拍照</summary>
+      <form class="manual" @submit.prevent="submitId">
+        <div class="manual-row">
+          <input
+            :id="`student-id-${uid}`"
+            ref="idInput"
+            v-model="studentId"
+            inputmode="numeric"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="學號，例如 1130524"
+            aria-label="學號"
+            :aria-invalid="!!formError"
+            @input="formError = ''"
+          >
+          <button type="submit" class="secondary-button" :disabled="phase === 'looking'">{{ lookupEnabled ? '查詢訂單' : '核對學號' }}</button>
+          <label class="secondary-button photo-button">
+            拍照
+            <input type="file" accept="image/*" capture="environment" @change="readPhoto">
+          </label>
+        </div>
+        <p v-if="formError" class="manual-error" role="alert">{{ formError }}</p>
+      </form>
+    </details>
+    <form v-else-if="card" class="manual" @submit.prevent="submitId">
       <label :for="`student-id-${uid}`">讀不到時，輸入學號</label>
       <div class="manual-row">
         <input
@@ -162,6 +188,7 @@ const SURE_CONFIDENCE = 92
 const uid = Math.random().toString(36).slice(2, 8)
 const video = ref(null)
 const idInput = ref(null)
+const manualFold = ref(null)
 // starting | scanning | looking | opening | choose | none | error | stopped
 const phase = ref('starting')
 const cameraError = ref('')
@@ -300,6 +327,14 @@ async function loop(run) {
         if (read.id) {
           const sure = read.confidence >= SURE_CONFIDENCE && read.votes >= 2
           if (sure || read.id === lastRead) {
+            // paired: a card still in view after it was sent is not sent again
+            if (props.paired && read.id === sentId && Date.now() - sentAt < PAIRED_REPEAT_MS) {
+              sentAt = Date.now()
+              hint.value = `學號 ${read.id} 已傳送，換下一位`
+              lastRead = read.id
+              await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
+              continue
+            }
             accept(read.id, read.candidates)
             return
           }
@@ -353,9 +388,10 @@ function accept(id, candidates = []) {
 }
 
 // lookup off: the page takes the 學號 from here and keeps reading what it
-// still needs
+// still needs. The field empties again: the page shows the 學號, and a 學號
+// left here would look like the next buyer's
 function hand(id) {
-  studentId.value = id
+  studentId.value = ''
   emit('read', { studentId: id, candidates: otherReads.value })
   startCamera()
 }
@@ -427,9 +463,13 @@ async function lookup(value, { keepReads = false } = {}) {
     if (run !== sequence || unmounted) return
     result.value = found
     const preferred = found.orders.find((order) => order.id === props.preferOrderId)
+    // paired, the computer picks among several orders; the phone never stops to ask
+    const first = props.paired ? found.orders.find((order) => !order.delivered) || found.orders[0] : null
     if (preferred) open(preferred)
     else if (found.orders.length === 1) open(found.orders[0])
+    else if (first) open(first)
     else phase.value = found.orders.length ? 'choose' : 'none'
+    if (phase.value === 'none' && props.paired) resumeSoon(PAIRED_MISS_MS)
   } catch (error) {
     if (run !== sequence || unmounted) return
     console.error('Student order lookup failed', error)
@@ -439,20 +479,32 @@ async function lookup(value, { keepReads = false } = {}) {
 }
 
 // paired, the phone sends the order and goes on reading by itself
-const PAIRED_NEXT_MS = 1500
+const PAIRED_NEXT_MS = 700
+const PAIRED_MISS_MS = 3000
+const PAIRED_REPEAT_MS = 4000
+let sentId = ''
+let sentAt = 0
+function resumeSoon(delay) {
+  const run = sequence
+  const shown = phase.value
+  setTimeout(() => {
+    if (run === sequence && phase.value === shown && !unmounted) startCamera()
+  }, delay)
+}
+
 function open(order) {
   opening.value = order
   phase.value = 'opening'
   emit('open', { orderId: order.id, studentId: result.value.studentId })
   if (props.paired) {
-    const run = sequence
-    setTimeout(() => {
-      if (run === sequence && phase.value === 'opening' && !unmounted) startCamera()
-    }, PAIRED_NEXT_MS)
+    sentId = result.value.studentId
+    sentAt = Date.now()
+    resumeSoon(PAIRED_NEXT_MS)
   }
 }
 
 async function editId() {
+  if (manualFold.value) manualFold.value.open = true
   await nextTick()
   idInput.value?.focus()
   idInput.value?.select()
@@ -741,6 +793,22 @@ defineExpose({ restart: () => startCamera() })
 
 .manual-row input:focus {
   border-color: rgba(242, 240, 233, .35);
+}
+
+.manual-fold {
+  margin-top: 10px;
+}
+
+.manual-fold summary {
+  padding: 8px 2px;
+  color: var(--lunar);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.manual-fold .manual {
+  margin-top: 6px;
+  padding: 12px;
 }
 
 .manual-error {

@@ -6,14 +6,17 @@ import { createScanLink, deleteScanLink, setScanLinkNeed, watchScanLink } from '
 import { isScanLinkExpired, isScanLinkId } from 'src/utils/scanLink'
 
 // The computer side of 手機掃描、電腦處理 (/admin/scan/desk). A store, so the
-// computer keeps receiving scans while it shows the orders they open. The
+// link keeps listening while staff look at other admin pages. Scans go to the
+// desk page's check-in station (PickupStation.vue), which never leaves the
+// page: the phone only scans, the computer shows what is still missing. The
 // link is kept for this browser tab: a reload stays paired, and two tabs
-// never both open the same scan.
+// never both receive the same scan.
 const STORAGE_KEY = 'cksc.scanDeskLink'
 const RECENT_LIMIT = 20
-// Pages left by themselves when a ticket arrives. Anywhere else the computer
-// only says so, so a scan never interrupts other admin work.
-const FOLLOW_ROUTES = ['admin-scan-desk', 'admin-order-detail']
+// An order page is left for the desk when a ticket arrives. Anywhere else the
+// computer only says so, so a scan never interrupts other admin work.
+const DESK_ROUTE = 'admin-scan-desk'
+const FOLLOW_ROUTES = ['admin-order-detail']
 
 function savedLink() {
   try {
@@ -43,14 +46,11 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
   const status = ref('idle')
   // tickets received in this tab, newest first
   const recent = ref([])
-  // what the order page open here still needs, as told to the phones:
+  // what the desk's station still needs, as told to the phones:
   // { orderId, name, qr, card } or null
   const need = ref(null)
-  // a scan of another order that came while that order page was waiting:
-  // the page asks before switching, so two buyers' scans don't mix
-  const pending = ref(null)
-  // a scan for the order page open here, for it to add
-  const incoming = ref(null)
+  // scans for the desk page to take (it may still be opening)
+  const incoming = ref([])
 
   const active = computed(() => !!linkId.value)
 
@@ -70,34 +70,26 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     status.value = 'idle'
     recent.value = []
     need.value = null
-    pending.value = null
-    incoming.value = null
+    incoming.value = []
     saveLink('')
   }
 
-  // The order page says what it still needs (null: nothing, or it closed)
+  // The station says what it still needs (null: nothing, or it closed)
   function setNeed(value) {
     const next = value && (value.qr || value.card)
       ? { orderId: value.orderId, name: value.name || '', qr: !!value.qr, card: !!value.card }
       : null
     if (JSON.stringify(next) === JSON.stringify(need.value)) return
     need.value = next
-    if (!next) pending.value = null
     const id = linkId.value
     if (id) setScanLinkNeed(id, next).catch((error) => console.error('Failed to tell the phone what is needed', error))
   }
 
+  // hands a scan to the desk page, opening it from an order page
   function open(entry) {
-    if (!router) return
-    pending.value = null
-    const target = {
-      name: 'admin-order-detail',
-      params: { id: entry.orderId },
-      query: entry.ticketCode ? { c: entry.ticketCode } : entry.studentId ? { sid: entry.studentId } : {}
-    }
-    // one order replaces another, so 返回 leads back to this page
-    if (router.currentRoute.value.name === 'admin-order-detail') router.replace(target)
-    else router.push(target)
+    incoming.value = [...incoming.value, entry]
+    const name = router?.currentRoute.value.name
+    if (router && name !== DESK_ROUTE) router.push({ name: DESK_ROUTE })
   }
 
   function receive(scan, phone) {
@@ -111,19 +103,9 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     }
     recent.value = [entry, ...recent.value.filter((item) => item.id !== entry.id)].slice(0, RECENT_LIMIT)
 
-    const route = router?.currentRoute.value
-    if (route?.name === 'admin-order-detail' && String(route.params.id) === entry.orderId) {
-      // the order shown: the scan adds the QR code or the student card to
-      // it (OrderDetailPage.vue takes it from here)
-      incoming.value = entry
-      return
-    }
-    if (route?.name === 'admin-order-detail' && need.value?.orderId === String(route.params.id)) {
-      pending.value = entry
-      return
-    }
-    if (FOLLOW_ROUTES.includes(route?.name)) open(entry)
-    else toast.show(`手機傳來訂單 ${entry.orderId}；到「電腦接收」開啟`, 5000)
+    const name = router?.currentRoute.value.name
+    if (name === DESK_ROUTE || FOLLOW_ROUTES.includes(name)) open(entry)
+    else toast.show(`手機傳來訂單 ${entry.orderId}；到「電腦接收」領票`, 5000)
   }
 
   function listen(id) {
@@ -233,12 +215,12 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     }
   )
 
-  const dismissPending = () => { pending.value = null }
+  // the desk page takes the scans waiting for it, oldest first
   const takeIncoming = () => {
-    const entry = incoming.value
-    incoming.value = null
-    return entry
+    const entries = incoming.value
+    incoming.value = []
+    return entries
   }
 
-  return { linkId, link, status, recent, active, need, pending, incoming, takeIncoming, start, resume, end, renew, retry, open, setNeed, dismissPending, expired }
+  return { linkId, link, status, recent, active, need, incoming, takeIncoming, start, resume, end, renew, retry, open, setNeed, expired }
 })

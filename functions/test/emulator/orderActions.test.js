@@ -25,7 +25,7 @@ beforeEach(async () => {
   batch.set(db.doc('users/manager2'), { role: 'manager', name: 'Door Two' })
   batch.set(db.doc('users/admin'), { role: 'admin', name: 'Administrator' })
   batch.set(ref(), {
-    userId: 'buyer', delivered: false, paid: false, ticketCode: TICKET_CODE, finalTotal: 700,
+    userId: 'buyer', delivered: false, paid: true, ticketCode: TICKET_CODE, finalTotal: 700,
     customerEmail: 'ck1130524@gl.ck.tp.edu.tw', customerName: '王小明', items: [{ name: '一階票', quantity: 1 }]
   })
   await batch.commit()
@@ -164,7 +164,22 @@ describe('掃描學生證', () => {
 })
 
 describe('atomic payment and input authority', () => {
+  test('an unpaid order is not collected until it is marked paid, whoever asks', async () => {
+    await ref().update({ paid: false })
+    await assert.rejects(deliver(collect(), as('manager1')), { code: 'failed-precondition', message: /尚未付款/ })
+    await assert.rejects(deliver(collect({ overrideReason: '現場收款' }), as('admin')), { code: 'failed-precondition', message: /尚未付款/ })
+    assert.equal((await ref().collection('history').get()).size, 0)
+    await pay({ orderId: ORDER_ID, paid: true, expectedPaid: false }, as('admin'))
+    assert.equal((await deliver(collect(), as('manager1'))).delivered, true)
+  })
+
+  test('a complimentary order needs no payment', async () => {
+    await ref().update({ paid: false, complimentary: true })
+    assert.equal((await deliver(collect(), as('manager1'))).delivered, true)
+  })
+
   test('only admins can change payment, with canonical metadata and immutable audit per transition', async () => {
+    await ref().update({ paid: false })
     const input = { orderId: ORDER_ID, paid: true, expectedPaid: false, paymentUpdatedByName: 'Forged' }
     await assert.rejects(pay(input, as('manager1')), { code: 'permission-denied' })
     const result = await pay(input, as('admin'))

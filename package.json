@@ -9,9 +9,10 @@
   "scripts": {
     "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
     "test": "yarn test:client && yarn --cwd functions test",
-    "test:client": "node --test tests/checkoutRecovery.test.js tests/notificationProgress.test.js tests/notificationFilters.test.js tests/orderSearch.test.js tests/ticketQr.test.js tests/scanLink.test.js tests/lineupLayout.test.js tests/salesAnalytics.test.js tests/partySurvey.test.js tests/salesImport.test.js tests/orderBackup.test.js tests/historyData.test.js tests/buyerIdentity.test.js tests/reimbursements.test.js tests/partyStatement.test.js tests/roles.test.js tests/cancellations.test.js",
+    "test:client": "node --test tests/checkoutRecovery.test.js tests/notificationProgress.test.js tests/notificationFilters.test.js tests/orderSearch.test.js tests/ticketQr.test.js tests/scanLink.test.js tests/lineupLayout.test.js tests/salesAnalytics.test.js tests/partySurvey.test.js tests/salesImport.test.js tests/orderBackup.test.js tests/historyData.test.js tests/buyerIdentity.test.js tests/pickupChecks.test.js tests/reimbursements.test.js tests/partyStatement.test.js tests/roles.test.js tests/cancellations.test.js",
     "test:checkout": "node --test tests/checkoutRecovery.test.js",
     "dev": "quasar dev",
+    "test:site": "node scripts/test-site.mjs",
     "build": "quasar build",
     "test:rules": "firebase emulators:exec --only firestore --project demo-cksc-ticket \"node --test tests/firestore.rules.test.js\""
   },
