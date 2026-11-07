@@ -33,6 +33,16 @@ export const STREET_SCHOOL = '路宣'
 export const HOME_SCHOOL = '建國中學'
 export const SCHOOL_ACCOUNT_DOMAIN = 'gl.ck.tp.edu.tw'
 
+// 友校: their students' school Google account domains, for tickets sold to
+// 建中及友校 only (friendSchoolsOnly). Keep in sync with src/data/schools.js
+export const FRIEND_SCHOOL_DOMAINS = {
+  北一女中: 'gapps.fg.tp.edu.tw',
+  中山女高: 'm2.csghs.tp.edu.tw',
+  景美女中: 'cmgsh.tp.edu.tw',
+  成功高中: 'gafe.cksh.tp.edu.tw',
+  師大附中: 'gs.hs.ntnu.edu.tw'
+}
+
 // Students of these schools give their class and seat number
 export const CAMPUS_SCHOOLS = new Set([
   '建國中學',

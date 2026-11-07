@@ -23,6 +23,25 @@ export const STREET_SCHOOL = '路宣'
 export const HOME_SCHOOL = '建國中學'
 export const SCHOOL_ACCOUNT_DOMAIN = 'gl.ck.tp.edu.tw'
 
+// 友校: their students' school Google account domains, for the 友校帳號
+// sign-in and tickets sold to 建中及友校 only (friendSchoolsOnly). Keep in
+// sync with functions/lib/constants.js
+export const TFG_DOMAIN = 'gapps.fg.tp.edu.tw'
+export const ZS_DOMAIN = 'm2.csghs.tp.edu.tw'
+export const JM_DOMAIN = 'cmgsh.tp.edu.tw'
+export const CG_DOMAIN = 'gafe.cksh.tp.edu.tw'
+export const HSNU_DOMAIN = 'gs.hs.ntnu.edu.tw'
+
+export const FRIEND_SCHOOL_DOMAINS = {
+  北一女中: TFG_DOMAIN,
+  中山女高: ZS_DOMAIN,
+  景美女中: JM_DOMAIN,
+  成功高中: CG_DOMAIN,
+  師大附中: HSNU_DOMAIN
+}
+
+export const FRIEND_SCHOOLS = Object.keys(FRIEND_SCHOOL_DOMAINS)
+
 // Students of these schools give their class and seat number
 export const CAMPUS_SCHOOLS = [
   '建國中學',
@@ -39,6 +58,18 @@ export function isCampusSchool(school) {
 
 export function isSchoolAccount(email) {
   return String(email || '').trim().toLowerCase().endsWith(`@${SCHOOL_ACCOUNT_DOMAIN}`)
+}
+
+// The school (建國中學 or a 友校) whose student account this is, or '' for
+// any other account. The whole domain must match. Keep in sync with
+// functions/lib/orderValidation.js
+export function accountSchoolOf(email) {
+  const address = String(email || '').trim().toLowerCase()
+  const at = address.lastIndexOf('@')
+  if (at < 1) return ''
+  const domain = address.slice(at + 1)
+  if (domain === SCHOOL_ACCOUNT_DOMAIN) return HOME_SCHOOL
+  return FRIEND_SCHOOLS.find((school) => FRIEND_SCHOOL_DOMAINS[school] === domain) || ''
 }
 
 // Any school's account (學生優先購買, and orders' 學生 / 社會人士): the domain

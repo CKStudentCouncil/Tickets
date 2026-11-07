@@ -7,7 +7,7 @@ const ticketTypesRef = () => doc(db, 'settings', 'ticketTypes')
 
 import { isAdminOnlyType } from 'src/data/ticketTypes'
 
-export { ELIGIBLE_IDENTITIES, isAdminOnlyType } from 'src/data/ticketTypes'
+export { ELIGIBLE_IDENTITIES, isAdminOnlyType, isFriendSchoolsOnlyType } from 'src/data/ticketTypes'
 
 export async function fetchTicketTypes() {
   const snapshot = await getDoc(ticketTypesRef())

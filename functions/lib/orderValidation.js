@@ -7,6 +7,7 @@ import {
   CAMPUS_SCHOOLS,
   HOME_SCHOOL,
   SCHOOL_ACCOUNT_DOMAIN,
+  FRIEND_SCHOOL_DOMAINS,
   ELIGIBLE_IDENTITIES,
   BUYER_TYPES,
   ROLE_RANK
@@ -54,6 +55,24 @@ export function isCampusSchool(school) {
 
 export function isSchoolAccount(email) {
   return String(email || '').trim().toLowerCase().endsWith(`@${SCHOOL_ACCOUNT_DOMAIN}`)
+}
+
+// The school (建國中學 or a 友校) whose student account this is, or '' for
+// any other account. The whole domain must match. Keep in sync with
+// src/data/schools.js
+export function accountSchoolOf(email) {
+  const address = String(email || '').trim().toLowerCase()
+  const at = address.lastIndexOf('@')
+  if (at < 1) return ''
+  const domain = address.slice(at + 1)
+  if (domain === SCHOOL_ACCOUNT_DOMAIN) return HOME_SCHOOL
+  return Object.keys(FRIEND_SCHOOL_DOMAINS).find((school) => FRIEND_SCHOOL_DOMAINS[school] === domain) || ''
+}
+
+// 僅限建中及友校: only students of 建國中學 and the 友校 may buy the type,
+// signed in with their school account
+export function isFriendSchoolsOnlyType(ticketType) {
+  return ticketType?.friendSchoolsOnly === true
 }
 
 // A Taiwanese school account: the domain is edu.tw or ends in .edu.tw.
@@ -308,6 +327,24 @@ export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed
     }
     if (school !== HOME_SCHOOL) {
       throw new HttpsError('permission-denied', `${ticketType.name}僅限建中在學學生購買`)
+    }
+  }
+
+  // 僅限建中及友校: a 建中 or 友校 student account, ordering as a student of
+  // that same school (not the 學生身分切結書: the account is the proof)
+  if (isFriendSchoolsOnlyType(ticketType)) {
+    const accountSchool = accountSchoolOf(email)
+    if (!accountSchool) {
+      throw new HttpsError(
+        'permission-denied',
+        `${ticketType.name}僅限建中及友校學生以學校帳號登入購買`
+      )
+    }
+    if (school !== accountSchool) {
+      throw new HttpsError(
+        'permission-denied',
+        `你登入的是${accountSchool}帳號，學校請選擇「${accountSchool}」`
+      )
     }
   }
 

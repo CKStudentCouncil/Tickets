@@ -17,6 +17,7 @@ import {
   getBuyerKey,
   isSchoolAccount,
   isEduAccount,
+  accountSchoolOf,
   getBuyerType,
   MAX_TICKETS_PER_ORDER
 } from '../../lib/orderValidation.js'
@@ -231,6 +232,39 @@ describe('checkTicketType', () => {
     expectHttpsError(() => checkTicketType(testType, 1, { ...buyer, roleRank: 2, alreadyBought: 4 }), 'failed-precondition')
     // other types don't need a rank
     assert.doesNotThrow(() => checkTicketType(ticketType, 1, buyer))
+  })
+
+  test('僅限建中及友校: a 建中 or 友校 account, ordering as that school', () => {
+    const friendOnly = { ...ticketType, friendSchoolsOnly: true }
+    const accounts = {
+      建國中學: 's1234@gl.ck.tp.edu.tw',
+      北一女中: 'S1234@GAPPS.FG.TP.EDU.TW',
+      中山女高: 'a@m2.csghs.tp.edu.tw',
+      景美女中: 'a@cmgsh.tp.edu.tw',
+      成功高中: 'a@gafe.cksh.tp.edu.tw',
+      師大附中: ' a@gs.hs.ntnu.edu.tw '
+    }
+    for (const [school, email] of Object.entries(accounts)) {
+      assert.equal(accountSchoolOf(email), school, email)
+      assert.doesNotThrow(() => checkTicketType(friendOnly, 1, { ...ok, school, email }))
+      // the school must be the account's own
+      const other = school === '北一女中' ? '中山女高' : '北一女中'
+      for (const wrong of [other, '建中老師', '其他學校或社會人士']) {
+        expectHttpsError(() => checkTicketType(friendOnly, 1, { ...ok, school: wrong, email }), 'permission-denied')
+      }
+    }
+    // other accounts, look-alike domains and the 學生身分切結書 don't count
+    for (const email of ['a@gmail.com', 'a@apps.ntpc.edu.tw', 'a@sub.gapps.fg.tp.edu.tw', 'a@gapps.fg.tp.edu.tw.evil.com', 'gapps.fg.tp.edu.tw', '@gapps.fg.tp.edu.tw', undefined]) {
+      assert.equal(accountSchoolOf(email), '', String(email))
+      expectHttpsError(() => checkTicketType(friendOnly, 1, { ...ok, email, studentDeclared: true }), 'permission-denied')
+    }
+    // the sale window still comes first
+    expectHttpsError(
+      () => checkTicketType(friendOnly, 1, { ...ok, email: 'a@gmail.com', now: new Date('2026-11-05T03:00:00Z') }),
+      'failed-precondition'
+    )
+    // unticked types take any account
+    assert.doesNotThrow(() => checkTicketType({ ...friendOnly, friendSchoolsOnly: false }, 1, { ...ok, email: 'a@gmail.com' }))
   })
 
   test('isSchoolAccount matches the whole domain only', () => {

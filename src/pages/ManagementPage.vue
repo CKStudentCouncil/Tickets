@@ -164,7 +164,7 @@
           </div>
 
           <div class="ticket-type-grid">
-            <label class="field">
+            <div class="field">
               <span>二、可購買資格</span>
 
               <select
@@ -187,7 +187,27 @@
               <small v-if="ticketType.eligibleBuyerIdentity === 'admins_only'" class="time-summary">
                 只有管理員（建班幹部以上）看得到、也只有管理員能買，一般使用者看不到
               </small>
-            </label>
+
+              <!-- 本校學生 is 建中 only already -->
+              <label
+                v-if="ticketType.eligibleBuyerIdentity !== 'campus_students'"
+                class="hide-until-sale"
+              >
+                <input
+                  v-model="ticketType.friendSchoolsOnly"
+                  type="checkbox"
+                >
+
+                <span>僅限建中及友校學生購買</span>
+              </label>
+
+              <small
+                v-if="ticketType.friendSchoolsOnly && ticketType.eligibleBuyerIdentity !== 'campus_students'"
+                class="time-summary"
+              >
+                須以建中或友校（{{ FRIEND_SCHOOLS.join('、') }}）學校帳號登入，學校須與帳號相符；不接受學生切結，也不能路宣登記
+              </small>
+            </div>
 
             <div class="field ticket-time-field">
               <span>三、販售時段</span>
@@ -421,6 +441,7 @@ import { useAuthStore } from 'src/stores/auth'
 import { useShopStore } from 'src/stores/shop'
 import { useToastStore } from 'src/stores/toast'
 import { fetchTicketTypes, saveTicketTypes } from 'src/services/ticketTypeService'
+import { FRIEND_SCHOOLS } from 'src/data/schools'
 import { saveShopOpenAt } from 'src/services/shopService'
 import {
   addDaysInputValue,
@@ -547,7 +568,9 @@ function createEmptyTicketType() {
     unlimited: false,
     purchaseLimitPerPerson: 1,
     // 學生優先購買至; blank = not used
-    studentOnlyUntil: ''
+    studentOnlyUntil: '',
+    // 僅限建中及友校學生購買
+    friendSchoolsOnly: false
   }
 }
 
@@ -810,7 +833,10 @@ async function saveTicketTypeSettings() {
           : Number(ticketType.purchaseLimitPerPerson) || 1,
         studentOnlyUntil: ticketType.studentOnlyUntil
           ? toStoredDateTime(ticketType.studentOnlyUntil)
-          : null
+          : null,
+        // moot for 本校學生, which is 建中 only already
+        friendSchoolsOnly:
+          ticketType.eligibleBuyerIdentity !== 'campus_students' && ticketType.friendSchoolsOnly === true
       })),
       // uid, not name/email: this document is publicly readable (PARTY-26)
       auth.user.uid

@@ -8,6 +8,7 @@ import {
   MAX_TICKETS_PER_ORDER,
   TICKET_TYPE_ID_PATTERN,
   generateOrderId,
+  isFriendSchoolsOnlyType,
   isValidRequestId
 } from './orderValidation.js'
 import { isContention, legacyRef, reserveStock, settingsRef, shardRef, ticketTypeOf, ticketTypesOf } from './orders.js'
@@ -152,6 +153,10 @@ export const registerStreetSale = functions
           // 本校學生 tickets go to school accounts that signed in themselves
           if (ticketType.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS) {
             throw new HttpsError('failed-precondition', `${ticketType.name}僅限建中學生登入購買，不能路宣登記`)
+          }
+          // so are 僅限建中及友校 tickets, bought with a 建中 or 友校 account
+          if (isFriendSchoolsOnlyType(ticketType)) {
+            throw new HttpsError('failed-precondition', `${ticketType.name}僅限建中及友校學生登入購買，不能路宣登記`)
           }
 
           if (orderSnap.exists) throw new OrderIdTaken()

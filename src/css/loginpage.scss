@@ -192,6 +192,67 @@ h1 {
   }
 }
 
+.expand-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+
+  color: var(--lunar);
+  transition: transform .2s ease;
+
+  &.open { transform: rotate(180deg); }
+}
+
+/* ---------- 友校 picker ---------- */
+
+.friend-schools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 2px 0 4px 16px;
+
+  border-left: 2px solid var(--line);
+}
+
+.friend-school-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  min-width: 0;
+  padding: 10px 12px;
+
+  border: 1px solid var(--line);
+  background: rgba(242, 240, 233, 0.03);
+  color: var(--off-white);
+
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--ember);
+    background: rgba(228, 164, 104, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-text strong { font-size: 13.5px; }
+  .btn-text small { font-size: 11px; }
+}
+
+.google-spinner.small {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-width: 2px;
+}
+
 /* ---------- consent & notes ---------- */
 
 .consent {
