@@ -96,9 +96,9 @@ test('student-priority tickets: staff look at the ID; a 建中 card scanned is c
 
 test('unpaid orders are blocked until marked paid; complimentary ones are not', () => {
   const unpaid = check({ ...general, paid: false }, { scans: { code: 'code-1' } })
-  assert.equal(states(unpaid).paid, 'bad')
+  assert.equal(states(unpaid).paid, 'pay')
   assert.equal(unpaid.canCollect, false)
-  assert.equal(unpaid.label, '尚未付款，不能領票')
+  assert.equal(unpaid.label, '等待收款')
   assert.equal(check({ ...general, paid: false, complimentary: true }, { scans: { code: 'code-1' } }).canCollect, true)
 })
 

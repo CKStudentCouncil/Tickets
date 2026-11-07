@@ -90,14 +90,16 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import QRCode from 'qrcode'
 import PickupStation from 'src/components/PickupStation.vue'
 import { useNow } from 'src/composables/useNow'
 import { useScanDeskStore } from 'src/stores/scanDesk'
 import { SCAN_LINK_HOURS, getScanLinkUrl } from 'src/utils/scanLink'
+import { ORDER_ID_PATTERN } from 'src/utils/ticketQr'
 
 const router = useRouter()
+const route = useRoute()
 const desk = useScanDeskStore()
 // for the expiry, which is hours away
 const now = useNow(30000)
@@ -210,10 +212,20 @@ const restart = () => run(async () => {
   await desk.start(router)
 })
 
+// from an order page's 去領票 (?order=…&c=…): that order, on this station
+function openFromQuery() {
+  const orderId = String(route.query.order || '')
+  if (!ORDER_ID_PATTERN.test(orderId)) return
+  const code = route.query.c ? String(route.query.c).slice(0, 200) : ''
+  station.value?.load(orderId, code ? { code } : {})
+  window.history.replaceState(window.history.state, '', router.resolve({ name: route.name }).href)
+}
+
 onMounted(() => {
   renderQr(desk.linkId)
   desk.start(router)
   takeScans()
+  openFromQuery()
 })
 
 onBeforeUnmount(() => {

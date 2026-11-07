@@ -69,6 +69,7 @@
           :camera="!firstGuide"
           :keyboard="!isPhone"
           :initial-order-id="initialOrderId"
+          :initial-scans="initialScans"
           :qr-filter="takePairingCode"
         >
           <template #idle-extra>
@@ -208,6 +209,8 @@ const manualBusy = ref(false)
 const manualChoices = ref([])
 // from an order page's 用相機核對領票 (/admin/scan?order=…)
 const initialOrderId = ORDER_ID_PATTERN.test(String(route.query.order || '')) ? String(route.query.order) : ''
+// ?c=: the ticket code, when a phone's own camera app opened the order page
+const initialScans = initialOrderId && route.query.c ? { code: String(route.query.c).slice(0, 200) } : {}
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth < 900
 
 let noticeTimer = 0

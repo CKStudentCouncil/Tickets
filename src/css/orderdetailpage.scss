@@ -271,7 +271,132 @@
   color: #e0a0a0;
 }
 
+/* ---------- staff: summary, 領票 and 付款 ---------- */
+
+.summary-card {
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .015));
+}
+
+.summary-card p {
+  margin: 0;
+}
+
+.summary-name {
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.summary-meta,
+.summary-items {
+  margin-top: 6px !important;
+  color: rgba(242, 240, 233, .72);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--lunar);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-chip.good {
+  border-color: rgba(119, 191, 139, .55);
+  background: rgba(119, 191, 139, .12);
+  color: #8fd1a1;
+}
+
+.status-chip.pending {
+  border-color: rgba(228, 164, 104, .55);
+  background: rgba(228, 164, 104, .1);
+  color: var(--ember);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0;
+}
+
+.status-row + .status-row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.summary-card + .status-row,
+.check-meta + .status-row,
+.qr-check + .status-row {
+  margin-top: 12px;
+}
+
+.status-row h2 {
+  margin: 0;
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.status-row-text p {
+  margin: 4px 0 0;
+  color: rgba(242, 240, 233, .78);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.status-row-text .status-row-note {
+  color: rgba(242, 240, 233, .45);
+  font-size: 12px;
+}
+
+.status-row-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
 /* ---------- 取消訂單 ---------- */
+
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 52px;
+  padding: 18px 20px;
+  border: 1px solid rgba(201, 120, 120, .35);
+}
+
+.danger-zone h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.danger-zone p {
+  margin: 4px 0 0;
+  color: rgba(242, 240, 233, .5);
+  font-size: 12.5px;
+}
+
 
 .cancel-row {
   margin: 14px 0 0;
@@ -749,5 +874,19 @@
   .page-footer {
     flex-direction: column;
     gap: 6px;
+  }
+
+  .status-row,
+  .danger-zone {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .status-row-actions .btn {
+    width: 100%;
+  }
+
+  .status-row-actions {
+    width: 100%;
   }
 }

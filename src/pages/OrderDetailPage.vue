@@ -128,145 +128,120 @@
 
       <!-- ---------- heading ---------- -->
       <header class="page-heading">
-        <p class="eyebrow">
-          CK PARTY NIGHT · {{ isAdminView ? 'STAFF VIEW' : 'CUSTOMER VIEW' }}
-        </p>
+        <p v-if="!isAdminView" class="eyebrow">CK PARTY NIGHT</p>
         <h1>訂單詳情</h1>
         <p class="heading-meta" style="margin-bottom: 2ch;">
           ORDER <span class="mono">{{ order.id }}</span>
         </p>
         <div class="heading-actions">
           <button type="button" class="btn-outline" @click="goBack">返回</button>
-          <button
-            v-if="isAdminView"
-            type="button"
-            class="btn"
-            @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
-          >
-            {{ scanDesk.active ? '回到電腦領票' : '回到領票' }}
-          </button>
         </div>
       </header>
 
-      <!-- ---------- status / check-in ---------- -->
-      <section class="panel" style="border-top: none; margin-top: 0; padding-top: 0;">
-        <div class="panel-head">
-          <h2>{{ isAdminView ? '領票作業' : '訂單狀態' }}</h2>
-          <span v-if="isAdminView" class="panel-tag">CHECK-IN DESK</span>
-        </div>
+      <!-- ---------- staff: who, what, and where it stands ---------- -->
+      <template v-if="isAdminView">
+        <section class="summary-card" aria-label="訂單摘要">
+          <p class="summary-name">{{ order.customerName || '（未填姓名）' }}</p>
+          <p v-if="buyerLine" class="summary-meta">{{ buyerLine }}</p>
+          <p class="summary-items">{{ itemsText || '尚無票券資料' }}・<span class="num">NT$ {{ Number(order.finalTotal ?? 0).toLocaleString() }}</span></p>
+          <div class="status-chips">
+            <span class="status-chip" :class="order.paid ? 'good' : 'pending'">{{ order.paid ? '已付款' : '未付款' }}</span>
+            <span class="status-chip" :class="order.delivered ? 'good' : 'quiet'">{{ order.delivered ? '已領票' : '未領票' }}</span>
+          </div>
+        </section>
 
-        <template v-if="isAdminView">
-          <!-- the check-in station for this one order (PickupStation.vue):
-               scans come from /admin/scan or a paired phone; here staff can
-               still finish an exception or collect -->
-          <PickupStation
-            :key="`${order.id}:${stationKey}`"
-            fixed
-            :camera="false"
-            :initial-order-id="order.id"
-            :initial-order="order"
-            :initial-scans="initialScans"
-            @collected="onStationUpdate"
-            @updated="onStationUpdate"
-          />
-          <div class="pickup-links">
-            <router-link v-if="!order.delivered" :to="{ name: 'admin-scan', query: { order: order.id } }" class="link-button">
-              用相機核對領票 →
-            </router-link>
-            <button v-if="order.delivered && auth.isAdmin" type="button" class="link-button" @click="resetOpen = true">
-              管理員：重設為未領票…
+        <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
+        <p v-if="changingStatus" class="check-meta" role="status">正在確認並更新訂單…</p>
+
+        <!-- 領票 happens on the scan page; here: where it stands -->
+        <section class="status-row" aria-labelledby="pickup-title">
+          <div class="status-row-text">
+            <h2 id="pickup-title">領票</h2>
+            <p v-if="order.delivered">
+              已領票<template v-if="order.deliveryUpdatedByName">・{{ order.deliveryUpdatedByName }}</template>
+              <template v-if="order.deliveryUpdatedAt">・{{ formatDateTime(order.deliveryUpdatedAt) }}</template>
+            </p>
+            <p v-else-if="!order.paid">還沒付款，要先收款才能領票</p>
+            <p v-else>還沒領票</p>
+            <p v-if="!order.delivered && order.deliveryUpdatedByName" class="status-row-note">
+              上次變更：{{ order.deliveryUpdatedByName }}・{{ formatDateTime(order.deliveryUpdatedAt) }}
+            </p>
+          </div>
+          <div class="status-row-actions">
+            <button v-if="!order.delivered" type="button" class="btn" @click="goPickup">去領票</button>
+            <button v-if="order.delivered && auth.isAdmin" type="button" class="btn-sm" :disabled="changingStatus || loading || loadError" @click="resetOpen = true">
+              重設為未領票…
+            </button>
+          </div>
+        </section>
+
+        <section class="status-row" aria-labelledby="payment-title">
+          <div class="status-row-text">
+            <h2 id="payment-title">付款</h2>
+            <p>{{ order.paid ? '已付款' : '未付款' }}</p>
+            <p v-if="order.paymentUpdatedByName" class="status-row-note">
+              上次變更：{{ order.paymentUpdatedByName }}<template v-if="order.paymentUpdatedAt">・{{ formatDateTime(order.paymentUpdatedAt) }}</template>
+            </p>
+            <p v-if="order.notices" class="status-row-note">已寄通知：繳費 {{ noticeCounts.payment }} 次・領票 {{ noticeCounts.pickup }} 次</p>
+          </div>
+          <div v-if="auth.isAdmin" class="status-row-actions">
+            <button v-if="!order.paid" type="button" class="btn-sm" :disabled="changingStatus || loading || loadError" @click="setPaid(true)">
+              標記已付款
+            </button>
+            <button v-else type="button" class="btn-sm muted" :disabled="changingStatus || loading || loadError" @click="setPaid(false)">
+              改為未付款
+            </button>
+          </div>
+        </section>
+
+        <q-dialog v-model="resetOpen" aria-labelledby="reset-title">
+          <form class="pickup-dialog" @submit.prevent="resetDelivered">
+            <h2 id="reset-title">重設為未領票？</h2>
+            <p class="dialog-lead">這筆訂單會變回「未領票」，可以再領一次。只在誤按領票、或要重新領票時使用。</p>
+            <label class="dialog-field">
+              原因（必填，會記錄在訂單）
+              <input v-model="overrideReason" maxlength="500" placeholder="例如：誤按領票" required>
+            </label>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel" @click="resetOpen = false">取消</button>
+              <button type="submit" class="dialog-confirm danger" :disabled="changingStatus || !overrideReason.trim() || loading || loadError">
+                重設為未領票
+              </button>
+            </div>
+          </form>
+        </q-dialog>
+      </template>
+
+      <!-- ---------- buyer: the QR code first, then where it stands ---------- -->
+      <template v-else>
+        <section class="panel" style="border-top: none; margin-top: 0; padding-top: 0;">
+          <h2>訂單 QR Code</h2>
+          <p class="panel-copy">領票時請出示此 QR Code 給工作人員掃描</p>
+
+          <div class="order-qr-card">
+            <div class="qr-canvas-wrapper">
+              <canvas
+                ref="qrCanvas"
+                class="order-qr"
+                width="220"
+                height="220"
+                role="img"
+                :aria-label="`訂單 ${order.id} 的領票 QR Code`"
+              />
+            </div>
+
+            <p v-if="qrError" role="alert">{{ qrError }}</p>
+            <button v-if="qrError" type="button" class="btn" @click="renderQr">
+              重新產生 QR Code
             </button>
           </div>
 
-          <q-dialog v-model="resetOpen" aria-labelledby="reset-title">
-            <form class="pickup-dialog" @submit.prevent="resetDelivered">
-              <h2 id="reset-title">重設為未領票？</h2>
-              <p class="dialog-lead">這筆訂單會變回「未領票」，可以再領一次。只在誤按領票、或要重新領票時使用。</p>
-              <label class="dialog-field">
-                原因（必填，會記錄在訂單）
-                <input v-model="overrideReason" maxlength="500" placeholder="例如：誤按領票" required>
-              </label>
-              <div class="dialog-actions">
-                <button type="button" class="dialog-cancel" @click="resetOpen = false">取消</button>
-                <button type="submit" class="dialog-confirm danger" :disabled="changingStatus || !overrideReason.trim() || loading || loadError">
-                  重設為未領票
-                </button>
-              </div>
-            </form>
-          </q-dialog>
-
-          <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
-        </template>
-
-        <div class="status-block">
-          <div class="delivery-bar" :class="order.delivered ? 'delivered' : 'pending'">
-            <span class="status-dot" />
-            <span>領票狀態：{{ order.delivered ? '已領票' : '未領票' }}</span>
+          <div class="status-chips">
+            <span class="status-chip" :class="order.paid ? 'good' : 'pending'">{{ order.paid ? '已付款' : '未付款' }}</span>
+            <span class="status-chip" :class="order.delivered ? 'good' : 'quiet'">{{ order.delivered ? '已領票' : '未領票' }}</span>
           </div>
-
-          <div class="delivery-bar" :class="order.paid ? 'paid' : 'pending'">
-            <span class="status-dot" />
-            <span>付款狀態：{{ order.paid ? '已付款' : '未付款' }}</span>
-            <div v-if="isAdminView && auth.isAdmin" class="delivery-actions">
-              <button
-                type="button"
-                class="btn-sm muted"
-                :disabled="changingStatus || !order.paid || loading || loadError"
-                @click="setPaid(false)"
-              >
-                標記未付款
-              </button>
-              <button
-                type="button"
-                class="btn-sm"
-                :disabled="changingStatus || order.paid || loading || loadError"
-                @click="setPaid(true)"
-              >
-                標記已付款
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <p v-if="changingStatus" class="check-meta" role="status">正在確認並更新訂單…</p>
-        <p v-if="isAdminView && order.deliveryUpdatedByName" class="check-meta">
-          最後領票更新：{{ order.deliveryUpdatedByName }} · {{ formatDateTime(order.deliveryUpdatedAt) }}
-        </p>
-        <p v-if="isAdminView && order.notices" class="check-meta">
-          已寄通知：繳費 {{ noticeCounts.payment }} 次・領票 {{ noticeCounts.pickup }} 次
-        </p>
-        <div v-if="isAdminView && auth.isSuperAdmin && !cancelBlockOf(order)" class="cancel-row">
-          <button type="button" class="btn-outline cancel-action" :disabled="changingStatus || loading" @click="cancelOpen = true">
-            取消訂單
-          </button>
-        </div>
-      </section>
-
-      <CancelOrderDialog v-if="isAdminView && auth.isSuperAdmin" v-model="cancelOpen" :orders="[order]" @cancelled="onCancelled" />
-
-      <!-- ---------- QR ---------- -->
-      <section class="panel">
-        <h2>訂單 QR Code</h2>
-        <p class="panel-copy">領票時請出示此 QR Code 給工作人員掃描</p>
-
-        <div class="order-qr-card">
-          <div class="qr-canvas-wrapper">
-            <canvas
-              ref="qrCanvas"
-              class="order-qr"
-              width="220"
-              height="220"
-              role="img"
-              :aria-label="`訂單 ${order.id} 的領票 QR Code`"
-            />
-          </div>
-
-          <p v-if="qrError" role="alert">{{ qrError }}</p>
-          <button v-if="qrError" type="button" class="btn" @click="renderQr">
-            重新產生 QR Code
-          </button>
-        </div>
-      </section>
+        </section>
+      </template>
 
       <!-- ---------- buyer info ---------- -->
       <section class="panel">
@@ -337,7 +312,7 @@
         </ul>
         <p v-else class="panel-copy">尚無票券資料</p>
 
-        <div class="stats-row">
+        <div v-if="!isAdminView" class="stats-row">
           <div class="stat">
             <div>應付總額</div>
             <div class="num accent">NT$ {{ Number(order.finalTotal ?? 0).toLocaleString() }}</div>
@@ -354,7 +329,7 @@
       </section>
 
       <!-- ---------- event ---------- -->
-      <section class="panel">
+      <section v-if="!isAdminView" class="panel">
         <h2>活動資訊</h2>
 
         <dl class="info-list">
@@ -392,6 +367,17 @@
         </button>
       </div>
 
+      <CancelOrderDialog v-if="isAdminView && auth.isSuperAdmin" v-model="cancelOpen" :orders="[order]" @cancelled="onCancelled" />
+      <section v-if="isAdminView && auth.isSuperAdmin && !cancelBlockOf(order)" class="danger-zone">
+        <div>
+          <h2>取消訂單</h2>
+          <p>取消後 QR Code 會失效，已付款的會列入待退款。</p>
+        </div>
+        <button type="button" class="btn-outline cancel-action" :disabled="changingStatus || loading" @click="cancelOpen = true">
+          取消訂單…
+        </button>
+      </section>
+
       <footer class="page-footer">
         <span>臺北市立建國高級中學班聯會</span>
         <span>CK PARTY NIGHT 2026 · COSMOS</span>
@@ -409,11 +395,11 @@ import { fetchCancelledOrder, fetchOrder, updateOrderDelivery, updateOrderPaymen
 import { CANCEL_EMAIL_LABELS, CANCEL_REASONS, REFUND_STATUS_LABELS } from 'src/data/cancellations'
 import { cancelBlockOf, noticeCountsOf } from 'src/utils/cancellations'
 import CancelOrderDialog from 'src/components/CancelOrderDialog.vue'
-import PickupStation from 'src/components/PickupStation.vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useScanDeskStore } from 'src/stores/scanDesk'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
+import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import { escapeHtml } from 'src/utils/text'
 import { downloadElementAsPdf } from 'src/utils/pdf'
 import { renderOrderQr } from 'src/utils/qrcode'
@@ -580,19 +566,26 @@ const orderId = computed(() => String(route.params.id || ''))
 // /admin/orders/:id is only reachable by managers (router guard)
 const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.isManager)
 
-// What /admin/scan or a link brought along (?c=: the ticket code read off
-// the QR code, ?sid=: a 學號 read off the student card), for the station
-const initialScans = {
-  code: String(route.query.c || ''),
-  studentId: String(route.query.sid || '')
-}
-// remakes the station after the order changed here (marked paid, reset)
-const stationKey = ref(0)
+// the ticket code read off the QR code when a phone's own camera app opened
+// this page (?c=), passed on to the scan page so the QR code counts there
+const scannedCode = String(route.query.c || '')
 const resetOpen = ref(false)
 
-// the station collected the order, or marked it paid
-function onStationUpdate(next) {
-  if (next?.id === order.value?.id) order.value = { ...order.value, ...next }
+const itemsText = computed(() => (order.value?.items || []).map((item) => `${item.name} × ${item.quantity}`).join('、'))
+// 學生・建國中學 205 班 12 號
+const buyerLine = computed(() => {
+  const current = order.value
+  if (!current) return ''
+  const seat = [current.class && `${current.class} 班`, current.number && `${current.number} 號`].filter(Boolean).join(' ')
+  return [getBuyerTypeLabel(current), current.complimentary ? guestSourceText(current) : current.school, seat, current.office]
+    .filter(Boolean)
+    .join('・')
+})
+
+// 領票 happens on the scan page (or the computer paired with phones)
+function goPickup() {
+  const query = { order: order.value.id, ...(scannedCode ? { c: scannedCode } : {}) }
+  router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan', query })
 }
 
 const noticeCounts = computed(() => noticeCountsOf(order.value))
@@ -656,7 +649,6 @@ async function resetDelivered() {
     order.value = { ...order.value, ...patch, delivered: false }
     overrideReason.value = ''
     resetOpen.value = false
-    stationKey.value++
     toast.show('已標記為未領票')
   } catch (error) {
     console.error(error)
@@ -664,7 +656,6 @@ async function resetDelivered() {
     statusError.value = error.message || '更新失敗，請重新確認訂單狀態。'
     resetOpen.value = false
     await loadOrder()
-    stationKey.value++
   } finally {
     if (orderId.value === id) changingStatus.value = false
   }
@@ -679,7 +670,6 @@ async function setPaid(paid) {
     const patch = await updateOrderPayment(id, paid, Boolean(order.value.paid))
     if (orderId.value !== id) return
     order.value = { ...order.value, ...patch }
-    stationKey.value++
     toast.show(paid ? '已確認付款' : '已重設為未付款')
   } catch (error) {
     if (orderId.value !== id) return
@@ -987,4 +977,9 @@ watch(orderId, () => {
 
 <style scoped>
 @import 'src/css/orderdetailpage.scss';
+</style>
+
+<!-- the 重設為未領票 dialog -->
+<style lang="scss">
+@import 'src/css/pickupdialog.scss';
 </style>

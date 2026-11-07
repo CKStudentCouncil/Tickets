@@ -25,6 +25,7 @@
           <Check v-else-if="row.state === 'excepted'" :size="18" :stroke-width="3" />
           <TriangleAlert v-else-if="row.state === 'bad'" :size="18" />
           <Eye v-else-if="row.state === 'look'" :size="18" />
+          <Banknote v-else-if="row.state === 'pay'" :size="18" />
           <ScanLine v-else :size="18" />
         </span>
         <div class="row-body">
@@ -154,7 +155,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { Check, ChevronRight, Eye, ScanLine, ShieldAlert, TriangleAlert, X } from 'lucide-vue-next'
+import { Banknote, Check, ChevronRight, Eye, ScanLine, ShieldAlert, TriangleAlert, X } from 'lucide-vue-next'
 import { ID_CHECK_METHODS, ID_NOTE_MAX } from 'src/data/pickup'
 import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import { unfinishedRows } from 'src/utils/pickupChecks'
@@ -181,7 +182,7 @@ const props = defineProps({
 // undo(key) | force(reason)
 const emit = defineEmits(['collect', 'clear', 'mark-paid', 'exception', 'undo', 'force'])
 
-const STATE_WORDS = { wait: '等待中', look: '請目視確認', done: '完成', excepted: '以例外方式完成', bad: '有問題' }
+const STATE_WORDS = { pay: '等待收款', wait: '等待中', look: '請目視確認', done: '完成', excepted: '以例外方式完成', bad: '有問題' }
 
 const dialogs = reactive({ qr: false, id: false, force: false })
 const qrReason = ref('')
@@ -401,6 +402,14 @@ defineExpose({ dialogOpen: () => dialogs.qr || dialogs.id || dialogs.force })
   color: var(--ink);
 }
 
+.row.pay {
+  border-color: rgba(228, 164, 104, .5);
+}
+
+.row.pay .mark {
+  color: #e4a468;
+}
+
 .row-body p {
   margin: 0;
 }
@@ -582,146 +591,6 @@ defineExpose({ dialogOpen: () => dialogs.qr || dialogs.id || dialogs.force })
 </style>
 
 <!-- q-dialog teleports to the body, outside the scoped styles above -->
-<style>
-/* a <form>, so Quasar's pointer-events rule for the dialog's <div> misses it */
-.pickup-dialog {
-  pointer-events: all;
-  width: min(92vw, 460px);
-  padding: 24px;
-  border: 1px solid rgba(242, 240, 233, .16);
-  background: #0d1015;
-  color: #f2f0e9;
-  font-family: 'Manrope', 'Noto Sans TC', sans-serif;
-}
-
-.pickup-dialog h2 {
-  margin: 0 0 8px;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.dialog-lead,
-.dialog-note {
-  margin: 0 0 14px;
-  color: #b9c0c7;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.dialog-note {
-  margin: 8px 0 0;
-  font-size: 13px;
-}
-
-.dialog-ok {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 4px;
-  color: #77bf8b;
-  font-weight: 700;
-}
-
-.dialog-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
-  color: #f2f0e9;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.dialog-field input {
-  height: 44px;
-  padding: 0 12px;
-  border: 1px solid rgba(242, 240, 233, .2);
-  background: rgba(255, 255, 255, .04);
-  color: #f2f0e9;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 400;
-}
-
-.dialog-field input:focus {
-  border-color: #e4a468;
-  outline: none;
-}
-
-.dialog-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.dialog-choices .choice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid rgba(242, 240, 233, .16);
-  cursor: pointer;
-}
-
-.dialog-choices .choice.picked {
-  border-color: #e4a468;
-  background: rgba(228, 164, 104, .08);
-}
-
-.dialog-choices input {
-  accent-color: #e4a468;
-}
-
-.dialog-skips {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 4px;
-  padding: 0;
-  list-style: none;
-  color: #e07f7f;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.dialog-cancel,
-.dialog-confirm {
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid rgba(242, 240, 233, .2);
-  background: transparent;
-  color: #f2f0e9;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.dialog-confirm {
-  border-color: #e4a468;
-  background: #e4a468;
-  color: #120b04;
-}
-
-.dialog-confirm.danger {
-  border-color: #c96161;
-  background: #c96161;
-  color: #fff;
-}
-
-.dialog-confirm:disabled {
-  opacity: .45;
-  cursor: not-allowed;
-}
+<style lang="scss">
+@import 'src/css/pickupdialog.scss';
 </style>
