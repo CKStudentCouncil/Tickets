@@ -6,6 +6,7 @@ import { auth, db } from 'src/boot/firebase'
 import { accountSchoolOf, isEduAccount as isEduEmail, isSchoolAccount as isSchoolEmail } from 'src/data/schools'
 import { isOnSellerList } from 'src/services/sellerService'
 import { isOnOfficerList } from 'src/services/guestService'
+import { activateStaffInvite, fetchStaffInvite, startedActivation } from 'src/services/staffAccountService'
 import { ROLE_RANK } from 'src/data/roles'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -40,15 +41,37 @@ export const useAuthStore = defineStore('auth', () => {
     () => user.value?.name || user.value?.displayName || user.value?.email || '管理員'
   )
 
+  // the last staff invite of this account that could not be activated
+  // (e.g. permission-denied); the login page tells the person
+  const inviteError = ref(null)
+
   // A slower, older load must not overwrite a newer one (e.g. the auth
   // listener finishing after refresh() on first login).
   let loadSeq = 0
+
+  // users/{uid} for an account that has none yet: an invited staff member
+  // gets theirs now, also one who was already signed in when invited, since
+  // a signed-in account never sees the login page (src/router/index.js).
+  // null for buyers, or when activating fails; they carry on as buyers.
+  async function activateInvite(firebaseUser, invite) {
+    try {
+      const started = startedActivation(firebaseUser.uid)
+      const profile = started ? await started : invite ? await activateStaffInvite(firebaseUser, invite) : null
+      inviteError.value = null
+      return profile
+    } catch (error) {
+      console.error('Staff invite activation error:', error)
+      inviteError.value = error
+      return null
+    }
+  }
 
   async function loadUser(firebaseUser) {
     const seq = ++loadSeq
 
     if (!firebaseUser) {
       user.value = null
+      inviteError.value = null
       return
     }
 
@@ -60,17 +83,21 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     try {
-      const [userDoc, isSeller, isOfficer] = await Promise.all([
+      // the invite is asked for alongside, not after, so a buyer's sign-in
+      // doesn't load any slower; staff have no invite left
+      const [userDoc, invite, isSeller, isOfficer] = await Promise.all([
         getDoc(doc(db, 'users', firebaseUser.uid)),
+        fetchStaffInvite(firebaseUser.email),
         firebaseUser.email ? isOnSellerList(firebaseUser.email) : false,
         firebaseUser.email ? isOnOfficerList(firebaseUser.email) : false
       ])
+      const profile = userDoc.exists() ? userDoc.data() : await activateInvite(firebaseUser, invite)
       // uid and email always come from the signed-in account: the rules
       // compare against request.auth, not whatever the users doc holds
       if (seq === loadSeq) {
         user.value = {
           ...base,
-          ...(userDoc.exists() ? userDoc.data() : {}),
+          ...(profile || {}),
           uid: base.uid,
           email: base.email,
           isSeller,
@@ -120,6 +147,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoggedIn,
     isSeller,
     isOfficer,
+    inviteError,
     email,
     isSchoolAccount,
     isEduAccount,

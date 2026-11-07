@@ -124,8 +124,7 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
-import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore'
-import { auth, db } from 'src/boot/firebase'
+import { auth } from 'src/boot/firebase'
 import {
   FRIEND_SCHOOLS,
   FRIEND_SCHOOL_DOMAINS,
@@ -134,7 +133,7 @@ import {
   isEduAccount,
   isSchoolAccount
 } from 'src/data/schools'
-import { isStaffRole } from 'src/data/roles'
+import { updateStaffProfile } from 'src/services/staffAccountService'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
 import { safeRedirect } from 'src/utils/redirect'
@@ -211,80 +210,24 @@ async function copyLink() {
   }
 }
 
-// First sign-in of an invited staff member: turn pendingUsers/{email} into
-// users/{uid}. Firestore rules only allow this when the invite exists and the
-// role matches it, so nobody can grant themselves a role. Returns the staff
-// role, or null for buyers.
-async function linkUserAccount(user) {
-  const userRef = doc(db, 'users', user.uid)
-  const existingSnap = await getDoc(userRef)
-  const now = new Date().toISOString()
-
-  if (existingSnap.exists()) {
-    const data = existingSnap.data()
-
-    await setDoc(
-      userRef,
-      {
-        email: user.email,
-        displayName: user.displayName || data.displayName || '',
-        photoURL: user.photoURL || '',
-        updatedAt: now
-      },
-      { merge: true }
-    )
-
-    return data.role || null
-  }
-
-  const email = (user.email || '').toLowerCase()
-  if (!email) return null
-
-  const pendingRef = doc(db, 'pendingUsers', email)
-  const pendingSnap = await getDoc(pendingRef)
-  if (!pendingSnap.exists()) return null
-
-  const pendingData = pendingSnap.data()
-  if (!isStaffRole(pendingData.role)) return null
-
-  // Must be one batch: the rules only allow creating the account when the
-  // invite is consumed in the same write, so it can never be reused.
-  const batch = writeBatch(db)
-  batch.set(userRef, {
-    email,
-    displayName: user.displayName || pendingData.name || '',
-    photoURL: user.photoURL || '',
-    name: pendingData.name || '',
-    role: pendingData.role,
-    uid: user.uid,
-    createdAt: pendingData.createdAt || now,
-    updatedAt: now
-  })
-  batch.delete(pendingRef)
-  await batch.commit()
-
-  return pendingData.role
-}
-
 async function afterLogin(user, mode, school) {
-  let role = null
+  // loads the profile of the account just signed in; an invited staff
+  // member's account is activated there (stores/auth.js)
+  await authStore.refresh()
 
-  try {
-    role = await linkUserAccount(user)
-  } catch (error) {
-    // only staff accounts are linked; a buyer can carry on regardless
-    console.error('Account linking error:', error)
-    if (error?.code === 'permission-denied') {
-      toast.show('幹部帳號授權資料無法驗證，請聯繫舞會總副召')
+  const isStaff = authStore.isManager
+
+  if (isStaff) {
+    try {
+      await updateStaffProfile(user)
+    } catch (error) {
+      console.error('Staff profile update error:', error)
     }
   }
 
-  // the auth listener may have loaded the profile before it was linked
-  await authStore.refresh()
-
-  const isStaff = isStaffRole(role)
-
-  if (mode === 'school' && !isSchoolAccount(user.email)) {
+  if (authStore.inviteError?.code === 'permission-denied') {
+    toast.show('幹部帳號授權資料無法驗證，請聯繫舞會總副召')
+  } else if (mode === 'school' && !isSchoolAccount(user.email)) {
     toast.show(`${user.email} 不是 @${SCHOOL_ACCOUNT_DOMAIN} 帳號，無法購買本校學生票`)
   } else if (mode === 'friend' && accountSchoolOf(user.email) !== school) {
     toast.show(`${user.email} 不是${school}帳號（@${FRIEND_SCHOOL_DOMAINS[school]}）`)
