@@ -28,10 +28,12 @@
     <div class="page-heading">
       <p class="eyebrow">後台管理</p>
       <h1>{{ canManageOrders ? '後台管理' : '通知管理' }}</h1>
-      <router-link :to="{ name: 'admin-scan' }" class="btn scan-link">掃描票券 QR Code</router-link>
-      <router-link :to="{ name: 'admin-scan-desk' }" class="btn-outline scan-link desk-link">電腦接收手機掃描</router-link>
-      <router-link v-if="canPurge" :to="{ name: 'super-admin-analytics' }" class="btn-outline scan-link analytics-link">銷售報表</router-link>
-      <router-link v-if="canCancel" :to="{ name: 'admin-cancel' }" class="btn-outline scan-link analytics-link">取消與退款</router-link>
+      <nav class="heading-actions" aria-label="後台功能">
+        <router-link :to="{ name: 'admin-scan' }" class="btn heading-link">掃描票券 QR Code</router-link>
+        <router-link :to="{ name: 'admin-scan-desk' }" class="btn-outline heading-link">電腦接收手機掃描</router-link>
+        <router-link v-if="canPurge" :to="{ name: 'super-admin-analytics' }" class="btn-outline heading-link">銷售報表</router-link>
+        <router-link v-if="canCancel" :to="{ name: 'admin-cancel' }" class="btn-outline heading-link">取消與退款</router-link>
+      </nav>
     </div>
 
     <div
@@ -1081,13 +1083,34 @@ async function resendEmail(order) {
   }
 }
 
-.scan-link {
-  display: inline-block;
+.heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 20px;
+}
+
+.heading-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 168px;
+  min-height: 44px;
+  padding: 0 20px;
+  text-align: center;
   text-decoration: none;
 }
 
-.desk-link {
-  margin-left: 10px;
+@media (max-width: 640px) {
+  .heading-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .heading-link {
+    min-width: 0;
+    padding: 0 10px;
+  }
 }
 </style>

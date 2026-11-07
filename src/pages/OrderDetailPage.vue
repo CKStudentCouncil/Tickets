@@ -158,6 +158,15 @@
             >
               取消訂單…
             </button>
+            <button
+              v-if="canDelete"
+              type="button"
+              class="btn-sm danger"
+              :disabled="deleting || changingStatus || loading"
+              @click="removeOrder"
+            >
+              {{ deleting ? '刪除中…' : '刪除訂單' }}
+            </button>
           </div>
         </section>
 
@@ -407,7 +416,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EVENT_DATE_LONG, EVENT_VENUE } from 'src/config/app'
 import { guestSourceText } from 'src/data/guests'
-import { fetchCancelledOrder, fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
+import { deleteOrder, fetchCancelledOrder, fetchOrder, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { CANCEL_EMAIL_LABELS, CANCEL_REASONS, REFUND_STATUS_LABELS } from 'src/data/cancellations'
 import { cancelBlockOf, noticeCountsOf } from 'src/utils/cancellations'
 import CancelOrderDialog from 'src/components/CancelOrderDialog.vue'
@@ -624,6 +633,30 @@ function askDelivery(delivered) {
 }
 
 const noticeCounts = computed(() => noticeCountsOf(order.value))
+
+// 刪除訂單, as on the admin list: only unpaid orders, 公關票 and 路宣 (a
+// paid order is cancelled instead, keeping its refund; firestore.rules)
+const canDelete = computed(() => {
+  const current = order.value
+  return auth.isAdmin && !!current && (current.paid !== true || current.complimentary === true || current.streetSale === true)
+})
+const deleting = ref(false)
+async function removeOrder() {
+  const current = order.value
+  if (!canDelete.value || deleting.value) return
+  const hint = current.complimentary || current.streetSale ? '' : '\n刪除只用於重複或誤建的訂單，不會留下紀錄；購票人放棄或逾期請改用「取消訂單」'
+  if (!window.confirm(`確定要刪除此訂單嗎？\nID: ${current.id}${hint}`)) return
+  deleting.value = true
+  try {
+    await deleteOrder(current.id)
+    toast.show('已刪除訂單')
+    router.replace({ name: 'admin' })
+  } catch {
+    toast.show('刪除失敗')
+  } finally {
+    deleting.value = false
+  }
+}
 
 function onCancelled({ refundAmount }) {
   toast.show(refundAmount ? `已取消訂單，待退款 NT$ ${refundAmount.toLocaleString()}` : '已取消訂單')
