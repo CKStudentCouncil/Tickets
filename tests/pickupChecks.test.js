@@ -43,7 +43,7 @@ test('早鳥票 waits for both the QR code and the card, in either order', () =>
 
   const both = check(early, { scans: { code: 'code-1', studentId: '1130524' } })
   assert.equal(both.canCollect, true)
-  assert.equal(both.label, '照片是本人，領票')
+  assert.equal(both.label, '領票')
   assert.deepEqual(both.request, { ticketCode: 'code-1', expectedDelivered: false, studentId: '1130524', studentCardChecked: true })
 })
 
@@ -91,7 +91,7 @@ test('student-priority tickets: staff look at the ID; a 建中 card scanned is c
 
   const campusScanned = check(priorityCampus, { scans: { code: 'code-1', studentId: '1130524' } })
   assert.equal(states(campusScanned).id, 'done')
-  assert.equal(campusScanned.label, '照片是本人，領票')
+  assert.equal(campusScanned.label, '領票')
 })
 
 test('unpaid orders are blocked until marked paid; complimentary ones are not', () => {

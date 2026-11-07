@@ -24,6 +24,8 @@
           <button type="button" class="remote-disconnect" @click="disconnect">中斷連線</button>
         </div>
 
+        <ModeSwitch v-model="mode" />
+
         <p class="phone-status" :class="{ waiting: !!need }" role="status" aria-live="polite">
           <template v-if="need">電腦正在等：<strong>{{ need.name || need.orderId }}</strong> 的{{ needWhat }}</template>
           <template v-else>電腦待命中：掃下一位的 QR Code 或學生證</template>
@@ -42,7 +44,6 @@
           @camera="saveCamera"
         />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
-        <ModeSelect v-model="mode" />
 
         <details class="manual order-entry" :open="!!manualError">
           <summary>都掃不到？輸入訂單編號傳到電腦</summary>
@@ -58,6 +59,7 @@
 
       <!-- ---------- the check-in station on this device ---------- -->
       <template v-else>
+        <ModeSwitch v-model="mode" />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
         <PickupStation
           ref="station"
@@ -67,12 +69,7 @@
           :initial-order-id="initialOrderId"
           :qr-filter="takePairingCode"
         >
-          <template v-if="!isPhone" #camera-extra>
-            <ModeSelect v-model="mode" />
-          </template>
           <template #idle-extra>
-            <!-- a phone: the buyer's order sits right under the camera -->
-            <ModeSelect v-if="isPhone" v-model="mode" />
             <details class="manual order-entry" :open="!!manualError">
               <summary>都掃不到？輸入訂單編號</summary>
               <form @submit.prevent="openManual">
@@ -131,7 +128,7 @@ const GUIDE_STEPS = [
     icon: markRaw(MousePointerClick),
     title: '2. 全部打勾，按一下領票',
     lines: [
-      '清單都打勾後，最下面的大按鈕會亮起來，上面寫著要確認的事，例如「照片是本人，領票」。',
+      '清單都打勾後，最下面的大按鈕會亮起來，上面寫著要確認的事，例如「已用酷課雲查驗，領票」。',
       '確認後按下（電腦也可以按 Enter），交付紙本票券。畫面會自動回到待命，直接掃下一位。'
     ]
   },
@@ -167,18 +164,19 @@ const PHONE_GUIDE = [
 ]
 
 // What the camera reads: both, or one kind (faster on slow phones)
-const MODE_LABELS = { auto: 'QR Code＋學生證', qr: '只掃 QR Code', card: '只掃學生證' }
-const ModeSelect = defineComponent({
+const MODE_LABELS = { auto: '自動辨識', qr: '只掃 QR Code', card: '只掃學生證' }
+const ModeSwitch = defineComponent({
   props: { modelValue: { type: String, default: 'auto' } },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
-    return () => h('label', { class: 'mode-select' }, [
-      h('span', '辨識'),
-      h('select', {
-        value: props.modelValue,
-        onChange: (event) => emit('update:modelValue', event.target.value)
-      }, Object.entries(MODE_LABELS).map(([value, label]) => h('option', { value }, label)))
-    ])
+    return () => h('div', { class: 'mode-switch', role: 'radiogroup', 'aria-label': '掃描方式' },
+      Object.entries(MODE_LABELS).map(([value, label]) => h('button', {
+        type: 'button',
+        role: 'radio',
+        'aria-checked': String(props.modelValue === value),
+        class: { active: props.modelValue === value },
+        onClick: () => emit('update:modelValue', value)
+      }, label)))
   }
 })
 
@@ -559,23 +557,32 @@ onBeforeUnmount(() => {
   color: var(--lunar);
 }
 
-.mode-select {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  color: var(--lunar);
-  font-size: 13px;
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
 }
 
-.mode-select :deep(select) {
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-soft);
-  color: var(--off-white);
-  font: inherit;
+.mode-switch :deep(button) {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--lunar);
+  font-family: inherit;
   font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.mode-switch :deep(button + button) {
+  border-left: 1px solid var(--line);
+}
+
+.mode-switch :deep(button.active) {
+  background: var(--ember);
+  color: #111;
 }
 
 .manual {

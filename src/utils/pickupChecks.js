@@ -90,7 +90,6 @@ export function pickupChecks(order, { ticketTypes = [], scans = {}, exceptions =
   else if (unpaid) label = '尚未付款，不能領票'
   else if (!qrOk) label = qr.state === 'bad' && code ? 'QR Code 不符，不能領票' : '等待掃描 QR Code'
   else if (!idOk) label = '等待掃描學生證'
-  else if (idRow?.state === 'done') label = '照片是本人，領票'
   else if (idRow?.state === 'excepted') label = `已用${methodShort(idException.method)}查驗，領票`
   else if (idRow?.state === 'look') label = '已看過學生證，領票'
   else label = '領票'
