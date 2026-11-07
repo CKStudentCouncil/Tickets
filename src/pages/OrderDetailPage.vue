@@ -192,7 +192,7 @@
                 <p v-else-if="needsCard && exceptionReady" class="check-text">以{{ idMethodLabel }}查驗{{ idNote.trim() ? `：${idNote.trim()}` : '' }}</p>
                 <p v-else-if="needsCard" class="check-text">{{ waitingText('card') }}</p>
                 <template v-else-if="needsIdCheck">
-                  <p class="check-text">學生優先票：請購票人出示學生證（背面有本學期註冊章）或酷課雲，資格不符不得領票</p>
+                  <p class="check-text">學生身分購票：請購票人出示學生證（背面有本學期註冊章）或酷課雲，資格不符不得領票</p>
                   <p v-if="idCheck?.campus" class="check-hint">建中學生證也可以用下方按鈕掃描，自動核對學號</p>
                 </template>
 
