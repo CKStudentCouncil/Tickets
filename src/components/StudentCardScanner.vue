@@ -323,17 +323,20 @@ async function loop(run) {
         cardSeen.value = read.cardFound && read.numberSeen
         if (read.id) {
           const expected = expectedRead(read)
+          // a card still in view after it was handed over (or sent) is not
+          // read again: before, each pair of frames handed it once more and
+          // the hint went 確認中 → 把學生證放進框內 → 確認中 for as long as
+          // the card stayed
+          if (!expected && read.id === sentId && Date.now() - sentAt < REPEAT_MS) {
+            sentAt = Date.now()
+            hint.value = props.paired ? `學號 ${read.id} 已傳送，換下一位` : `已讀到學號 ${read.id}`
+            await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
+            continue
+          }
           const again = readBefore(read)
           const sure = expected || again || read.confidence >= SURE_CONFIDENCE
           const id = expected || read.id
           if (sure) {
-            // paired: a card still in view after it was sent is not sent again
-            if (props.paired && id === sentId && Date.now() - sentAt < PAIRED_REPEAT_MS) {
-              sentAt = Date.now()
-              hint.value = `學號 ${id} 已傳送，換下一位`
-              await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
-              continue
-            }
             accept(id, read.candidates)
             return
           }
@@ -407,6 +410,8 @@ function accept(id, candidates = []) {
 // still needs. The field empties again: the page shows the 學號, and a 學號
 // left here would look like the next buyer's
 function hand(id) {
+  sentId = id
+  sentAt = Date.now()
   studentId.value = ''
   emit('read', { studentId: id, candidates: otherReads.value })
   startCamera()
@@ -497,7 +502,9 @@ async function lookup(value, { keepReads = false } = {}) {
 // paired, the phone sends the order and goes on reading by itself
 const PAIRED_NEXT_MS = 700
 const PAIRED_MISS_MS = 3000
-const PAIRED_REPEAT_MS = 4000
+// the 學號 last handed over (or sent, paired) and when it was last in view:
+// while it stays in view it is not read again
+const REPEAT_MS = 4000
 let sentId = ''
 let sentAt = 0
 function resumeSoon(delay) {
