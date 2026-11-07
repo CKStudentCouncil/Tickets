@@ -2,6 +2,7 @@
   <div class="station" :class="[{ 'with-camera': camera, 'one-order': fixed }, flash ? `flash-${flash}` : '']">
     <div v-if="camera" class="station-camera">
       <StudentCardScanner
+        ref="scanner"
         :device-id="savedCamera()"
         :card="cameraMode !== 'qr'"
         :qr="cameraMode !== 'card'"
@@ -41,7 +42,7 @@
             <span class="choose-state" :class="{ done: item.delivered }">{{ item.delivered ? '已領票' : '未領票' }}{{ item.paid ? '' : '・未付款' }}</span>
           </button>
         </div>
-        <button type="button" class="prompt-secondary" @click="prompt = null">取消</button>
+        <button type="button" class="prompt-secondary" @click="dismissChoice">取消</button>
       </div>
 
       <PickupPanel
@@ -178,6 +179,7 @@ const loading = ref(false)
 const busy = ref(false)
 const panelError = ref('')
 const panel = ref(null)
+const scanner = ref(null)
 // the 學號 on the order shown, still to be scanned: the camera takes it on
 // the first reading
 // one of QR Code and card scanned, the other still wanted
@@ -536,12 +538,27 @@ async function loadOrder(orderId, scans, known) {
   }
 }
 
+// back to waiting: whatever is still in front of the camera counts again at
+// once. Before, a card or QR code kept in view (or shown again within 3 s)
+// after 取消 was taken for the same scan and ignored, for good
 function clear() {
   loadSequence++
   current.value = null
   prompt.value = null
   panelError.value = ''
   loading.value = false
+  rescanAll()
+}
+
+function rescanAll() {
+  seen.clear()
+  scanner.value?.forget()
+}
+
+// 取消 on a 學號's list of orders: the card can be scanned again at once
+function dismissChoice() {
+  prompt.value = null
+  rescanAll()
 }
 
 function setException({ key, value }) {
@@ -693,7 +710,8 @@ function onKey(event) {
     event.preventDefault()
     collect()
   } else if (event.key === 'Escape') {
-    if (prompt.value) prompt.value = null
+    if (prompt.value?.kind === 'choose') dismissChoice()
+    else if (prompt.value) prompt.value = null
     else if (current.value && !props.fixed) clear()
     else if (done.value) done.value = null
   }

@@ -570,8 +570,16 @@ onBeforeUnmount(() => {
   reader?.terminate()
 })
 
-// the page restarts reading after it handled a QR code it could not use
-defineExpose({ restart: () => startCamera() })
+// the page restarts reading after it handled a QR code it could not use;
+// forget(): the page dropped what it was given (取消), so the card still in
+// view is read and handed over again
+defineExpose({
+  restart: () => startCamera(),
+  forget: () => {
+    sentId = ''
+    recentReads = []
+  }
+})
 </script>
 
 <style scoped>
