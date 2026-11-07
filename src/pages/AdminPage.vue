@@ -520,6 +520,30 @@
     <section
       v-if="canPurge"
       class="panel danger-zone"
+      aria-labelledby="test-orders-title"
+    >
+      <div class="notify-header">
+        <div>
+          <p class="danger-eyebrow">Danger zone</p>
+          <h2 id="test-orders-title">刪除所有測試票訂單</h2>
+          <p class="panel-copy">
+            開賣前試完購票、繳費與領票流程後使用；刪除只含測試票的訂單，已付款、已領票與已取消的都會刪除，票會退回庫存與購買額度；同時含一般票的訂單不會刪除
+          </p>
+        </div>
+        <button
+          type="button"
+          class="btn-outline danger"
+          :disabled="testOrdersStep !== ''"
+          @click="confirmDeleteTestOrders"
+        >
+          {{ TEST_ORDERS_STEP_LABELS[testOrdersStep] }}
+        </button>
+      </div>
+    </section>
+
+    <section
+      v-if="canPurge"
+      class="panel danger-zone"
       aria-labelledby="purge-title"
     >
       <div class="notify-header">
@@ -670,7 +694,7 @@ import { useToastStore } from 'src/stores/toast'
 import { useAdminOrders } from 'src/composables/useAdminOrders'
 import { useNotificationJob } from 'src/composables/useNotificationJob'
 import { useOrderPurge } from 'src/composables/useOrderPurge'
-import { fetchCancelledOrder, fetchOrder, resendOrderEmail } from 'src/services/orderService'
+import { deleteTestOrders, fetchCancelledOrder, fetchOrder, previewTestOrders, resendOrderEmail } from 'src/services/orderService'
 import { needsNotificationEnqueue, canClearNotification } from 'src/utils/notificationProgress'
 import {
   COMPLIMENTARY_OPTIONS, DELIVERED_OPTIONS, NOTIFY_AUDIENCE, PAID_OPTIONS,
@@ -841,6 +865,55 @@ function confirmDelete(order) {
   const hint = order.complimentary || order.streetSale ? '' : '\n刪除只用於重複或誤建的訂單，不會留下紀錄；購票人放棄或逾期請改用「取消訂單」'
   if (!window.confirm(`確定要刪除此訂單嗎？\nID: ${order.id}${hint}`)) return
   deleteOrder(order.id).catch(() => toast.show('刪除失敗'))
+}
+
+/* ---------- 刪除所有測試票訂單 (functions/lib/testOrders.js) ---------- */
+
+// super admins only, as for purging (deleteTestOrders checks this too)
+const TEST_ORDERS_STEP_LABELS = { '': '刪除所有測試票訂單…', counting: '統計中...', deleting: '刪除中...' }
+const testOrdersStep = ref('')
+
+function testOrdersConfirmText(preview) {
+  const lines = [
+    '確定要刪除所有測試票訂單嗎？',
+    `票種：${preview.ticketTypes.map((type) => type.name).join('、')}`,
+    `訂單 ${preview.orderCount} 筆、共 ${preview.ticketCount} 張（已付款 ${preview.paidCount} 筆、已領票 ${preview.deliveredCount} 筆）`
+  ]
+  if (preview.cancelledCount) lines.push(`已取消的測試票訂單 ${preview.cancelledCount} 筆也會刪除`)
+  if (preview.mixedCount) lines.push(`另有 ${preview.mixedCount} 筆同時含一般票的訂單不會刪除`)
+  lines.push('票會退回庫存與購買額度；刪除後無法復原')
+  return lines.join('\n')
+}
+
+async function confirmDeleteTestOrders() {
+  if (testOrdersStep.value) return
+  testOrdersStep.value = 'counting'
+  try {
+    const preview = await previewTestOrders()
+    if (preview.ticketTypes.length === 0) {
+      toast.show('目前沒有設為測試票的票種')
+      return
+    }
+    if (preview.orderCount === 0 && preview.cancelledCount === 0) {
+      toast.show(preview.mixedCount
+        ? `沒有只含測試票的訂單；${preview.mixedCount} 筆同時含一般票的訂單請逐筆處理`
+        : '目前沒有測試票訂單')
+      return
+    }
+    if (!window.confirm(testOrdersConfirmText(preview))) return
+
+    testOrdersStep.value = 'deleting'
+    const result = await deleteTestOrders()
+    // a page of search results does not drop them by itself
+    dropOrder(result.deletedOrderIds)
+    const cancelled = result.cancelledDeletedCount ? `與已取消的 ${result.cancelledDeletedCount} 筆` : ''
+    toast.show(`已刪除 ${result.deletedCount} 筆測試票訂單${cancelled}`)
+  } catch (error) {
+    console.error('Delete test orders error:', error)
+    toast.show('刪除測試票訂單失敗，請稍後再試')
+  } finally {
+    testOrdersStep.value = ''
+  }
 }
 
 /* ---------- 取消訂單 (functions/lib/orderCancel.js) ---------- */

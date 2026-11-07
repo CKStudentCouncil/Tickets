@@ -606,7 +606,7 @@ service cloud.firestore {
     match /surveyResponses/{responseId} {
       allow create: if false;
 
-      allow read: if isManager();
+      allow read: if isSuperAdmin();
       allow delete: if isSuperAdmin();
       allow update: if false;
     }

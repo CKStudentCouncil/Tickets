@@ -58,26 +58,25 @@ async function changeStatus(data, context, { field, expectedField, prefix, minRo
       throw new HttpsError(code, current && field === 'delivered' ? '此訂單已領票' : '訂單狀態已變更，請重新確認', metadata(order, field, prefix))
     }
 
-    const verification = verify ? verify({ data, input, order, rank }) : {}
+    // `alsoPaid`: a pickup that marks the order paid in the same write
+    const { alsoPaid, ...verification } = verify ? verify({ data, input, order, rank }) : {}
     const updatedAt = Timestamp.now()
     const actorName = staffName(profile, context)
-    const patch = {
-      [field]: input.value,
-      [`${prefix}UpdatedAt`]: updatedAt,
-      [`${prefix}UpdatedByName`]: actorName,
-      [`${prefix}UpdatedByUid`]: context.auth.uid
-    }
-    tx.update(orderRef, patch)
-    tx.create(historyRef, {
-      action: prefix,
-      previousValue: current,
-      value: input.value,
-      actorUid: context.auth.uid,
-      actorName,
-      occurredAt: updatedAt,
-      ...verification
+    const stamp = (key) => ({
+      [`${key}UpdatedAt`]: updatedAt,
+      [`${key}UpdatedByName`]: actorName,
+      [`${key}UpdatedByUid`]: context.auth.uid
     })
-    return metadata(patch, field, prefix)
+    const patch = { [field]: input.value, ...stamp(prefix), ...(alsoPaid ? { paid: true, ...stamp('payment') } : {}) }
+    tx.update(orderRef, patch)
+    const event = { actorUid: context.auth.uid, actorName, occurredAt: updatedAt }
+    if (alsoPaid) {
+      tx.create(orderRef.collection('history').doc(), {
+        action: 'payment', previousValue: false, value: true, ...event, paymentVerification: alsoPaid
+      })
+    }
+    tx.create(historyRef, { action: prefix, previousValue: current, value: input.value, ...event, ...verification })
+    return { ...metadata(patch, field, prefix), ...(alsoPaid ? metadata(patch, 'paid', 'payment') : {}) }
   })
 }
 
@@ -110,19 +109,29 @@ function verifyDelivery({ data, input, order, rank }, ticketTypes) {
     return { codeVerification: 'not_required', overrideReason: requireOverrideReason(data) }
   }
 
-  // the money first: an unpaid order is marked paid (admins) before it is
-  // collected, so nobody walks in on a ticket that was never paid for
-  if (order.paid !== true && order.complimentary !== true) {
-    throw new HttpsError('failed-precondition', '此訂單尚未付款：請先收款並標記已付款，再領票')
-  }
-
   const isAdmin = rank >= ROLE_RANK.admin
   const studentId = cleanStudentId(data.studentId)
-  const cardOk = !!studentId && data.studentCardChecked === true && order.customerEmail === studentAccountEmail(studentId)
+  // compared as the pickup screen does (src/utils/pickupChecks.js cardMatches)
+  const email = String(order.customerEmail || '').trim().toLowerCase()
+  const cardOk = !!studentId && data.studentCardChecked === true && email === studentAccountEmail(studentId)
+  const codeOk = typeof data.ticketCode === 'string' && typeof order.ticketCode === 'string' && !!order.ticketCode && data.ticketCode === order.ticketCode
   const override = isAdmin && typeof data.overrideReason === 'string' && data.overrideReason.trim()
 
+  // the money first: an unpaid order is marked paid (admins) before it is
+  // collected, so nobody walks in on a ticket that was never paid for. The
+  // one exception: the buyer at the desk with both their ticket QR code and
+  // their own student card; staff take the cash there and the pickup marks
+  // the order paid too (any staff who can collect)
+  let alsoPaid = null
+  if (order.paid !== true && order.complimentary !== true) {
+    if (!(data.markPaid === true && codeOk && cardOk)) {
+      throw new HttpsError('failed-precondition', '此訂單尚未付款：請先收款並標記已付款，再領票')
+    }
+    alsoPaid = 'pickup_scan'
+  }
+
   let code
-  if (typeof data.ticketCode === 'string' && typeof order.ticketCode === 'string' && order.ticketCode && data.ticketCode === order.ticketCode) {
+  if (codeOk) {
     code = { codeVerification: 'verified' }
   } else if (isAdmin && cardOk && data.skipQr === true) {
     // 忘了 QR Code: an admin lets the student card stand in for it
@@ -134,8 +143,9 @@ function verifyDelivery({ data, input, order, rank }, ticketTypes) {
   }
 
   const card = cardOk ? { idVerification: 'student_card', studentId } : null
-  if (!requiresStudentCard(order, ticketTypes)) return { ...code, ...card }
-  if (card) return { ...code, ...card }
+  // alsoPaid needs the card, so it only ever comes back with it
+  if (card) return { ...code, ...card, ...(alsoPaid ? { alsoPaid } : {}) }
+  if (!requiresStudentCard(order, ticketTypes)) return code
   const exception = idCheckException(data)
   if (exception) return { ...code, ...exception }
   if (override) return { ...code, idVerification: 'admin_override', overrideReason: requireOverrideReason(data) }

@@ -296,11 +296,11 @@ const loadError = ref(false)
 const now = useNow(1000)
 
 // a type hidden until sales open reads as 找不到 until then; so does a
-// 測試票 for anyone but admins
+// 測試票 for anyone but staff (友校幹部 and above)
 const ticketType = computed(() => {
   const type = ticketTypes.value.find((t) => t.id === route.params.id)
 
-  return type && isTicketTypeListed(type, now.value, { isAdmin: auth.isAdmin }) ? type : null
+  return type && isTicketTypeListed(type, now.value, { isStaff: auth.isManager }) ? type : null
 })
 
 const isTestTicket = computed(() => isAdminOnlyType(ticketType.value))

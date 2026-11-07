@@ -33,7 +33,7 @@
       <!-- a 學號 with several orders -->
       <div v-else-if="prompt?.kind === 'choose'" class="station-prompt" role="dialog" aria-label="選擇訂單">
         <p class="prompt-title">{{ prompt.title }}</p>
-        <p class="prompt-text">點選要領的那一筆，或直接掃那一筆的 QR Code</p>
+        <p class="prompt-text">點選要領的那一筆，或直接掃那一筆的 QR Code{{ prompt.scans?.studentId ? '；學生證不用再掃，每一筆掃 QR Code 就好' : '' }}</p>
         <div class="choose-list">
           <button v-for="item in prompt.orders" :key="item.id" type="button" class="choose-row" @click="choose(item)">
             <strong>{{ item.customerName || '（未填姓名）' }}</strong>
@@ -56,18 +56,32 @@
         :clearable="!fixed"
         :detail-link="!fixed"
         :keyboard="keyboard"
+        :auto-ms="autoMs"
         @collect="collect()"
         @force="collect"
         @clear="clear"
         @mark-paid="markPaid"
         @exception="setException"
         @undo="undoException"
+        @stop-auto="stopAuto"
       />
 
+      <!-- stays until the next scan -->
       <div v-else-if="done" class="station-done" role="status">
         <p class="done-title"><Check :size="28" :stroke-width="3" aria-hidden="true" /> 已領票</p>
         <p class="done-name">{{ done.name }}</p>
-        <p class="done-meta">{{ done.items }}・請交付紙本票券</p>
+        <ul class="done-tickets" aria-label="交付的票">
+          <li v-for="(item, index) in done.tickets" :key="index">
+            <span>{{ item.name }}</span>
+            <strong>× {{ item.quantity }}</strong>
+          </li>
+        </ul>
+        <p class="done-money" :class="done.money.kind">
+          <span>{{ done.money.label }}</span>
+          <strong v-if="done.money.amount">{{ done.money.amount }}</strong>
+        </p>
+        <p class="done-meta">請交付紙本票券</p>
+        <slot v-if="!fixed" name="idle-extra" />
       </div>
 
       <div v-else-if="loading" class="station-idle" role="status">
@@ -107,7 +121,7 @@ import { isTimeout, withTimeout } from 'src/utils/withTimeout'
 import { fetchCancelledOrder, fetchOrder, findStudentOrders, lookupOrders, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import { useAuthStore } from 'src/stores/auth'
-import { cardMatches, pickupChecks } from 'src/utils/pickupChecks'
+import { amountText, cardMatches, pickupChecks } from 'src/utils/pickupChecks'
 import { SEARCH_HINT, choices, classifySearch, notFoundText, pickOrder, searchLabel } from 'src/utils/pickupSearch'
 import { parseTicketQr } from 'src/utils/ticketQr'
 
@@ -115,7 +129,9 @@ import { parseTicketQr } from 'src/utils/ticketQr'
 // scan (this camera, a paired phone, a typed order number) goes to
 // receive(); it ticks a row of the order shown, opens the buyer's order, or
 // asks before replacing a half-checked one. Staff press one button at the
-// end; the station then waits for the next buyer by itself.
+// end, or none when the ticket's QR code and the buyer's own student card
+// both match (a short countdown, which they can stop); 已領票 then stays on
+// screen until the next buyer's scan.
 const props = defineProps({
   // this device's camera (StudentCardScanner); off at a computer a phone scans for
   camera: { type: Boolean, default: true },
@@ -145,9 +161,13 @@ const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 // The buyer's QR code or card stays in view for a while: each counts once
 // until it has been out of view this long
 const REPEAT_GAP_MS = 3000
-// 已領票 stays up this long, then the station waits for the next buyer
-const DONE_MS = 1500
 const NOTICE_MS = 4500
+// QR Code and student card both match: collected this long after, unless
+// staff stop it
+const AUTO_MS = 2000
+// a student card read counts for that student's other orders (several
+// orders, one card) while they keep coming: this long after the last one
+const CARD_KEEP_MS = 60000
 const RECENT_LIMIT = 3
 const CAMERA_KEY = 'cksc.scanCamera'
 
@@ -170,9 +190,15 @@ const expectedCard = computed(() => {
 // { kind: 'switch', title, text, name, orderId, order, scans } | { kind: 'choose', title, orders, scans }
 const prompt = ref(null)
 const notice = ref(null)
+// 已領票: which tickets to hand over and the money; stays until the next scan
 const done = ref(null)
 const recent = ref([])
 const flash = ref('')
+// the countdown running (AUTO_MS) or 0; autoSkip: the order staff stopped
+// it for, or whose automatic collect failed (back to the button)
+const autoMs = ref(0)
+const autoSkip = ref('')
+let autoTimer = 0
 
 const checks = computed(() => current.value && pickupChecks(current.value.order, {
   ticketTypes: ticketTypes.value,
@@ -195,7 +221,6 @@ async function afterLoad() {
   while (loadingNow) await loadingNow
 }
 let noticeTimer = 0
-let doneTimer = 0
 let flashTimer = 0
 const seen = new Map()
 
@@ -208,6 +233,15 @@ function isNew(key) {
 
 function itemsOf(order) {
   return (order?.items || []).map((item) => `${item.name} × ${item.quantity}`).join('、')
+}
+
+// the done screen's money line: 收款 (taken at the desk just now), 已付款
+// (paid before) or 免付款 (guests)
+function moneyOf(order, paidHere) {
+  const amount = amountText(order).trim()
+  if (paidHere) return { kind: 'collect', label: amount ? '收款' : '已收款', amount }
+  if (order.complimentary) return { kind: 'free', label: '免付款', amount: '' }
+  return { kind: 'paid', label: '已付款', amount }
 }
 
 function savedCamera() {
@@ -259,8 +293,26 @@ function say(text, tone = 'bad', duration = NOTICE_MS) {
 }
 
 // ---------- scans ----------
-const hasProgress = (entry) => !!(entry && (entry.scans.code || entry.scans.studentId || entry.exceptions.qr || entry.exceptions.id))
-const blank = () => ({ code: '', studentId: '' })
+// a card carried over from the student's last order is not work done here
+const hasProgress = (entry) => !!(entry && (entry.scans.code || (entry.scans.studentId && !entry.scans.cardCarried) || entry.exceptions.qr || entry.exceptions.id))
+const blank = () => ({ code: '', studentId: '', cardCarried: false })
+
+// { studentId, at }: the last student card read at this station
+let cardOnFile = null
+function rememberCard(studentId) {
+  cardOnFile = { studentId, at: Date.now() }
+}
+// the card for an order just opened: the student's own, read lately; an
+// order of anyone else means the student has gone
+function carriedCard(order) {
+  if (!cardOnFile) return ''
+  if (Date.now() - cardOnFile.at > CARD_KEEP_MS || !cardMatches(order, cardOnFile.studentId)) {
+    cardOnFile = null
+    return ''
+  }
+  cardOnFile.at = Date.now()
+  return cardOnFile.studentId
+}
 
 function handleQr(text) {
   if (panel.value?.dialogOpen?.()) return
@@ -281,6 +333,8 @@ async function handleCard(value, hintOrderId = '') {
   if (panel.value?.dialogOpen?.()) return
   const studentId = cleanStudentId(value)
   if (!studentId || !isNew(`card:${studentId}`)) return
+  done.value = null
+  rememberCard(studentId)
   await afterLoad()
   const shown = current.value
   if (shown && !shown.order.delivered && cardMatches(shown.order, studentId)) {
@@ -337,6 +391,7 @@ function lookupError(error) {
 // one order's scan: ticks it when shown, else opens it (asking first when
 // the one shown is half done)
 async function route(orderId, scans, why = '') {
+  done.value = null
   await afterLoad()
   const shown = current.value
   if (shown?.order.id === orderId) {
@@ -349,11 +404,28 @@ async function route(orderId, scans, why = '') {
     return
   }
   if (shown && hasProgress(shown) && !shown.order.delivered) {
+    // read the other order first: one that can't be read is not offered,
+    // so the half-checked buyer stays on screen
     const sequence = ++loadSequence
-    const order = await fetchOrder(orderId).catch(() => null)
+    let order
+    try {
+      order = await withTimeout(fetchOrder(orderId), LOAD_TIMEOUT_MS[0])
+    } catch (error) {
+      if (sequence !== loadSequence) return
+      console.error('Failed to read the other order', error)
+      feedback('bad')
+      say('網路不穩，讀不到剛掃的訂單；請再掃一次')
+      return
+    }
     if (sequence !== loadSequence) return
     feedback('bad')
-    const name = order?.customerName || orderId
+    if (!order) {
+      const cancelled = await withTimeout(fetchCancelledOrder(orderId), LOAD_TIMEOUT_MS[0]).catch(() => null)
+      if (sequence !== loadSequence) return
+      say(goneText(orderId, cancelled), 'bad', 8000)
+      return
+    }
+    const name = order.customerName || '（未填姓名）'
     prompt.value = {
       kind: 'switch',
       title: why || `掃到另一筆訂單：${name}`,
@@ -389,8 +461,9 @@ function addScans(scans) {
     next.code = scans.code
     changed = true
   }
-  if (scans.studentId && scans.studentId !== next.studentId) {
+  if (scans.studentId && (scans.studentId !== next.studentId || next.cardCarried)) {
     next.studentId = scans.studentId
+    next.cardCarried = false
     changed = true
   }
   if (!changed) return
@@ -398,6 +471,12 @@ function addScans(scans) {
   panelError.value = ''
   const qrBad = scans.code && scans.code !== entry.order.ticketCode
   feedback(qrBad ? 'bad' : 'ok')
+}
+
+// an order that is not there: cancelled (from cancelledOrders) or never was
+function goneText(orderId, cancelled) {
+  if (!cancelled) return `找不到訂單 ${orderId}`
+  return `訂單 ${orderId}${cancelled.customerName ? `（${cancelled.customerName}）` : ''}已取消，不得領票`
 }
 
 function load(orderId, scans = {}, known = null) {
@@ -410,11 +489,11 @@ function load(orderId, scans = {}, known = null) {
 
 async function loadOrder(orderId, scans, known) {
   const sequence = ++loadSequence
-  clearTimeout(doneTimer)
   done.value = null
   prompt.value = null
   notice.value = null
   panelError.value = ''
+  autoSkip.value = ''
   loading.value = true
   try {
     let order = known
@@ -434,10 +513,15 @@ async function loadOrder(orderId, scans, known) {
       if (sequence !== loadSequence) return
       current.value = null
       feedback('bad')
-      say(cancelled ? `訂單 ${orderId}（${cancelled.customerName || ''}）已取消，不得領票` : `找不到訂單 ${orderId}`, 'bad', 8000)
+      say(goneText(orderId, cancelled), 'bad', 8000)
       return
     }
-    current.value = { order: { ...order, delivered: !!order.delivered }, scans: { ...blank(), ...scans }, exceptions: { qr: null, id: null } }
+    const carried = !scans.studentId && !order.delivered ? carriedCard(order) : ''
+    current.value = {
+      order: { ...order, delivered: !!order.delivered },
+      scans: { ...blank(), ...scans, ...(carried ? { studentId: carried, cardCarried: true } : {}) },
+      exceptions: { qr: null, id: null }
+    }
     notice.value = null
     const qrBad = scans.code && scans.code !== order.ticketCode
     // an order page opening by itself makes no sound
@@ -486,22 +570,29 @@ async function collect(forceReason = '') {
     })
     const collected = { ...order, ...patch, delivered: true }
     emit('collected', collected)
+    // the same student's next order takes the card from here
+    if (state.cardOk) rememberCard(state.request.studentId)
     feedback('ok')
+    const paidHere = !forceReason && state.autoPay
     const how = forceReason
       ? '管理員強制領票'
-      : state.rows.some((row) => row.state === 'excepted') ? '例外處理' : state.cardOk ? 'QR＋學生證' : 'QR Code'
+      : state.rows.some((row) => row.state === 'excepted') ? '例外處理' : `${state.cardOk ? 'QR＋學生證' : 'QR Code'}${paidHere ? `・現場收款${state.money}` : ''}`
     recent.value = [{ id: order.id, name: order.customerName || order.id, at: Date.now(), time: clock(new Date()), how }, ...recent.value].slice(0, RECENT_LIMIT)
     if (props.fixed) {
       entry.order = collected
       return
     }
     current.value = null
-    done.value = { name: order.customerName || order.id, items: itemsOf(order) }
-    clearTimeout(doneTimer)
-    doneTimer = setTimeout(() => { done.value = null }, DONE_MS)
+    done.value = {
+      name: order.customerName || order.id,
+      tickets: (order.items || []).map((item) => ({ name: item.name, quantity: item.quantity })),
+      money: moneyOf(order, paidHere)
+    }
   } catch (error) {
     console.error('Collect failed', error)
     feedback('bad')
+    // no automatic retry: staff press the button
+    autoSkip.value = order.id
     panelError.value = error.message || '領票失敗，請再按一次'
     if (error?.details?.delivered === true || /已領票/.test(error.message || '')) {
       entry.order = { ...entry.order, ...(error.details || {}), delivered: true }
@@ -539,6 +630,7 @@ function clock(date) {
 async function search(text) {
   const query = classifySearch(text)
   if (!query) return `請輸入${SEARCH_HINT}`
+  done.value = null
   if (query.kind === 'order') {
     await route(query.orderId, {})
     return ''
@@ -603,7 +695,32 @@ function onKey(event) {
   } else if (event.key === 'Escape') {
     if (prompt.value) prompt.value = null
     else if (current.value && !props.fixed) clear()
+    else if (done.value) done.value = null
   }
+}
+
+// ---------- QR Code and student card both match: collect by itself ----------
+// held while staff have a question or a dialog open, or are already sending
+watch(
+  () => {
+    const entry = current.value
+    if (!entry || !checks.value?.auto || busy.value || prompt.value || panel.value?.dialogOpen?.()) return ''
+    if (entry.order.id === autoSkip.value) return ''
+    return `${entry.order.id}:${entry.scans.code}:${entry.scans.studentId}`
+  },
+  (key) => {
+    clearTimeout(autoTimer)
+    autoMs.value = key ? AUTO_MS : 0
+    if (!key) return
+    autoTimer = setTimeout(() => {
+      autoMs.value = 0
+      collect()
+    }, AUTO_MS)
+  }
+)
+
+function stopAuto() {
+  if (current.value) autoSkip.value = current.value.order.id
 }
 
 // what a paired phone should scan for the order shown
@@ -630,8 +747,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   clearTimeout(noticeTimer)
-  clearTimeout(doneTimer)
   clearTimeout(flashTimer)
+  clearTimeout(autoTimer)
   audio?.close?.()
 })
 
@@ -822,10 +939,63 @@ defineExpose({ receive, search, load, clear, current })
   font-weight: 700;
 }
 
+.done-tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.done-tickets li {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.done-tickets strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.done-money {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 14px auto 0 !important;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  color: rgba(242, 240, 233, .8);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.done-money strong {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-variant-numeric: tabular-nums;
+}
+
+/* cash taken at the desk: the number staff act on */
+.done-money.collect {
+  border-color: var(--wait);
+  background: rgba(228, 164, 104, .14);
+  color: var(--wait);
+}
+
 .done-meta {
-  margin-top: 4px !important;
+  margin-top: 12px !important;
   color: rgba(242, 240, 233, .8);
   font-size: 15px;
+}
+
+.station-done :deep(.order-entry) {
+  margin-top: 18px;
+  text-align: left;
 }
 
 .station-idle {

@@ -1631,6 +1631,10 @@ textarea::placeholder {
   border-top-color: rgba(201, 120, 120, 0.35);
 }
 
+.danger-zone + .danger-zone {
+  margin-top: 52px;
+}
+
 .danger-zone .panel-copy {
   max-width: 640px;
 }

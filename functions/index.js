@@ -7,6 +7,7 @@ export { updateOrderDelivery, updateOrderPayment } from './lib/orderActions.js'
 export { registerSellerTickets, releaseSellerStock, updateSellerRegistrationQuantity } from './lib/sellers.js'
 export { registerStreetSale } from './lib/streetSales.js'
 export { purgeOrders } from './lib/orderPurge.js'
+export { deleteTestOrders } from './lib/testOrders.js'
 export { importSalesArchive } from './lib/salesArchive.js'
 export {
   claimOfficerInvite,

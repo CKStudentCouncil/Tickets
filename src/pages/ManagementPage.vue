@@ -185,7 +185,7 @@
               </select>
 
               <small v-if="ticketType.eligibleBuyerIdentity === 'admins_only'" class="time-summary">
-                只有管理員（建班幹部以上）看得到、也只有管理員能買，一般使用者看不到
+                只有管理員（友校幹部以上）看得到、也只有管理員能買，一般使用者看不到
               </small>
 
               <!-- 本校學生 is 建中 only already -->

@@ -56,13 +56,19 @@
       v-if="!order.delivered"
       type="button"
       class="collect-button"
-      :class="{ ready: checks.canCollect }"
+      :class="{ ready: checks.canCollect, auto: counting }"
+      :style="counting ? { '--auto-ms': `${autoMs}ms` } : null"
       :disabled="!checks.canCollect || busy"
       @click="$emit('collect')"
     >
       <span>{{ busy ? '處理中…' : checks.label }}</span>
       <kbd v-if="keyboard && checks.canCollect && !busy" aria-hidden="true">Enter</kbd>
     </button>
+
+    <p v-if="counting" class="auto-note" role="status">
+      <span>QR Code 和學生證都相符，馬上自動領票</span>
+      <button type="button" class="auto-stop" @click="$emit('stop-auto')">取消</button>
+    </p>
 
     <p v-if="error" class="panel-error" role="alert">{{ error }}</p>
 
@@ -176,11 +182,13 @@ const props = defineProps({
   // a link to the order's own page (not on that page itself)
   detailLink: { type: Boolean, default: false },
   // a computer: Enter collects
-  keyboard: { type: Boolean, default: false }
+  keyboard: { type: Boolean, default: false },
+  // the station collects by itself this many ms from now (0: it does not)
+  autoMs: { type: Number, default: 0 }
 })
 // collect | clear | mark-paid | exception({ key: 'qr' | 'id', value }) |
-// undo(key) | force(reason)
-const emit = defineEmits(['collect', 'clear', 'mark-paid', 'exception', 'undo', 'force'])
+// undo(key) | force(reason) | stop-auto (back to the button)
+const emit = defineEmits(['collect', 'clear', 'mark-paid', 'exception', 'undo', 'force', 'stop-auto'])
 
 const STATE_WORDS = { pay: '等待收款', wait: '等待中', look: '請目視確認', done: '完成', excepted: '以例外方式完成', bad: '有問題' }
 
@@ -195,6 +203,7 @@ const itemsText = computed(() => (props.order.items || []).map((item) => `${item
 const skipped = computed(() => unfinishedRows(props.checks))
 const canForce = computed(() => props.isAdmin && !props.order.delivered && skipped.value.length > 0 && !props.checks.unpaid)
 const idReady = computed(() => !!idMethod.value && (idMethod.value !== 'other' || !!idNote.value))
+const counting = computed(() => props.autoMs > 0 && !props.busy && !props.order.delivered)
 
 const deliveredBy = computed(() => {
   const at = toDate(props.order.deliveryUpdatedAt)
@@ -499,6 +508,60 @@ defineExpose({ dialogOpen: () => dialogs.qr || dialogs.id || dialogs.force })
   filter: brightness(1.06);
 }
 
+/* the automatic collect counting down: the button fills from the left */
+.collect-button.auto {
+  position: relative;
+  overflow: hidden;
+}
+
+.collect-button.auto::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 11, 4, .2);
+  transform-origin: left;
+  animation: auto-fill var(--auto-ms, 2000ms) linear forwards;
+}
+
+.collect-button.auto > * {
+  position: relative;
+}
+
+@keyframes auto-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.auto-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: rgba(242, 240, 233, .82);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auto-stop {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auto-stop:hover,
+.auto-stop:focus-visible {
+  border-color: var(--wait);
+  color: var(--wait);
+}
+
 .collect-button kbd {
   padding: 2px 6px;
   border: 1px solid rgba(18, 11, 4, .35);
@@ -567,7 +630,8 @@ defineExpose({ dialogOpen: () => dialogs.qr || dialogs.id || dialogs.force })
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row.wait .mark {
+  .row.wait .mark,
+  .collect-button.auto::before {
     animation: none;
   }
 }

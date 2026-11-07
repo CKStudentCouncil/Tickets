@@ -153,6 +153,8 @@ Create orders through `createOrder` (or, for 公關票, the callables in `guests
 
 清除所有訂單 deletes through `purgeOrders` only: it deletes exactly the orders in the browser's Excel backup, archives every one before deleting any, then deletes each with its archived copy and stock release in one transaction (its `stockReleases` marker stops `releaseOrderStock` from releasing twice). An interrupted run resumes with the same `purgeId`.
 
+刪除所有測試票訂單 (`/admin`, super admins) goes through `deleteTestOrders`: a dry run counts the orders whose every ticket is a type that is a 測試票 (`admins_only`) now, then the confirmed call deletes them, paid, collected and cancelled ones included, each with its stock release in one transaction like a purge but without archiving. Orders that also hold other tickets are left alone.
+
 `/super_admin/analytics` listens to every order (one read per order when it opens). Keep the admin order list on bounded pages.
 
 Admin reads use bounded live pages and filter-specific server aggregates. Name/email/phone search applies to the visible page; exact order ID lookup covers any order. Full Excel export explicitly paginates the selected filters and loads ExcelJS only when requested. Order value and collected payment are distinct in both UI and export.

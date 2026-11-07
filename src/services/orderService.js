@@ -28,6 +28,7 @@ const deliveryCallable = httpsCallable(functions, 'updateOrderDelivery')
 const paymentCallable = httpsCallable(functions, 'updateOrderPayment')
 const cancelCallable = httpsCallable(functions, 'cancelOrders')
 const refundCallable = httpsCallable(functions, 'updateRefundStatus')
+const testOrdersCallable = httpsCallable(functions, 'deleteTestOrders', { timeout: 300_000 })
 
 // Errors where the order may or may not have been saved, or the server was
 // just too busy; retrying with the same requestId is safe (the server returns
@@ -237,12 +238,13 @@ export function updateOrderDelivery(
   delivered,
   {
     ticketCode = '', expectedDelivered, overrideReason = '', studentId = '', studentCardChecked = false,
-    skipQr = false, idCheck = null
+    skipQr = false, idCheck = null, markPaid = false
   } = {}
 ) {
   // studentId: the buyer's student card, its photo checked; skipQr: an admin
   // lets it stand in for a forgotten QR code; idCheck: { method, note },
-  // another check of who collects (src/data/pickup.js)
+  // another check of who collects (src/data/pickup.js); markPaid: an unpaid
+  // order is paid at the desk, allowed with both the QR code and the card
   return statusCall(deliveryCallable, {
     orderId,
     delivered,
@@ -251,7 +253,8 @@ export function updateOrderDelivery(
     overrideReason,
     ...(studentId ? { studentId, studentCardChecked } : {}),
     ...(skipQr ? { skipQr: true } : {}),
-    ...(idCheck ? { idCheck } : {})
+    ...(idCheck ? { idCheck } : {}),
+    ...(markPaid ? { markPaid: true } : {})
   })
 }
 
@@ -281,6 +284,22 @@ export async function resendOrderEmail(orderId, requestId = createRequestId()) {
 
 export function deleteOrder(orderId) {
   return deleteDoc(doc(db, 'orders', orderId))
+}
+
+/* ---------- 刪除所有測試票訂單 (functions/lib/testOrders.js) ---------- */
+
+// { ticketTypes: [{ id, name }], orderCount, ticketCount, paidCount,
+// deliveredCount, cancelledCount, mixedCount }: the orders made only of
+// 測試票, paid, collected and cancelled ones included, deleting nothing
+export async function previewTestOrders() {
+  const { data } = await testOrdersCallable({ dryRun: true })
+  return data
+}
+
+// Deletes them; adds deletedCount, cancelledDeletedCount and deletedOrderIds
+export async function deleteTestOrders() {
+  const { data } = await testOrdersCallable({ confirm: true })
+  return data
 }
 
 /* ---------- 取消訂單與退款 (functions/lib/orderCancel.js) ---------- */

@@ -63,7 +63,7 @@ export const CAMPUS_SCHOOLS = new Set([
 export const ELIGIBLE_IDENTITIES = {
   CAMPUS_STUDENTS: 'campus_students',
   ALL_USERS: 'all_users',
-  // 測試票: only admins (建班幹部 and above) may buy it
+  // 測試票: only staff (友校幹部 and above) may buy it
   ADMINS_ONLY: 'admins_only'
 }
 

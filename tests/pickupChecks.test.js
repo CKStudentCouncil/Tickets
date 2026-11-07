@@ -102,6 +102,70 @@ test('unpaid orders are blocked until marked paid; complimentary ones are not', 
   assert.equal(check({ ...general, paid: false, complimentary: true }, { scans: { code: 'code-1' } }).canCollect, true)
 })
 
+test('the ticket QR code and the buyer\'s own card both scanned: collected by itself', () => {
+  assert.equal(check(early, { scans: { code: 'code-1' } }).auto, false)
+  assert.equal(check(early, { scans: { studentId: '1130524' } }).auto, false)
+  assert.equal(check(early, { scans: { code: 'forged', studentId: '1130524' } }).auto, false)
+  assert.equal(check(early, { scans: { code: 'code-1', studentId: '1139999' } }).auto, false)
+  // the card standing in for a forgotten QR code still takes the button
+  assert.equal(check(early, { scans: { studentId: '1130524' }, exceptions: { qr: { byCard: true } }, isAdmin: true }).auto, false)
+  // a general ticket alone has nothing to match a card against
+  assert.equal(check(general, { scans: { code: 'code-1' } }).auto, false)
+
+  const both = check(early, { scans: { code: 'code-1', studentId: '1130524' } })
+  assert.equal(both.auto, true)
+  assert.equal(both.autoPay, false)
+  assert.equal(both.request.markPaid, undefined)
+  assert.equal(check(priorityCampus, { scans: { code: 'code-1', studentId: '1130524' } }).auto, true)
+  assert.equal(check({ ...early, delivered: true }, { scans: { code: 'code-1', studentId: '1130524' } }).auto, false)
+})
+
+test('unpaid, with the QR code and the card: paid at the desk and collected, by any staff', () => {
+  const unpaid = { ...early, paid: false, finalTotal: 700 }
+  const qrOnly = check(unpaid, { scans: { code: 'code-1' } })
+  assert.equal(qrOnly.canCollect, false)
+  assert.equal(qrOnly.label, '等待掃描學生證')
+  assert.deepEqual(qrOnly.need, { qr: false, card: true, done: 'qr' })
+  assert.match(qrOnly.rows[0].text, /自動標記付款並領票/)
+  assert.equal(qrOnly.rows[0].action.kind, 'paid')
+
+  const cardOnly = check(unpaid, { scans: { studentId: '1130524' } })
+  assert.equal(cardOnly.label, '等待掃描 QR Code')
+
+  const both = check(unpaid, { scans: { code: 'code-1', studentId: '1130524' } })
+  assert.equal(states(both).paid, 'pay')
+  assert.equal(both.rows[0].action, undefined)
+  assert.match(both.rows[0].text, /NT\$ 700/)
+  assert.equal(both.canCollect, true)
+  assert.equal(both.auto, true)
+  assert.equal(both.autoPay, true)
+  assert.equal(both.label, '收款 NT$ 700，領票')
+  assert.equal(both.request.markPaid, true)
+
+  // a general ticket on a 建中 account works the same way
+  const campusGeneral = { ...general, ...campus, paid: false }
+  assert.equal(check(campusGeneral, { scans: { code: 'code-1' } }).need.card, true)
+  assert.equal(check(campusGeneral, { scans: { code: 'code-1', studentId: '1130524' } }).request.markPaid, true)
+
+  // no card can match: an admin marks it paid, as before
+  const other = check({ ...general, paid: false }, { scans: { code: 'code-1' } })
+  assert.equal(other.need.card, false)
+  assert.equal(other.label, '等待收款')
+  // an admin's exceptions never mark it paid
+  const excepted = check(unpaid, { scans: { studentId: '1130524' }, exceptions: { qr: { byCard: true } }, isAdmin: true })
+  assert.equal(excepted.canCollect, false)
+  assert.equal(excepted.label, '等待收款')
+})
+
+test('several orders, one card: a card carried over from the last order ticks the row and says so', () => {
+  const carried = check(early, { scans: { code: 'code-1', studentId: '1130524', cardCarried: true } })
+  assert.equal(states(carried).id, 'done')
+  assert.match(carried.rows.find((row) => row.key === 'id').text, /剛才已掃/)
+  assert.equal(carried.auto, true)
+  assert.equal(carried.request.studentCardChecked, true)
+  assert.doesNotMatch(check(early, { scans: { code: 'code-1', studentId: '1130524' } }).rows[1].text, /剛才已掃/)
+})
+
 test('an admin\'s 強制領票 lists what it skips', () => {
   const checks = check(early, { scans: { studentId: '1130524' } })
   assert.deepEqual(unfinishedRows(checks).map((row) => row.key), ['qr'])

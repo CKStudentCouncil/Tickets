@@ -190,6 +190,54 @@ describe('atomic payment and input authority', () => {
     assert.equal((await deliver(collect(), as('manager1'))).delivered, true)
   })
 
+  test('unpaid: the ticket QR code with the buyer\'s own student card collects it and marks it paid, door staff too', async () => {
+    await ref().update({ paid: false })
+    const card = { studentId: '1130524', studentCardChecked: true }
+    // both the code and the card, and asked for
+    await assert.rejects(deliver(collect({ markPaid: true }), as('manager1')), { code: 'failed-precondition', message: /尚未付款/ })
+    await assert.rejects(deliver(collect({ ...card, markPaid: true, ticketCode: 'wrong-code' }), as('manager1')), { code: 'failed-precondition', message: /尚未付款/ })
+    await assert.rejects(deliver(collect({ ...card, studentId: '1139999', markPaid: true }), as('manager1')), { code: 'failed-precondition', message: /尚未付款/ })
+    await assert.rejects(deliver(collect({ ...card, studentCardChecked: false, markPaid: true }), as('manager1')), { code: 'failed-precondition', message: /尚未付款/ })
+    await assert.rejects(deliver(collect({ ...card, ticketCode: '', skipQr: true, markPaid: true }), as('admin')), { code: 'failed-precondition', message: /尚未付款/ })
+    await assert.rejects(deliver(collect(card), as('manager1')), { code: 'failed-precondition', message: /尚未付款/ })
+    assert.equal((await ref().collection('history').get()).size, 0)
+
+    const result = await deliver(collect({ ...card, markPaid: true }), as('manager1'))
+    assert.equal(result.delivered, true)
+    assert.equal(result.paid, true)
+    assert.equal(result.paymentUpdatedByUid, 'manager1')
+    assert.equal(result.paymentUpdatedAt, result.deliveryUpdatedAt)
+    const saved = (await ref().get()).data()
+    assert.equal(saved.paid, true)
+    assert.equal(saved.delivered, true)
+    assert.equal(saved.paymentUpdatedByName, 'Door One')
+
+    const events = (await ref().collection('history').get()).docs.map((doc) => doc.data())
+    assert.equal(events.length, 2)
+    const payment = events.find((event) => event.action === 'payment')
+    const delivery = events.find((event) => event.action === 'delivery')
+    assert.deepEqual(
+      [payment.previousValue, payment.value, payment.paymentVerification, payment.actorUid],
+      [false, true, 'pickup_scan', 'manager1']
+    )
+    assert.deepEqual([delivery.codeVerification, delivery.idVerification, delivery.studentId], ['verified', 'student_card', '1130524'])
+    assert.equal(delivery.alsoPaid, undefined)
+  })
+
+  test('the card matches the order\'s email whatever its case, as on the pickup screen', async () => {
+    await ref().update({ paid: false, customerEmail: ' CK1130524@GL.CK.TP.EDU.TW ' })
+    const result = await deliver(collect({ studentId: '1130524', studentCardChecked: true, markPaid: true }), as('manager1'))
+    assert.equal(result.paid, true)
+    assert.equal(result.delivered, true)
+  })
+
+  test('a paid order collected with markPaid is not paid again', async () => {
+    const result = await deliver(collect({ studentId: '1130524', studentCardChecked: true, markPaid: true }), as('manager1'))
+    assert.equal(result.delivered, true)
+    assert.equal('paid' in result, false)
+    assert.deepEqual((await ref().collection('history').get()).docs.map((doc) => doc.data().action), ['delivery'])
+  })
+
   test('a complimentary order needs no payment', async () => {
     await ref().update({ paid: false, complimentary: true })
     assert.equal((await deliver(collect(), as('manager1'))).delivered, true)

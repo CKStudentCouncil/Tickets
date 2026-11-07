@@ -3,7 +3,7 @@
 export const ELIGIBLE_IDENTITIES = {
   CAMPUS_STUDENTS: 'campus_students',
   ALL_USERS: 'all_users',
-  // 測試票: only admins (建班幹部 and above) see it on the storefront and
+  // 測試票: only staff (友校幹部 and above) see it on the storefront and
   // may buy it, to try out a sale before it opens
   ADMINS_ONLY: 'admins_only'
 }

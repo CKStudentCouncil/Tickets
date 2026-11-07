@@ -84,7 +84,7 @@ const ORDERS = [
   ['CKS20261107TESTAD', '學生優先票，外校學生：看學生證或酷課雲', { customerName: '外校學生', customerEmail: 'student@ms.hs.edu.tw', school: '師大附中', buyerType: 'student' }, [item('priority', '學生優先票', 650, { checkId: true })]],
   ['CKS20261107TESTAE', '一般票，社會人士：只掃 QR', { customerName: '社會人士', customerEmail: 'guest@example.com', school: '', buyerType: 'general' }, [item('general', '一般票', 700)]],
   ['CKS20261107TESTAF', `早鳥票，別人的學號 ${otherId}：掃你的學生證會顯示不符`, campus(otherId, '另一位學生'), [item('early', '早鳥票', 500)]],
-  ['CKS20261107TESTAG', '早鳥票，尚未付款：擋下，管理員可「已收款，標記付款」', campus(studentId, '測試學生'), [item('early', '早鳥票', 500)], { paid: false }],
+  ['CKS20261107TESTAG', '早鳥票，尚未付款：掃 QR + 學生證就自動標記付款並領票（記得收款）', campus(studentId, '測試學生'), [item('early', '早鳥票', 500)], { paid: false }],
   ['CKS20261107TESTAH', '一般票，已經領過：顯示「已領票」', { customerName: '已領過的人', customerEmail: 'done@example.com', school: '', buyerType: 'general' }, [item('general', '一般票', 700)], { delivered: true }],
   ['CKS20261107TESTAJ', '公關票（免付款）：只掃 QR', { customerName: '貴賓', customerEmail: 'vip@example.com', school: '', buyerType: 'general', complimentary: true }, [item('general', '一般票', 0)], { paid: false }]
 ]
@@ -113,7 +113,7 @@ console.log(`
 2. 到 /admin/orders 打開任一筆訂單，畫面上的「訂單 QR Code」就是票券 QR：
    用手機拍下來（或開在另一個螢幕），再拿到電腦鏡頭前掃。
 3. 到 /admin/scan：先掃 QR Code 或先掃你的學生證（學號 ${studentId}）都可以，
-   掃到一樣會打勾、繼續等另一樣；全部打勾後按一下領票（或按 Enter）。
+   掃到一樣會打勾、繼續等另一樣；兩樣都相符會自動領票，其他全部打勾後按一下領票（或按 Enter）。
 
 測試訂單：
 ${ORDERS.map(([id, note]) => `  ${id}  ${note}`).join('\n')}

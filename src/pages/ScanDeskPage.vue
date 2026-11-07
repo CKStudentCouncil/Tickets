@@ -7,7 +7,7 @@
           <span class="live-badge" :class="{ off: !connected }"><i />{{ connected ? (phone ? '手機已連線' : '等待手機配對') : '未連線' }}</span>
         </div>
         <h1>電腦領票</h1>
-        <p class="lead">手機只負責掃，這台電腦核對與領票：手機掃到的 QR Code 和學生證會打勾在下面的清單，全部打勾後按一下領票（或按 Enter）</p>
+        <p class="lead">手機只負責掃，這台電腦核對與領票：手機掃到的 QR Code 和學生證會打勾在下面的清單；兩樣都相符會自動領票，其他情況全部打勾後按一下領票（或按 Enter）</p>
       </header>
 
       <div class="desk-grid">
@@ -57,7 +57,7 @@
             <ol class="steps">
               <li>手機登入後台，開啟「掃描票券」，對準這個 QR Code</li>
               <li>手機顯示「已連線到電腦」後，掃購票人的 QR Code 和學生證；手機不用按任何按鈕</li>
-              <li>在這台電腦核對，按一下領票；手機上會顯示電腦還在等什麼</li>
+              <li>在這台電腦核對：QR Code 和學生證都相符會自動領票，其他按一下領票；手機上會顯示電腦還在等什麼</li>
             </ol>
           </details>
 

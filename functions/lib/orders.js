@@ -201,7 +201,7 @@ function planStaleCaps() {
   })
 }
 
-// The buyer's staff rank, read only when the order has a 測試票 (only admins
+// The buyer's staff rank, read only when the order has a 測試票 (only staff
 // may buy one), so other checkouts read nothing more. `getRank` reads it
 // once per checkout.
 async function roleRankFor(ticketTypes, ticketTypeIds, getRank) {

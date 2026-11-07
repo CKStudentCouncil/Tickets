@@ -90,7 +90,7 @@ export function getBuyerType(email, studentDeclared = false) {
   return isEduAccount(email) || studentDeclared === true ? BUYER_TYPES.STUDENT : BUYER_TYPES.PUBLIC
 }
 
-// 測試票: only admins (建班幹部 and above) see and buy it
+// 測試票: only staff (友校幹部 and above) see and buy it
 export function isAdminOnlyType(ticketType) {
   return ticketType?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.ADMINS_ONLY
 }
@@ -301,7 +301,7 @@ export function planShards({ caps, sold, quantity, random }) {
 export function checkSaleOpen(ticketType, { now, school, email, studentConfirmed, studentDeclared, roleRank = 0 }) {
   // 測試票: checked first, so other buyers learn nothing about its sale
   // window; the storefront doesn't list it for them either
-  if (isAdminOnlyType(ticketType) && !(Number.isInteger(roleRank) && roleRank >= ROLE_RANK.admin)) {
+  if (isAdminOnlyType(ticketType) && !(Number.isInteger(roleRank) && roleRank >= ROLE_RANK.manager)) {
     throw new HttpsError('permission-denied', `${ticketType.name}為測試票，僅限管理員購買`)
   }
 

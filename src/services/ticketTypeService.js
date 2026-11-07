@@ -82,10 +82,10 @@ export function getTicketStatus(ticketType, now = new Date(), soldOut = {}) {
 // out before the announcement, unless the admin unticked 開賣前隱藏
 // (hideUntilSale: false). A missing flag counts as hidden. Once sales have
 // opened the type stays listed, also after they end; it just can't be bought.
-// 測試票 are listed for admins only (`isAdmin`); createOrder refuses them to
-// everyone else.
-export function isTicketTypeListed(ticketType, now = new Date(), { isAdmin = false } = {}) {
-  if (isAdminOnlyType(ticketType) && !isAdmin) return false
+// 測試票 are listed for staff only (`isStaff`: 友校幹部 and above); createOrder
+// refuses them to everyone else.
+export function isTicketTypeListed(ticketType, now = new Date(), { isStaff = false } = {}) {
+  if (isAdminOnlyType(ticketType) && !isStaff) return false
 
   const { state } = getTicketStatus(ticketType, now)
 

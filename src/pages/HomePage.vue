@@ -146,8 +146,8 @@ function statusOf(ticketType) {
 }
 
 const availableTicketTypes = computed(() =>
-  // 測試票 only for admins
-  ticketTypes.value.filter((ticketType) => isTicketTypeListed(ticketType, now.value, { isAdmin: auth.isAdmin }))
+  // 測試票 only for staff (友校幹部 and above)
+  ticketTypes.value.filter((ticketType) => isTicketTypeListed(ticketType, now.value, { isStaff: auth.isManager }))
 )
 
 function scrollToCollection() {
