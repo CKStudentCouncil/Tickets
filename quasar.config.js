@@ -17,7 +17,12 @@ export default configure(() => ({
 
     publicPath: '/',
 
-    distDir: 'dist/spa'
+    distDir: 'dist/spa',
+
+    // Set by `yarn test:site`: use the local Firebase emulators
+    env: {
+      FIREBASE_EMULATORS: process.env.FIREBASE_EMULATORS === 'true' ? 'true' : ''
+    }
   },
 
   devServer: {

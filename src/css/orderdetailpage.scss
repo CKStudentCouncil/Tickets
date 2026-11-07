@@ -297,7 +297,30 @@
   font-weight: 600;
 }
 
-/* ---------- buyer identity (學生 / 社會人士, staff only) ---------- */
+/* ---------- 領票: the check-in station (PickupStation.vue) ---------- */
+
+.pickup-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ember);
+  font-family: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
 
 .identity-check {
   margin: 12px 0 0;

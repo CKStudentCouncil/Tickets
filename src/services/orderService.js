@@ -230,8 +230,37 @@ async function statusCall(callable, payload) {
   }
 }
 
-export function updateOrderDelivery(orderId, delivered, { ticketCode = '', expectedDelivered, overrideReason = '' } = {}) {
-  return statusCall(deliveryCallable, { orderId, delivered, ticketCode, expectedDelivered, overrideReason })
+// `studentId` with `studentCardChecked`: found by scanning the buyer's 建中
+// student card, whose photo staff compared with the person (no QR code)
+export function updateOrderDelivery(
+  orderId,
+  delivered,
+  {
+    ticketCode = '', expectedDelivered, overrideReason = '', studentId = '', studentCardChecked = false,
+    skipQr = false, idCheck = null
+  } = {}
+) {
+  // studentId: the buyer's student card, its photo checked; skipQr: an admin
+  // lets it stand in for a forgotten QR code; idCheck: { method, note },
+  // another check of who collects (src/data/pickup.js)
+  return statusCall(deliveryCallable, {
+    orderId,
+    delivered,
+    ticketCode,
+    expectedDelivered,
+    overrideReason,
+    ...(studentId ? { studentId, studentCardChecked } : {}),
+    ...(skipQr ? { skipQr: true } : {}),
+    ...(idCheck ? { idCheck } : {})
+  })
+}
+
+const studentOrdersCallable = httpsCallable(functions, 'findStudentOrders')
+
+// The orders of ck{學號}@gl.ck.tp.edu.tw (managers): { studentId, email, orders }
+export async function findStudentOrders(studentId) {
+  const { data } = await studentOrdersCallable({ studentId })
+  return data
 }
 
 export function updateOrderPayment(orderId, paid, expectedPaid) {

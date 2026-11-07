@@ -2,6 +2,7 @@
   <q-dialog :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" @hide="emit('hide')">
     <div class="guide" aria-labelledby="guide-title">
       <p class="guide-count">{{ label }} · {{ step + 1 }} / {{ steps.length }}</p>
+      <component :is="steps[step].icon" v-if="steps[step].icon" class="guide-icon" :size="40" aria-hidden="true" />
       <h2 id="guide-title">{{ steps[step].title }}</h2>
       <ul class="guide-body">
         <li v-for="line in steps[step].lines" :key="line">{{ line }}</li>
@@ -23,7 +24,8 @@
 <script setup>
 import { ref, watch } from 'vue'
 
-// Step-by-step guide shown in a dialog; steps are [{ title, lines: [] }]
+// Step-by-step guide shown in a dialog; steps are [{ title, lines: [], icon? }]
+// (icon: a lucide-vue-next component drawn above the title)
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   steps: { type: Array, required: true },
@@ -141,5 +143,10 @@ function next() {
   background: var(--ember);
   color: #111;
   font-weight: 700;
+}
+.guide-icon {
+  display: block;
+  margin: 4px 0 10px;
+  color: var(--ember);
 }
 </style>

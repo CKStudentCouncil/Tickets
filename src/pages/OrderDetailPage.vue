@@ -28,7 +28,7 @@
             class="btn"
             @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
           >
-            掃描下一張
+            {{ scanDesk.active ? '回到電腦領票' : '回到領票' }}
           </button>
         </div>
       </header>
@@ -143,7 +143,7 @@
             class="btn"
             @click="router.push({ name: scanDesk.active ? 'admin-scan-desk' : 'admin-scan' })"
           >
-            掃描下一張
+            {{ scanDesk.active ? '回到電腦領票' : '回到領票' }}
           </button>
         </div>
       </header>
@@ -156,30 +156,44 @@
         </div>
 
         <template v-if="isAdminView">
-          <p v-if="qrCheck === 'ok'" class="qr-check ok">✓ QR 驗證碼相符</p>
-          <p v-else-if="qrCheck === 'mismatch'" class="qr-check danger">
-            ⚠ QR 驗證碼不符，可能是偽造的 QR Code。請核對購票人姓名與證件後再處理
-          </p>
-          <p v-else-if="qrCheck === 'none'" class="qr-check warn">
-            請掃描購票人的票券 QR Code 後領票。管理員可核對身分並填寫原因後手動處理
-          </p>
-
-          <div v-if="idCheck" class="identity-check" :class="{ student: needsIdCheck }" role="status">
-            <p class="identity-title">{{ buyerTypeLabel || '購票身分未知' }}</p>
-            <p v-if="idCheck.campus">建中學生票：請查驗建中學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
-            <p v-else-if="idCheck.student">請查驗學生證（背面須有本學期註冊章）或酷課雲，資格不符者不得領票</p>
-            <p v-else>社會人士：不需查驗學生證</p>
-            <label v-if="needsIdCheck" class="identity-confirm">
-              <input v-model="identityChecked" type="checkbox">
-              <span>已查驗身分</span>
-            </label>
+          <!-- the check-in station for this one order (PickupStation.vue):
+               scans come from /admin/scan or a paired phone; here staff can
+               still finish an exception or collect -->
+          <PickupStation
+            :key="`${order.id}:${stationKey}`"
+            fixed
+            :camera="false"
+            :initial-order-id="order.id"
+            :initial-order="order"
+            :initial-scans="initialScans"
+            @collected="onStationUpdate"
+            @updated="onStationUpdate"
+          />
+          <div class="pickup-links">
+            <router-link v-if="!order.delivered" :to="{ name: 'admin-scan', query: { order: order.id } }" class="link-button">
+              用相機核對領票 →
+            </router-link>
+            <button v-if="order.delivered && auth.isAdmin" type="button" class="link-button" @click="resetOpen = true">
+              管理員：重設為未領票…
+            </button>
           </div>
-          <p v-else-if="buyerTypeLabel" class="identity-check general">購票身分：{{ buyerTypeLabel }}</p>
 
-          <label v-if="auth.isAdmin" class="manual-reason">
-            手動領票或重設的原因
-            <input v-model="overrideReason" maxlength="500" placeholder="核對身分的方式或重設原因">
-          </label>
+          <q-dialog v-model="resetOpen" aria-labelledby="reset-title">
+            <form class="pickup-dialog" @submit.prevent="resetDelivered">
+              <h2 id="reset-title">重設為未領票？</h2>
+              <p class="dialog-lead">這筆訂單會變回「未領票」，可以再領一次。只在誤按領票、或要重新領票時使用。</p>
+              <label class="dialog-field">
+                原因（必填，會記錄在訂單）
+                <input v-model="overrideReason" maxlength="500" placeholder="例如：誤按領票" required>
+              </label>
+              <div class="dialog-actions">
+                <button type="button" class="dialog-cancel" @click="resetOpen = false">取消</button>
+                <button type="submit" class="dialog-confirm danger" :disabled="changingStatus || !overrideReason.trim() || loading || loadError">
+                  重設為未領票
+                </button>
+              </div>
+            </form>
+          </q-dialog>
 
           <p v-if="statusError" class="qr-check danger" role="alert">{{ statusError }}</p>
         </template>
@@ -188,24 +202,6 @@
           <div class="delivery-bar" :class="order.delivered ? 'delivered' : 'pending'">
             <span class="status-dot" />
             <span>領票狀態：{{ order.delivered ? '已領票' : '未領票' }}</span>
-            <div v-if="isAdminView" class="delivery-actions">
-              <button
-                type="button"
-                class="btn-sm muted"
-                :disabled="changingStatus || !order.delivered || !auth.isAdmin || !overrideReason.trim() || loading || loadError"
-                @click="setDelivered(false)"
-              >
-                標記未領票
-              </button>
-              <button
-                type="button"
-                class="btn-sm"
-                :disabled="changingStatus || order.delivered || !canCollect || loading || loadError"
-                @click="setDelivered(true)"
-              >
-                標記已領票
-              </button>
-            </div>
           </div>
 
           <div class="delivery-bar" :class="order.paid ? 'paid' : 'pending'">
@@ -413,11 +409,11 @@ import { fetchCancelledOrder, fetchOrder, updateOrderDelivery, updateOrderPaymen
 import { CANCEL_EMAIL_LABELS, CANCEL_REASONS, REFUND_STATUS_LABELS } from 'src/data/cancellations'
 import { cancelBlockOf, noticeCountsOf } from 'src/utils/cancellations'
 import CancelOrderDialog from 'src/components/CancelOrderDialog.vue'
+import PickupStation from 'src/components/PickupStation.vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useScanDeskStore } from 'src/stores/scanDesk'
 import { useToastStore } from 'src/stores/toast'
 import { formatDateTime } from 'src/utils/datetime'
-import { getBuyerTypeLabel, getIdCheck } from 'src/utils/buyerIdentity'
 import { escapeHtml } from 'src/utils/text'
 import { downloadElementAsPdf } from 'src/utils/pdf'
 import { renderOrderQr } from 'src/utils/qrcode'
@@ -584,21 +580,20 @@ const orderId = computed(() => String(route.params.id || ''))
 // /admin/orders/:id is only reachable by managers (router guard)
 const isAdminView = computed(() => route.name === 'admin-order-detail' && auth.isManager)
 
-// Code from the scanned ticket QR (?c=...), compared with the order's secret
-// ticketCode so a QR generated from a guessed order id is flagged (PARTY-19)
-const scannedCode = computed(() => String(route.query.c || ''))
+// What /admin/scan or a link brought along (?c=: the ticket code read off
+// the QR code, ?sid=: a 學號 read off the student card), for the station
+const initialScans = {
+  code: String(route.query.c || ''),
+  studentId: String(route.query.sid || '')
+}
+// remakes the station after the order changed here (marked paid, reset)
+const stationKey = ref(0)
+const resetOpen = ref(false)
 
-const qrCheck = computed(() => {
-  if (!isAdminView.value || !order.value?.ticketCode) return null
-  if (!scannedCode.value) return 'none'
-  return scannedCode.value === order.value.ticketCode ? 'ok' : 'mismatch'
-})
-// 學生 / 社會人士 (staff only). 學生 buyers of types sold to students first
-// need 已查驗身分 ticked before the tickets can be collected
-const buyerTypeLabel = computed(() => getBuyerTypeLabel(order.value))
-const idCheck = computed(() => getIdCheck(order.value))
-const needsIdCheck = computed(() => !!idCheck.value?.student)
-const identityChecked = ref(false)
+// the station collected the order, or marked it paid
+function onStationUpdate(next) {
+  if (next?.id === order.value?.id) order.value = { ...order.value, ...next }
+}
 
 const noticeCounts = computed(() => noticeCountsOf(order.value))
 
@@ -608,18 +603,11 @@ function onCancelled({ refundAmount }) {
   loadOrder()
 }
 
-const canCollect = computed(
-  () =>
-    (qrCheck.value === 'ok' || (auth.isAdmin && !!overrideReason.value.trim())) &&
-    (!needsIdCheck.value || identityChecked.value)
-)
-
 async function loadOrder() {
   const sequence = ++loadSequence
   const id = orderId.value
   loading.value = true
   loadError.value = false
-  if (order.value?.id !== id) identityChecked.value = false
 
   try {
     // staff can read any order, a buyer only their own (firestore.rules);
@@ -654,33 +642,29 @@ async function renderQr() {
   }
 }
 
-async function setDelivered(delivered) {
-  if (!isAdminView.value || !order.value || changingStatus.value || loading.value || loadError.value || order.value.delivered === delivered) {
-    return
-  }
-
-  if (delivered ? !canCollect.value : (!auth.isAdmin || !overrideReason.value.trim())) return
-
+// an admin's 重設為未領票 (collecting goes through the station)
+async function resetDelivered() {
+  if (!isAdminView.value || !auth.isAdmin || !order.value?.delivered || changingStatus.value || loading.value || loadError.value) return
+  const reason = overrideReason.value.trim()
+  if (!reason) return
   changingStatus.value = true
   statusError.value = ''
   const id = order.value.id
   try {
-    const patch = await updateOrderDelivery(id, delivered, {
-      ticketCode: scannedCode.value,
-      expectedDelivered: order.value.delivered,
-      overrideReason: auth.isAdmin ? overrideReason.value.trim() : ''
-    })
+    const patch = await updateOrderDelivery(id, false, { expectedDelivered: true, overrideReason: reason })
     if (orderId.value !== id) return
-    order.value = { ...order.value, ...patch }
+    order.value = { ...order.value, ...patch, delivered: false }
     overrideReason.value = ''
-    // a later collection of the same order needs a new check
-    identityChecked.value = false
-    toast.show(delivered ? '已標記為已領票' : '已標記為未領票')
+    resetOpen.value = false
+    stationKey.value++
+    toast.show('已標記為未領票')
   } catch (error) {
     console.error(error)
     if (orderId.value !== id) return
     statusError.value = error.message || '更新失敗，請重新確認訂單狀態。'
+    resetOpen.value = false
     await loadOrder()
+    stationKey.value++
   } finally {
     if (orderId.value === id) changingStatus.value = false
   }
@@ -695,6 +679,7 @@ async function setPaid(paid) {
     const patch = await updateOrderPayment(id, paid, Boolean(order.value.paid))
     if (orderId.value !== id) return
     order.value = { ...order.value, ...patch }
+    stationKey.value++
     toast.show(paid ? '已確認付款' : '已重設為未付款')
   } catch (error) {
     if (orderId.value !== id) return

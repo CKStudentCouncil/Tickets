@@ -4,46 +4,31 @@
       <header class="page-heading">
         <div class="heading-topline">
           <p class="eyebrow">領票服務 <span>／ CHECK-IN DESK</span></p>
-          <span class="live-badge" :class="{ off: !connected }"><i />{{ connected ? '接收中' : '未連線' }}</span>
+          <span class="live-badge" :class="{ off: !connected }"><i />{{ connected ? (phone ? '手機已連線' : '等待手機配對') : '未連線' }}</span>
         </div>
-        <h1>電腦接收掃描</h1>
-        <p class="lead">使用系統內建相機掃描本頁QR Code，手機作為條碼掃描器；掃到的票券會在這台電腦上開啟，在這裡核對並領票</p>
+        <h1>電腦領票</h1>
+        <p class="lead">手機只負責掃，這台電腦核對與領票：手機掃到的 QR Code 和學生證會打勾在下面的清單，全部打勾後按一下領票（或按 Enter）</p>
       </header>
 
       <div class="desk-grid">
-        <section class="card">
-          <div class="card-head">
-            <span>配對 QR Code</span>
-            <span v-if="expiresAt && !isExpired" class="card-tag">有效至 {{ formatTime(expiresAt) }}</span>
-          </div>
-
-          <div class="qr-box">
-            <canvas v-show="showQr" ref="qrCanvas" role="img" aria-label="配對 QR Code" />
-            <div v-if="ended" class="qr-overlay">
-              <p>已結束連線</p>
-              <button type="button" class="primary-button" @click="restart">重新開始</button>
-            </div>
-            <div v-else-if="desk.status === 'error'" class="qr-overlay">
-              <p role="alert">{{ desk.linkId ? '與伺服器的連線中斷' : '無法產生配對 QR Code' }}；請檢查網路後重試</p>
-              <button type="button" class="primary-button" @click="desk.retry()">重試</button>
-            </div>
-            <div v-else-if="isExpired" class="qr-overlay">
-              <p>配對已過期，手機已無法傳送</p>
-              <button type="button" class="primary-button" @click="renew">重新產生 QR Code</button>
-            </div>
-            <p v-else-if="!showQr" class="qr-overlay">正在產生配對 QR Code…</p>
-          </div>
-
-          <ol class="steps">
-            <li>手機登入後台，開啟「掃描票券」</li>
-            <li>用掃描畫面對準這個 QR Code（用手機的相機 App 掃也可以）</li>
-            <li>手機顯示「已連線到電腦」後，就可以開始掃描票券</li>
-          </ol>
+        <section class="desk-station" aria-label="領票">
+          <PickupStation
+            ref="station"
+            :camera="cameraOn"
+            keyboard
+            idle-hint="用手機掃購票人的 QR Code 或建中學生證，訂單會出現在這裡；先掃哪一個都可以"
+            @need="desk.setNeed"
+          />
+          <label class="camera-toggle">
+            <input v-model="cameraOn" type="checkbox">
+            也用這台電腦的相機掃描
+          </label>
         </section>
 
-        <section class="card">
+        <aside class="card">
           <div class="card-head">
-            <span>連線狀態</span>
+            <span>{{ phone && connected ? '手機已連線' : '配對手機' }}</span>
+            <span v-if="expiresAt && !isExpired" class="card-tag">有效至 {{ formatTime(expiresAt) }}</span>
           </div>
 
           <div class="status-main" :class="{ on: !!phone && connected }" role="status" aria-live="polite">
@@ -51,36 +36,63 @@
             <p class="status-meta">{{ statusMeta }}</p>
           </div>
 
-          <h2 class="recent-title">最近收到的票券</h2>
-          <p v-if="!desk.recent.length" class="recent-empty">還沒有收到票券</p>
-          <ul v-else class="recent-list">
-            <li v-for="item in desk.recent" :key="item.id">
-              <button type="button" @click="desk.open(item)">
-                <span class="mono">{{ item.orderId }}</span>
-                <span class="recent-meta">
-                  {{ formatTime(item.at) }}{{ item.byName ? ` · ${item.byName}` : '' }}{{ item.ticketCode ? '' : ' · 手動輸入' }}
-                </span>
-              </button>
-            </li>
-          </ul>
+          <details class="pair-details" :open="!phone || !connected">
+            <summary>{{ phone && connected ? '再配對一支手機' : '配對 QR Code' }}</summary>
+            <div class="qr-box">
+              <canvas v-show="showQr" ref="qrCanvas" role="img" aria-label="配對 QR Code" />
+              <div v-if="ended" class="qr-overlay">
+                <p>已結束連線</p>
+                <button type="button" class="primary-button" @click="restart">重新開始</button>
+              </div>
+              <div v-else-if="desk.status === 'error'" class="qr-overlay">
+                <p role="alert">{{ desk.linkId ? '與伺服器的連線中斷' : '無法產生配對 QR Code' }}；請檢查網路後重試</p>
+                <button type="button" class="primary-button" @click="desk.retry()">重試</button>
+              </div>
+              <div v-else-if="isExpired" class="qr-overlay">
+                <p>配對已過期，手機已無法傳送</p>
+                <button type="button" class="primary-button" @click="renew">重新產生 QR Code</button>
+              </div>
+              <p v-else-if="!showQr" class="qr-overlay">正在產生配對 QR Code…</p>
+            </div>
+            <ol class="steps">
+              <li>手機登入後台，開啟「掃描票券」，對準這個 QR Code</li>
+              <li>手機顯示「已連線到電腦」後，掃購票人的 QR Code 和學生證；手機不用按任何按鈕</li>
+              <li>在這台電腦核對，按一下領票；手機上會顯示電腦還在等什麼</li>
+            </ol>
+          </details>
+
+          <template v-if="desk.recent.length">
+            <h2 class="recent-title">手機傳來的</h2>
+            <ul class="recent-list">
+              <li v-for="item in desk.recent" :key="item.id">
+                <button type="button" @click="station?.receive({ orderId: item.orderId })">
+                  <span class="mono">{{ item.orderId }}</span>
+                  <span class="recent-meta">
+                    {{ formatTime(item.at) }}{{ item.byName ? ` · ${item.byName}` : '' }}{{ item.ticketCode ? ' · QR Code' : item.studentId ? ` · 學生證 ${item.studentId}` : ' · 手動輸入' }}
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </template>
 
           <div class="desk-actions">
             <button type="button" class="secondary-button" :disabled="busy" @click="renew">重新產生 QR Code</button>
             <button type="button" class="secondary-button danger" :disabled="busy || !desk.linkId" @click="endLink">結束連線</button>
           </div>
-        </section>
+          <p class="desk-hint">重新產生 QR Code 或結束連線後，已配對的手機會改回自己領票</p>
+        </aside>
       </div>
 
-      <p class="desk-hint">收到票券時，這台電腦會自動開啟訂單；處理完按訂單頁的「掃描下一張」回到這裡；重新產生 QR Code 或結束連線後，已配對的手機會改回自己開啟訂單</p>
-      <router-link :to="{ name: 'admin-scan' }" class="desk-link">改用這台裝置的相機掃描 →</router-link>
+      <router-link :to="{ name: 'admin-scan' }" class="desk-link">改用這台裝置的相機領票 →</router-link>
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import QRCode from 'qrcode'
+import PickupStation from 'src/components/PickupStation.vue'
 import { useNow } from 'src/composables/useNow'
 import { useScanDeskStore } from 'src/stores/scanDesk'
 import { SCAN_LINK_HOURS, getScanLinkUrl } from 'src/utils/scanLink'
@@ -90,11 +102,29 @@ const desk = useScanDeskStore()
 // for the expiry, which is hours away
 const now = useNow(30000)
 
+const station = ref(null)
 const qrCanvas = ref(null)
 const qrReady = ref(false)
 // 結束連線 pressed on this page; a new pairing waits for 重新開始
 const ended = ref(false)
 const busy = ref(false)
+const CAMERA_KEY = 'cksc.deskCamera'
+const cameraOn = ref(readCameraPref())
+
+function readCameraPref() {
+  try {
+    return localStorage.getItem(CAMERA_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+watch(cameraOn, (on) => {
+  try {
+    localStorage.setItem(CAMERA_KEY, on ? '1' : '0')
+  } catch {
+    // ignore
+  }
+})
 
 const phone = computed(() => desk.link?.phone || null)
 const createdAt = computed(() => desk.link?.createdAt?.toDate?.() || null)
@@ -110,14 +140,14 @@ const statusTitle = computed(() => {
   if (desk.status === 'error') return '連線中斷'
   if (isExpired.value) return '配對已過期'
   if (!connected.value) return '準備中'
-  return phone.value ? '手機已連線' : '等待手機配對'
+  return phone.value ? (phone.value.name || '手機') : '等待手機配對'
 })
 
 const statusMeta = computed(() => {
   if (!connected.value) return ''
-  if (!phone.value) return '用手機掃描左邊的 QR Code'
+  if (!phone.value) return '用手機掃描下面的配對 QR Code'
   const at = phone.value.at?.toDate?.()
-  return `${phone.value.name || '手機'}${at ? `・最後活動 ${formatTime(at)}` : ''}`
+  return at ? `最後活動 ${formatTime(at)}` : ''
 })
 
 function formatTime(date) {
@@ -133,7 +163,7 @@ async function renderQr(linkId) {
   if (!qrCanvas.value || linkId !== desk.linkId) return
   try {
     await QRCode.toCanvas(qrCanvas.value, getScanLinkUrl(linkId, window.location.origin), {
-      width: 248,
+      width: 232,
       margin: 2,
       errorCorrectionLevel: 'M',
       color: { dark: '#050608', light: '#ffffff' }
@@ -145,6 +175,15 @@ async function renderQr(linkId) {
 }
 
 watch(() => desk.linkId, renderQr)
+
+// the phone's scans, handed over by the store
+function takeScans() {
+  if (!station.value) return
+  for (const entry of desk.takeIncoming()) {
+    station.value.receive({ orderId: entry.orderId, ticketCode: entry.ticketCode, studentId: entry.studentId })
+  }
+}
+watch(() => desk.incoming.length, (length) => { if (length) takeScans() })
 
 async function run(action) {
   if (busy.value) return
@@ -174,6 +213,11 @@ const restart = () => run(async () => {
 onMounted(() => {
   renderQr(desk.linkId)
   desk.start(router)
+  takeScans()
+})
+
+onBeforeUnmount(() => {
+  desk.setNeed(null)
 })
 </script>
 
@@ -204,13 +248,13 @@ onMounted(() => {
 }
 
 .desk-content {
-  width: min(100%, 880px);
+  width: min(100%, 1180px);
   margin: 0 auto;
 }
 
 .page-heading {
-  margin-bottom: 24px;
-  padding: 22px 0 25px;
+  margin-bottom: 18px;
+  padding: 14px 0 16px;
   border-top: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
 }
@@ -220,7 +264,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
 .eyebrow {
@@ -262,7 +306,7 @@ onMounted(() => {
 .page-heading h1 {
   margin: 0;
   font-family: 'Noto Sans TC', 'Manrope', sans-serif;
-  font-size: clamp(2rem, 8vw, 2.6rem);
+  font-size: 2.2rem;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -279,11 +323,49 @@ onMounted(() => {
   gap: 16px;
 }
 
-@media (min-width: 760px) {
+@media (min-width: 960px) {
   .desk-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 320px;
     align-items: start;
   }
+
+  .desk-grid .card {
+    position: sticky;
+    top: 88px;
+  }
+}
+
+.desk-station {
+  min-width: 0;
+}
+
+.camera-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--lunar);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.camera-toggle input {
+  accent-color: var(--ember);
+}
+
+.pair-details {
+  margin-top: 14px;
+}
+
+.pair-details summary {
+  padding: 4px;
+  color: var(--ember);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pair-details[open] summary {
+  margin-bottom: 10px;
 }
 
 .card {
@@ -316,7 +398,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 300px;
+  min-height: 260px;
   background: #fff;
 }
 
@@ -450,9 +532,9 @@ onMounted(() => {
 }
 
 .desk-hint {
-  margin: 20px 0 0;
+  margin: 12px 4px 0;
   color: var(--lunar);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -512,6 +594,12 @@ onMounted(() => {
 
   .desk-actions button {
     flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 959px) {
+  .page-heading h1 {
+    font-size: 1.9rem;
   }
 }
 </style>

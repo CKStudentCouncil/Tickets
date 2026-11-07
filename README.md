@@ -121,6 +121,13 @@ yarn --cwd functions test:emulator    # checkout, atomic staff actions, mail que
 cd functions && yarn test:load        # load test: hundreds of simultaneous checkouts, needs Java
 ```
 
+To try ticket pickup by hand, `yarn test:site [學號]` runs the whole site at
+http://localhost:9000 against local Firebase emulators (needs the Firebase CLI,
+Java and `yarn --cwd functions install`). It signs in test staff accounts
+(`admin@test.local`, `manager@test.local`) and adds one order for each kind of
+pickup, for the 學號 given (your own, to scan your student card). Nothing
+touches the live project, and everything is gone when it stops.
+
 ## Firebase Configuration
 
 The application is configured to use Firebase through:

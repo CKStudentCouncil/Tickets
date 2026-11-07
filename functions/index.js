@@ -23,3 +23,4 @@ export {
 export { submitPartySurvey } from './lib/partySurvey.js'
 export { submitSurvey } from './lib/survey.js'
 export { submitReimbursement, trashReimbursementInvoices } from './lib/reimbursements.js'
+export { findStudentOrders } from './lib/studentCards.js'

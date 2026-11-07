@@ -1,10 +1,14 @@
 import { boot } from 'quasar/wrappers'
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
-import { getFunctions } from 'firebase/functions'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions'
 
-const firebaseConfig = {
+// `yarn test:site` runs the site against local Firebase emulators with test
+// data (scripts/test-site.mjs), so nothing touches the live project
+const EMULATORS = process.env.FIREBASE_EMULATORS === 'true'
+
+const firebaseConfig = EMULATORS ? { apiKey: 'demo-key', authDomain: 'localhost', projectId: 'demo-cksc-ticket', appId: 'demo-app' } : {
   apiKey: 'AIzaSyDpURP6Src9JzM5nttBCpA9eCllwRobJtc',
   authDomain: 'cksc-ticket.firebaseapp.com',
   projectId: 'cksc-ticket',
@@ -18,6 +22,14 @@ export const app = initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const functions = getFunctions(app, 'asia-east1')
+
+if (EMULATORS) {
+  const host = window.location.hostname
+  connectAuthEmulator(auth, `http://${host}:9099`, { disableWarnings: true })
+  connectFirestoreEmulator(db, host, 8080)
+  connectFunctionsEmulator(functions, host, 5001)
+}
 
 // Analytics pulls in Google's gtag script (~160 KB), so it starts only a few
 // seconds after the page has loaded instead of competing with it. Resolves to
@@ -31,10 +43,9 @@ export const analyticsReady = new Promise((resolve) => {
       .catch(() => resolve(null))
   const later = () => setTimeout(start, ANALYTICS_DELAY_MS)
 
-  if (document.readyState === 'complete') later()
+  if (EMULATORS) resolve(null)
+  else if (document.readyState === 'complete') later()
   else window.addEventListener('load', later, { once: true })
 })
-
-export const functions = getFunctions(app, 'asia-east1')
 
 export default boot(() => {})

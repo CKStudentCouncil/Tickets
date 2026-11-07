@@ -2,18 +2,21 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { createScanLink, deleteScanLink, watchScanLink } from 'src/services/scanLinkService'
+import { createScanLink, deleteScanLink, setScanLinkNeed, watchScanLink } from 'src/services/scanLinkService'
 import { isScanLinkExpired, isScanLinkId } from 'src/utils/scanLink'
 
 // The computer side of 手機掃描、電腦處理 (/admin/scan/desk). A store, so the
-// computer keeps receiving scans while it shows the orders they open. The
+// link keeps listening while staff look at other admin pages. Scans go to the
+// desk page's check-in station (PickupStation.vue), which never leaves the
+// page: the phone only scans, the computer shows what is still missing. The
 // link is kept for this browser tab: a reload stays paired, and two tabs
-// never both open the same scan.
+// never both receive the same scan.
 const STORAGE_KEY = 'cksc.scanDeskLink'
 const RECENT_LIMIT = 20
-// Pages left by themselves when a ticket arrives. Anywhere else the computer
-// only says so, so a scan never interrupts other admin work.
-const FOLLOW_ROUTES = ['admin-scan-desk', 'admin-order-detail']
+// An order page is left for the desk when a ticket arrives. Anywhere else the
+// computer only says so, so a scan never interrupts other admin work.
+const DESK_ROUTE = 'admin-scan-desk'
+const FOLLOW_ROUTES = ['admin-order-detail']
 
 function savedLink() {
   try {
@@ -43,6 +46,11 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
   const status = ref('idle')
   // tickets received in this tab, newest first
   const recent = ref([])
+  // what the desk's station still needs, as told to the phones:
+  // { orderId, name, qr, card } or null
+  const need = ref(null)
+  // scans for the desk page to take (it may still be opening)
+  const incoming = ref([])
 
   const active = computed(() => !!linkId.value)
 
@@ -61,19 +69,27 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     link.value = null
     status.value = 'idle'
     recent.value = []
+    need.value = null
+    incoming.value = []
     saveLink('')
   }
 
+  // The station says what it still needs (null: nothing, or it closed)
+  function setNeed(value) {
+    const next = value && (value.qr || value.card)
+      ? { orderId: value.orderId, name: value.name || '', qr: !!value.qr, card: !!value.card }
+      : null
+    if (JSON.stringify(next) === JSON.stringify(need.value)) return
+    need.value = next
+    const id = linkId.value
+    if (id) setScanLinkNeed(id, next).catch((error) => console.error('Failed to tell the phone what is needed', error))
+  }
+
+  // hands a scan to the desk page, opening it from an order page
   function open(entry) {
-    if (!router) return
-    const target = {
-      name: 'admin-order-detail',
-      params: { id: entry.orderId },
-      query: entry.ticketCode ? { c: entry.ticketCode } : {}
-    }
-    // one order replaces another, so 返回 leads back to this page
-    if (router.currentRoute.value.name === 'admin-order-detail') router.replace(target)
-    else router.push(target)
+    incoming.value = [...incoming.value, entry]
+    const name = router?.currentRoute.value.name
+    if (router && name !== DESK_ROUTE) router.push({ name: DESK_ROUTE })
   }
 
   function receive(scan, phone) {
@@ -81,13 +97,15 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
       id: scan.id,
       orderId: scan.orderId,
       ticketCode: scan.ticketCode || '',
+      studentId: scan.studentId || '',
       at: scan.at?.toDate?.() || new Date(),
       byName: phone?.name || ''
     }
     recent.value = [entry, ...recent.value.filter((item) => item.id !== entry.id)].slice(0, RECENT_LIMIT)
 
-    if (FOLLOW_ROUTES.includes(router?.currentRoute.value.name)) open(entry)
-    else toast.show(`手機傳來訂單 ${entry.orderId}；到「電腦接收」開啟`, 5000)
+    const name = router?.currentRoute.value.name
+    if (name === DESK_ROUTE || FOLLOW_ROUTES.includes(name)) open(entry)
+    else toast.show(`手機傳來訂單 ${entry.orderId}；到「電腦接收」領票`, 5000)
   }
 
   function listen(id) {
@@ -197,5 +215,12 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
     }
   )
 
-  return { linkId, link, status, recent, active, start, resume, end, renew, retry, open, expired }
+  // the desk page takes the scans waiting for it, oldest first
+  const takeIncoming = () => {
+    const entries = incoming.value
+    incoming.value = []
+    return entries
+  }
+
+  return { linkId, link, status, recent, active, need, incoming, takeIncoming, start, resume, end, renew, retry, open, setNeed, expired }
 })
