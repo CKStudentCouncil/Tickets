@@ -43,8 +43,9 @@ export function pickupChecks(order, { ticketTypes = [], scans = {}, exceptions =
     rows.push({
       key: 'paid',
       title: '付款',
-      state: 'bad',
-      text: '尚未付款：先收款，標記已付款後才能領票',
+      // collecting money here is part of the job, not a problem
+      state: 'pay',
+      text: '尚未付款：收款後按「已收款，標記付款」，就能接著領票',
       action: { kind: 'paid', label: '已收款，標記付款', allowed: isAdmin }
     })
   }
@@ -87,7 +88,7 @@ export function pickupChecks(order, { ticketTypes = [], scans = {}, exceptions =
 
   let label
   if (order.delivered) label = '已領票'
-  else if (unpaid) label = '尚未付款，不能領票'
+  else if (unpaid) label = '等待收款'
   else if (!qrOk) label = qr.state === 'bad' && code ? 'QR Code 不符，不能領票' : '等待掃描 QR Code'
   else if (!idOk) label = '等待掃描學生證'
   else if (idRow?.state === 'excepted') label = `已用${methodShort(idException.method)}查驗，領票`

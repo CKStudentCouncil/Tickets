@@ -271,7 +271,156 @@
   color: #e0a0a0;
 }
 
+/* ---------- staff: summary, 領票 and 付款 ---------- */
+
+.summary-card {
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .015));
+}
+
+.summary-card p {
+  margin: 0;
+}
+
+.summary-name {
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.summary-meta,
+.summary-items {
+  margin-top: 6px !important;
+  color: rgba(242, 240, 233, .72);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--lunar);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-chip.good {
+  border-color: rgba(119, 191, 139, .55);
+  background: rgba(119, 191, 139, .12);
+  color: #8fd1a1;
+}
+
+.status-chip.pending {
+  border-color: rgba(228, 164, 104, .55);
+  background: rgba(228, 164, 104, .1);
+  color: var(--ember);
+}
+
+.summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-sm.danger {
+  border-color: rgba(201, 120, 120, .45);
+  color: var(--danger);
+}
+
+.btn-sm.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(201, 120, 120, .1);
+}
+
+/* 領票 and 付款 side by side, also on a phone */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.status-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+}
+
+.status-box h2 {
+  margin: 0;
+  color: var(--lunar);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .08em;
+}
+
+.status-box p {
+  margin: 0;
+}
+
+.status-value {
+  font-family: 'Noto Sans TC', 'Manrope', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.status-box.good {
+  border-color: rgba(119, 191, 139, .5);
+  background: rgba(119, 191, 139, .07);
+}
+
+.status-box.good .status-value {
+  color: #8fd1a1;
+}
+
+.status-box.pending {
+  border-color: rgba(228, 164, 104, .5);
+  background: rgba(228, 164, 104, .07);
+}
+
+.status-box.pending .status-value {
+  color: var(--ember);
+}
+
+.status-note {
+  color: rgba(242, 240, 233, .5);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.status-box .btn-sm {
+  margin-top: 4px;
+}
+
+.summary-card + .status-grid,
+.qr-check + .status-grid,
+.check-meta + .status-grid {
+  margin-top: 10px;
+}
+
 /* ---------- 取消訂單 ---------- */
+
+
 
 .cancel-row {
   margin: 14px 0 0;
@@ -750,4 +899,5 @@
     flex-direction: column;
     gap: 6px;
   }
+
 }

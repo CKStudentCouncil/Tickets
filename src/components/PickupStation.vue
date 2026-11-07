@@ -3,7 +3,8 @@
     <div v-if="camera" class="station-camera">
       <StudentCardScanner
         :device-id="savedCamera()"
-        qr
+        :card="cameraMode !== 'qr'"
+        :qr="cameraMode !== 'card'"
         :lookup="false"
         title="QR Code 和學生證都可以掃"
         compact
@@ -102,6 +103,7 @@ import PickupPanel from 'src/components/PickupPanel.vue'
 import StudentCardScanner from 'src/components/StudentCardScanner.vue'
 import { SITE_URL } from 'src/config/app'
 import { accountStudentId, cleanStudentId } from 'src/data/schools'
+import { isTimeout, withTimeout } from 'src/utils/withTimeout'
 import { fetchCancelledOrder, fetchOrder, findStudentOrders, lookupOrders, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import { useAuthStore } from 'src/stores/auth'
@@ -125,6 +127,8 @@ const props = defineProps({
   // the order already loaded by the page (skips fetching it again)
   initialOrder: { type: Object, default: null },
   initialScans: { type: Object, default: () => ({}) },
+  // this device's camera: auto (QR Code and card) | qr | card
+  cameraMode: { type: String, default: 'auto' },
   // QR codes the page handles itself (a phone's pairing code): return true
   qrFilter: { type: Function, default: null },
   // shown while waiting, e.g. 手機掃描後會出現在這裡
@@ -184,16 +188,11 @@ let loadSequence = 0
 // the order load in progress: a card or a search waits for it, so neither
 // cancels it and leaves 載入訂單中… on screen
 let loadingNow = null
-const LOAD_TIMEOUT_MS = 15000
+// a read that takes this long is asked again once (a phone's connection
+// may have dropped meanwhile), then given up on
+const LOAD_TIMEOUT_MS = [8000, 12000]
 async function afterLoad() {
   while (loadingNow) await loadingNow
-}
-function timeout(promise, ms) {
-  let timer
-  const late = new Promise((resolve, reject) => {
-    timer = setTimeout(() => reject(Object.assign(new Error('timed out'), { code: 'deadline-exceeded' })), ms)
-  })
-  return Promise.race([promise, late]).finally(() => clearTimeout(timer))
 }
 let noticeTimer = 0
 let doneTimer = 0
@@ -418,10 +417,20 @@ async function loadOrder(orderId, scans, known) {
   panelError.value = ''
   loading.value = true
   try {
-    const order = known || await timeout(fetchOrder(orderId), LOAD_TIMEOUT_MS)
+    let order = known
+    for (const [attempt, ms] of LOAD_TIMEOUT_MS.entries()) {
+      if (order) break
+      try {
+        order = await withTimeout(fetchOrder(orderId), ms)
+        break
+      } catch (error) {
+        if (!isTimeout(error) || attempt === LOAD_TIMEOUT_MS.length - 1 || sequence !== loadSequence) throw error
+        say('網路較慢，再試一次…', 'info', 0)
+      }
+    }
     if (sequence !== loadSequence) return
     if (!order) {
-      const cancelled = await timeout(fetchCancelledOrder(orderId), LOAD_TIMEOUT_MS).catch(() => null)
+      const cancelled = await withTimeout(fetchCancelledOrder(orderId), LOAD_TIMEOUT_MS[0]).catch(() => null)
       if (sequence !== loadSequence) return
       current.value = null
       feedback('bad')
@@ -429,6 +438,7 @@ async function loadOrder(orderId, scans, known) {
       return
     }
     current.value = { order: { ...order, delivered: !!order.delivered }, scans: { ...blank(), ...scans }, exceptions: { qr: null, id: null } }
+    notice.value = null
     const qrBad = scans.code && scans.code !== order.ticketCode
     // an order page opening by itself makes no sound
     if (!(props.fixed && known)) feedback(order.delivered || qrBad ? 'bad' : 'ok')

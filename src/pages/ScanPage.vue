@@ -29,11 +29,14 @@
           <template v-else>電腦待命中：掃下一位的 QR Code 或學生證</template>
         </p>
 
+        <ModeSwitch v-model="mode" />
+
         <StudentCardScanner
           v-if="!firstGuide"
           :device-id="savedCamera()"
           paired
-          qr
+          :card="mode !== 'qr'"
+          :qr="mode !== 'card'"
           :prefer-order-id="need?.orderId || ''"
           :scanned="need?.done || ''"
           compact
@@ -63,12 +66,15 @@
 
       <!-- ---------- the check-in station on this device ---------- -->
       <template v-else>
+        <ModeSwitch v-model="mode" />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
         <PickupStation
           ref="station"
           :camera="!firstGuide"
+          :camera-mode="mode"
           :keyboard="!isPhone"
           :initial-order-id="initialOrderId"
+          :initial-scans="initialScans"
           :qr-filter="takePairingCode"
         >
           <template #idle-extra>
@@ -100,7 +106,7 @@
 </template>
 
 <script setup>
-import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineComponent, h, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Camera, CircleQuestionMark, Laptop, MousePointerClick, ScanLine, TriangleAlert } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
@@ -163,7 +169,7 @@ const PHONE_GUIDE = [
     title: '掃描小技巧',
     lines: [
       '畫面模糊時，把手機拿遠一點（約 20–30 公分）讓鏡頭對焦；讀不到 QR Code 就請對方調亮螢幕。',
-      '學生證橫放拿穩，別蓋住學號。'
+      '學生證橫放拿穩，別蓋住學號。手機太卡時，在最上面改成「只掃 QR Code」。'
     ]
   }
 ]
@@ -173,6 +179,42 @@ const PHONE_GUIDE = [
 const REPEAT_GAP_MS = 2000
 // how long a send may take before the phone says the computer may not have it
 const SLOW_SEND_MS = 5000
+// What the camera reads: both, or one kind. 只掃 QR Code skips the student
+// card reader altogether, which slow phones need
+const MODE_LABELS = { auto: '自動辨識', qr: '只掃 QR Code', card: '只掃學生證' }
+const MODES = Object.keys(MODE_LABELS)
+const MODE_KEY = 'cksc.scanMode3'
+const ModeSwitch = defineComponent({
+  props: { modelValue: { type: String, default: 'auto' } },
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    return () => h('div', { class: 'mode-switch', role: 'radiogroup', 'aria-label': '掃描方式' },
+      Object.entries(MODE_LABELS).map(([value, label]) => h('button', {
+        type: 'button',
+        role: 'radio',
+        'aria-checked': String(props.modelValue === value),
+        class: { active: props.modelValue === value },
+        onClick: () => emit('update:modelValue', value)
+      }, label)))
+  }
+})
+function savedMode() {
+  try {
+    const saved = localStorage.getItem(MODE_KEY)
+    return MODES.includes(saved) ? saved : 'auto'
+  } catch {
+    return 'auto'
+  }
+}
+const mode = ref(savedMode())
+watch(mode, (next) => {
+  try {
+    localStorage.setItem(MODE_KEY, next)
+  } catch {
+    // ignore
+  }
+})
+
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen3'
 const CAMERA_KEY = 'cksc.scanCamera'
 
@@ -208,6 +250,8 @@ const manualBusy = ref(false)
 const manualChoices = ref([])
 // from an order page's 用相機核對領票 (/admin/scan?order=…)
 const initialOrderId = ORDER_ID_PATTERN.test(String(route.query.order || '')) ? String(route.query.order) : ''
+// ?c=: the ticket code, when a phone's own camera app opened the order page
+const initialScans = initialOrderId && route.query.c ? { code: String(route.query.c).slice(0, 200) } : {}
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth < 900
 
 let noticeTimer = 0
@@ -566,6 +610,35 @@ onBeforeUnmount(() => {
 
 .scan-notice.info {
   color: var(--lunar);
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+}
+
+/* the buttons are made by ModeSwitch's render function */
+.mode-switch :deep(button) {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  color: var(--lunar);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+
+.mode-switch :deep(button + button) {
+  border-left: 1px solid var(--line);
+}
+
+.mode-switch :deep(button.active) {
+  background: var(--ember);
+  color: #111;
 }
 
 .manual {
