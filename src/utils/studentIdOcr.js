@@ -24,6 +24,8 @@ export const CARD_RATIO = 85.6 / 54
 
 const DEFAULTS = {
   idLength: [6, 8],
+  // only numbers like this count (e.g. /^11[0-9]00[0-9]{3}$/); null: any
+  idPattern: null,
   maxWorkers: 0, // 0: by CPU cores, 2–4
   workMax: 1800, // longest side of the picture searched for the card
   hiResMax: 3000, // longest side the card is cut from
@@ -374,10 +376,11 @@ export function quadsFromOutline(outline, { minSide }) {
 
 // ---------- reading the number ----------
 
-function pickNumbers(data, [minLength, maxLength]) {
+function pickNumbers(data, [minLength, maxLength], pattern = null) {
   const found = []
   const add = (text, confidence, bbox) => {
     if (text.length < minLength || text.length > maxLength) return
+    if (pattern && !pattern.test(text)) return
     found.push({ text, confidence, bbox, height: bbox.y1 - bbox.y0 })
   }
   for (const word of data.words || []) {
@@ -711,7 +714,7 @@ export function createStudentIdReader(userOptions = {}) {
       const view = skew ? rotate(turned, -skew) : turned
       return scheduler.addJob('recognize', view).then(({ data }) => {
         mark(`ocr ${mode} ${turn}° C${offset}`)
-        return pickNumbers(data, idLength).map((c) => Object.assign(c, { view, turn, skew, mode, offset }))
+        return pickNumbers(data, idLength, options.idPattern).map((c) => Object.assign(c, { view, turn, skew, mode, offset }))
       })
     }
     const readAll = async (jobs) => (await Promise.all(jobs.map((job) => read(...job)))).flat()

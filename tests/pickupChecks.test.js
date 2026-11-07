@@ -32,14 +32,14 @@ test('早鳥票 waits for both the QR code and the card, in either order', () =>
   const qrFirst = check(early, { scans: { code: 'code-1' } })
   assert.deepEqual(states(qrFirst), { qr: 'done', id: 'wait' })
   assert.equal(qrFirst.label, '等待掃描學生證')
-  assert.deepEqual(qrFirst.need, { qr: false, card: true })
+  assert.deepEqual(qrFirst.need, { qr: false, card: true, done: 'qr' })
 
   // the card alone never stands in for the QR code, even for an admin
   const cardFirst = check(early, { scans: { studentId: '1130524' }, isAdmin: true })
   assert.deepEqual(states(cardFirst), { qr: 'wait', id: 'done' })
   assert.equal(cardFirst.canCollect, false)
   assert.equal(cardFirst.label, '等待掃描 QR Code')
-  assert.deepEqual(cardFirst.need, { qr: true, card: false })
+  assert.deepEqual(cardFirst.need, { qr: true, card: false, done: 'card' })
 
   const both = check(early, { scans: { code: 'code-1', studentId: '1130524' } })
   assert.equal(both.canCollect, true)

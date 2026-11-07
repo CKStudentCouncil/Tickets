@@ -57,6 +57,8 @@ export function orderSummary(id, order) {
   return {
     id,
     customerName: typeof order.customerName === 'string' ? order.customerName : '',
+    // tells two buyers with the same name apart
+    school: typeof order.school === 'string' ? order.school : '',
     delivered: order.delivered === true,
     paid: order.paid === true,
     items: (Array.isArray(order.items) ? order.items : []).map((item) => ({
@@ -67,19 +69,54 @@ export function orderSummary(id, order) {
   }
 }
 
+// a buyer's name as typed at the desk: the whole name, as on the order
+export const NAME_MAX = 50
+export function cleanName(value) {
+  if (typeof value !== 'string') return ''
+  const name = value.normalize('NFKC').trim().replace(/\s+/g, ' ')
+  return name.length >= 1 && name.length <= NAME_MAX ? name : ''
+}
+
+// an email as typed at the desk; orders keep it lowercased, guests' as given
+export function cleanEmail(value) {
+  if (typeof value !== 'string') return ''
+  const email = value.normalize('NFKC').trim()
+  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
+}
+
+function summaries(snapshot) {
+  return snapshot.docs
+    .map((doc) => orderSummary(doc.id, doc.data()))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+}
+
+// { studentId }: the orders of that 建中 student's school account (a card
+// read at the desk, or a 學號 typed). { name } / { email }: the orders with
+// exactly that buyer name or email, when the buyer has neither QR code nor
+// card at hand
 export async function findOrdersByStudentId(data, context) {
   // managers may open single orders, not search them (firestore.rules); this
-  // looks up one account only
+  // looks up one account, or one exact name, only
   await assertRole(context, 'manager')
+  if (data?.email !== undefined) {
+    const email = cleanEmail(data.email)
+    if (!email) throw new HttpsError('invalid-argument', 'Email 格式不正確')
+    const emails = [...new Set([email.toLowerCase(), email])]
+    const snapshot = await db.collection('orders').where('customerEmail', 'in', emails).limit(ORDER_LIMIT).get()
+    return { email: email.toLowerCase(), orders: summaries(snapshot) }
+  }
+  if (data?.name !== undefined) {
+    const name = cleanName(data.name)
+    if (!name) throw new HttpsError('invalid-argument', '姓名格式不正確')
+    const snapshot = await db.collection('orders').where('customerName', '==', name).limit(ORDER_LIMIT).get()
+    return { name, orders: summaries(snapshot) }
+  }
   const studentId = cleanStudentId(data?.studentId)
   if (!studentId) throw new HttpsError('invalid-argument', '學號格式不正確')
 
   const email = studentAccountEmail(studentId)
   const snapshot = await db.collection('orders').where('customerEmail', '==', email).limit(ORDER_LIMIT).get()
-  const orders = snapshot.docs
-    .map((doc) => orderSummary(doc.id, doc.data()))
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-  return { studentId, email, orders }
+  return { studentId, email, orders: summaries(snapshot) }
 }
 
 export const findStudentOrders = functions.region(REGION).https.onCall(findOrdersByStudentId)

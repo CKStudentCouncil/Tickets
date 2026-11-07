@@ -56,7 +56,7 @@
           </p>
           <div class="overlay-actions">
             <button type="button" class="primary-button" @click="startCamera()">重新掃描</button>
-            <button type="button" class="secondary-button" @click="editId">手動改學號</button>
+            <button v-if="!compact" type="button" class="secondary-button" @click="editId">手動改學號</button>
           </div>
         </div>
 
@@ -92,33 +92,8 @@
       </p>
     </div>
 
-    <!-- compact: folded away, so the page's own content sits right under the camera -->
-    <details v-if="card && compact" ref="manualFold" class="manual-fold" :open="!!formError">
-      <summary>讀不到學號？手動輸入或拍照</summary>
-      <form class="manual" @submit.prevent="submitId">
-        <div class="manual-row">
-          <input
-            :id="`student-id-${uid}`"
-            ref="idInput"
-            v-model="studentId"
-            inputmode="numeric"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="學號，例如 1130524"
-            aria-label="學號"
-            :aria-invalid="!!formError"
-            @input="formError = ''"
-          >
-          <button type="submit" class="secondary-button" :disabled="phase === 'looking'">{{ lookupEnabled ? '查詢訂單' : '核對學號' }}</button>
-          <label class="secondary-button photo-button">
-            拍照
-            <input type="file" accept="image/*" capture="environment" @change="readPhoto">
-          </label>
-        </div>
-        <p v-if="formError" class="manual-error" role="alert">{{ formError }}</p>
-      </form>
-    </details>
-    <form v-else-if="card" class="manual" @submit.prevent="submitId">
+    <!-- compact: the page has its own search box (訂單編號、姓名或學號) -->
+    <form v-if="card && !compact" class="manual" @submit.prevent="submitId">
       <label :for="`student-id-${uid}`">讀不到時，輸入學號</label>
       <div class="manual-row">
         <input
@@ -128,7 +103,7 @@
           inputmode="numeric"
           autocomplete="off"
           spellcheck="false"
-          placeholder="例如 1130524"
+          placeholder="例如 11300524"
           :aria-invalid="!!formError"
           @input="formError = ''"
         >
@@ -149,7 +124,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { findStudentOrders } from 'src/services/orderService'
-import { cleanStudentId, STUDENT_ID_LENGTH } from 'src/data/schools'
+import { CARD_ID_PATTERN, cleanStudentId } from 'src/data/schools'
 import { acquireCamera, releaseCamera } from 'src/utils/camera'
 import { cameraErrorMessage, createDecoder, listCameras } from 'src/utils/qrScanner'
 import { createStudentIdReader } from 'src/utils/studentIdOcr'
@@ -172,7 +147,12 @@ const props = defineProps({
   // inside the order page, whose checklist already says what to scan
   compact: { type: Boolean, default: false },
   // what staff are asked for, above the camera (e.g. whose card)
-  prompt: { type: String, default: '' }
+  prompt: { type: String, default: '' },
+  // the 學號 the page waits for (the order shown): read once, it is taken
+  // at once, since a misread is never exactly that number
+  expect: { type: String, default: '' },
+  // 'card' | 'qr': that one was scanned for the order, the other is wanted
+  scanned: { type: String, default: '' }
 })
 // `open({ orderId, studentId })`: found by lookup | `read({ studentId, candidates })`:
 // lookup off | `qr(text)`: every QR code in view (the page decides) |
@@ -182,13 +162,20 @@ const emit = defineEmits(['open', 'read', 'qr', 'camera'])
 // a pause between camera frames, so the phone stays responsive
 const FRAME_GAP_MS = 150
 const QR_GAP_MS = 150
-// one reading this sure is enough; otherwise two frames in a row must agree
-const SURE_CONFIDENCE = 92
+// a card in view: QR codes are looked for less often, leaving the phone to
+// the card
+const QR_CARD_GAP_MS = 600
+// one reading this sure is enough (only 11x00xxx numbers are read at all);
+// otherwise two frames must agree within CONFIRM_MS. A frame that reads
+// nothing in between does not start over
+const SURE_CONFIDENCE = 90
+const CONFIRM_MS = 4000
+// a frame's runner-up this sure counts for the next frame too
+const RUNNER_UP_CONFIDENCE = 80
 
 const uid = Math.random().toString(36).slice(2, 8)
 const video = ref(null)
 const idInput = ref(null)
-const manualFold = ref(null)
 // starting | scanning | looking | opening | choose | none | error | stopped
 const phase = ref('starting')
 const cameraError = ref('')
@@ -207,12 +194,17 @@ const currentCamera = ref('')
 
 const lookupEnabled = computed(() => props.lookup)
 const engineLabel = computed(() => ({ loading: '載入辨識引擎…', ready: '辨識引擎就緒', failed: '辨識引擎載入失敗' })[engine.value])
-const idleHint = () => (props.card && props.qr ? '把 QR Code 或學生證放進框內' : props.card ? '把學生證放進框內' : '把票券 QR Code 放進框內')
+function idleHint() {
+  if (props.scanned === 'card' && props.qr) return '學生證掃描成功，請掃描 QR Code'
+  if (props.scanned === 'qr' && props.card) return 'QR Code 掃描成功，請掃描學生證'
+  return props.card && props.qr ? '把 QR Code 或學生證放進框內' : props.card ? '把學生證放進框內' : '把票券 QR Code 放進框內'
+}
 
 let reader = null
 let stream = null
 let sequence = 0
-let lastRead = ''
+// the 學號 each recent frame read: [{ at, ids }]
+let recentReads = []
 let unmounted = false
 let qrDecoder = null
 
@@ -266,7 +258,7 @@ async function startCamera(deviceId = currentCamera.value || props.deviceId) {
 
 function beginReading(run) {
   phase.value = 'scanning'
-  lastRead = ''
+  recentReads = []
   hint.value = props.card && engine.value !== 'ready' ? '第一次使用要下載辨識引擎（約 15 MB），請稍候…' : idleHint()
   if (props.card) loop(run)
   if (props.qr) qrLoop(run)
@@ -307,7 +299,7 @@ function snapshot() {
 }
 
 function getReader() {
-  reader ||= createStudentIdReader({ idLength: STUDENT_ID_LENGTH })
+  reader ||= createStudentIdReader({ idLength: [8, 8], idPattern: CARD_ID_PATTERN })
   return reader
 }
 
@@ -325,24 +317,26 @@ async function loop(run) {
         if (run !== sequence || unmounted) return
         cardSeen.value = read.cardFound
         if (read.id) {
-          const sure = read.confidence >= SURE_CONFIDENCE && read.votes >= 2
-          if (sure || read.id === lastRead) {
+          const expected = expectedRead(read)
+          const again = readBefore(read)
+          const sure = expected || again || read.confidence >= SURE_CONFIDENCE
+          const id = expected || read.id
+          if (sure) {
             // paired: a card still in view after it was sent is not sent again
-            if (props.paired && read.id === sentId && Date.now() - sentAt < PAIRED_REPEAT_MS) {
+            if (props.paired && id === sentId && Date.now() - sentAt < PAIRED_REPEAT_MS) {
               sentAt = Date.now()
-              hint.value = `學號 ${read.id} 已傳送，換下一位`
-              lastRead = read.id
+              hint.value = `學號 ${id} 已傳送，換下一位`
               await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
               continue
             }
-            accept(read.id, read.candidates)
+            accept(id, read.candidates)
             return
           }
+          // waiting for a second reading: the next frame at once
           hint.value = `讀到 ${read.id}，確認中…`
-        } else {
-          hint.value = read.cardFound ? '找到學生證，讀取學號中…' : idleHint()
+          continue
         }
-        lastRead = read.id || ''
+        hint.value = read.cardFound ? '找到學生證，讀取學號中…' : idleHint()
       }
       await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
     }
@@ -352,6 +346,23 @@ async function loop(run) {
     engine.value = 'failed'
     hint.value = props.qr ? '學生證辨識引擎無法載入；QR Code 仍可掃描，學號請在下方輸入' : '辨識引擎無法載入，請檢查網路，或在下方輸入學號'
   }
+}
+
+// the 學號 the page waits for, when this frame read it (even as a runner-up)
+function expectedRead(read) {
+  const want = cleanStudentId(props.expect)
+  if (!want) return ''
+  return read.id === want || read.candidates.some((c) => c.text === want && c.confidence >= 60) ? want : ''
+}
+
+// whether another recent frame read this 學號 too; this frame is remembered
+function readBefore(read) {
+  const now = Date.now()
+  recentReads = recentReads.filter((entry) => now - entry.at < CONFIRM_MS)
+  const seen = recentReads.some((entry) => entry.ids.includes(read.id))
+  const ids = read.candidates.filter((c) => c.text === read.id || c.confidence >= RUNNER_UP_CONFIDENCE).map((c) => c.text)
+  recentReads.push({ at: now, ids })
+  return seen
 }
 
 // QR codes are quick to find: checked on their own, much more often than
@@ -373,7 +384,7 @@ async function qrLoop(run) {
         console.error('QR decode failed', error)
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, QR_GAP_MS))
+    await new Promise((resolve) => setTimeout(resolve, props.card && cardSeen.value ? QR_CARD_GAP_MS : QR_GAP_MS))
   }
 }
 
@@ -504,11 +515,16 @@ function open(order) {
 }
 
 async function editId() {
-  if (manualFold.value) manualFold.value.open = true
   await nextTick()
   idInput.value?.focus()
   idInput.value?.select()
 }
+
+// one of the two scanned (or a new order): say what is wanted next
+const IDLE_HINTS = ['把 QR Code 或學生證放進框內', '把學生證放進框內', '把票券 QR Code 放進框內', '學生證掃描成功，請掃描 QR Code', 'QR Code 掃描成功，請掃描學生證']
+watch(() => props.scanned, () => {
+  if (phase.value === 'scanning' && IDLE_HINTS.includes(hint.value)) hint.value = idleHint()
+})
 
 // what to read changed (the page got one of the two): read the rest
 watch(() => [props.card, props.qr], () => {
@@ -793,22 +809,6 @@ defineExpose({ restart: () => startCamera() })
 
 .manual-row input:focus {
   border-color: rgba(242, 240, 233, .35);
-}
-
-.manual-fold {
-  margin-top: 10px;
-}
-
-.manual-fold summary {
-  padding: 8px 2px;
-  color: var(--lunar);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.manual-fold .manual {
-  margin-top: 6px;
-  padding: 12px;
 }
 
 .manual-error {

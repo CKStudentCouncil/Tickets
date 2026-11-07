@@ -99,6 +99,8 @@ export function pickupChecks(order, { ticketTypes = [], scans = {}, exceptions =
     qr: qr.state === 'wait' || qr.state === 'bad',
     card: needsCard && idRow?.state === 'wait'
   }
+  // one of the two scanned and the other still wanted: the camera says so
+  need.done = need.qr && !need.card && cardOk ? 'card' : need.card && !need.qr && qr.state === 'done' ? 'qr' : ''
 
   // updateOrderDelivery's options; `overrideReason` is added by an admin's
   // 強制領票 (the station's dialog)

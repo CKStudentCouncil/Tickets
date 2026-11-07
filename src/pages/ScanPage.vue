@@ -24,8 +24,6 @@
           <button type="button" class="remote-disconnect" @click="disconnect">中斷連線</button>
         </div>
 
-        <ModeSwitch v-model="mode" />
-
         <p class="phone-status" :class="{ waiting: !!need }" role="status" aria-live="polite">
           <template v-if="need">電腦正在等：<strong>{{ need.name || need.orderId }}</strong> 的{{ needWhat }}</template>
           <template v-else>電腦待命中：掃下一位的 QR Code 或學生證</template>
@@ -35,9 +33,9 @@
           v-if="!firstGuide"
           :device-id="savedCamera()"
           paired
-          :card="mode !== 'qr'"
-          :qr="mode !== 'card'"
+          qr
           :prefer-order-id="need?.orderId || ''"
+          :scanned="need?.done || ''"
           compact
           @open="sendCard"
           @qr="handlePhoneQr"
@@ -45,38 +43,43 @@
         />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
 
-        <details class="manual order-entry" :open="!!manualError">
-          <summary>都掃不到？輸入訂單編號傳到電腦</summary>
+        <details class="manual order-entry" :open="!!manualError || !!manualChoices.length">
+          <summary>都掃不到？輸入訂單編號、姓名、Email 或學號</summary>
           <form @submit.prevent="openManual">
             <div class="manual-row">
-              <input v-model="manualId" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 CKS20261027ABCDEF" :aria-invalid="!!manualError">
-              <button type="submit" class="secondary-button">傳送到電腦</button>
+              <input v-model="manualId" autocomplete="off" spellcheck="false" placeholder="訂單編號、姓名、Email 或學號" aria-label="訂單編號、姓名、Email 或學號" :aria-invalid="!!manualError">
+              <button type="submit" class="secondary-button" :disabled="manualBusy">傳送到電腦</button>
             </div>
             <p v-if="manualError" class="manual-error" role="alert">{{ manualError }}</p>
           </form>
+          <div v-if="manualChoices.length" class="manual-choices" role="group" aria-label="選擇訂單">
+            <p>有 {{ manualChoices.length }} 筆訂單，點要領的那一筆：</p>
+            <button v-for="order in manualChoices" :key="order.id" type="button" class="secondary-button" @click="sendChoice(order)">
+              {{ order.customerName || order.id }}<span>{{ [order.school, itemsOf(order), order.delivered ? '已領票' : ''].filter(Boolean).join('・') }}</span>
+            </button>
+          </div>
         </details>
       </template>
 
       <!-- ---------- the check-in station on this device ---------- -->
       <template v-else>
-        <ModeSwitch v-model="mode" />
         <p v-if="notice" class="scan-notice" :class="noticeTone" role="status" aria-live="polite">{{ notice }}</p>
         <PickupStation
           ref="station"
           :camera="!firstGuide"
-          :camera-mode="mode"
           :keyboard="!isPhone"
           :initial-order-id="initialOrderId"
           :qr-filter="takePairingCode"
         >
           <template #idle-extra>
             <details class="manual order-entry" :open="!!manualError">
-              <summary>都掃不到？輸入訂單編號</summary>
+              <summary>都掃不到？輸入訂單編號、姓名、Email 或學號</summary>
               <form @submit.prevent="openManual">
                 <div class="manual-row">
-                  <input v-model="manualId" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 CKS20261027ABCDEF" :aria-invalid="!!manualError">
-                  <button type="submit" class="secondary-button">開啟</button>
+                  <input v-model="manualId" autocomplete="off" spellcheck="false" placeholder="訂單編號、姓名、Email 或學號" aria-label="訂單編號、姓名、Email 或學號" :aria-invalid="!!manualError">
+                  <button type="submit" class="secondary-button" :disabled="manualBusy">查詢</button>
                 </div>
+                <p class="manual-hint">姓名和 Email 要和訂單上的完全相同</p>
                 <p v-if="manualError" class="manual-error" role="alert">{{ manualError }}</p>
               </form>
             </details>
@@ -97,7 +100,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, markRaw, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Camera, CircleQuestionMark, Laptop, MousePointerClick, ScanLine, TriangleAlert } from 'lucide-vue-next'
 import GuideDialog from 'src/components/GuideDialog.vue'
@@ -105,6 +108,8 @@ import PickupStation from 'src/components/PickupStation.vue'
 import StudentCardScanner from 'src/components/StudentCardScanner.vue'
 import { SITE_URL } from 'src/config/app'
 import { isScanLinkClosed, useScanRemote } from 'src/composables/useScanRemote'
+import { lookupOrders } from 'src/services/orderService'
+import { SEARCH_HINT, choices, classifySearch, notFoundText, pickOrder, searchLabel } from 'src/utils/pickupSearch'
 import { useAuthStore } from 'src/stores/auth'
 import { isGuideSeen, markGuideSeen } from 'src/utils/guideSeen'
 import { createRepeatFilter, isScanLinkId, parseScanLinkQr } from 'src/utils/scanLink'
@@ -158,27 +163,10 @@ const PHONE_GUIDE = [
     title: '掃描小技巧',
     lines: [
       '畫面模糊時，把手機拿遠一點（約 20–30 公分）讓鏡頭對焦；讀不到 QR Code 就請對方調亮螢幕。',
-      '學生證橫放拿穩，別蓋住學號。耗電或太慢時，可以在下方改成「只掃 QR Code」。'
+      '學生證橫放拿穩，別蓋住學號。'
     ]
   }
 ]
-
-// What the camera reads: both, or one kind (faster on slow phones)
-const MODE_LABELS = { auto: '自動辨識', qr: '只掃 QR Code', card: '只掃學生證' }
-const ModeSwitch = defineComponent({
-  props: { modelValue: { type: String, default: 'auto' } },
-  emits: ['update:modelValue'],
-  setup(props, { emit }) {
-    return () => h('div', { class: 'mode-switch', role: 'radiogroup', 'aria-label': '掃描方式' },
-      Object.entries(MODE_LABELS).map(([value, label]) => h('button', {
-        type: 'button',
-        role: 'radio',
-        'aria-checked': String(props.modelValue === value),
-        class: { active: props.modelValue === value },
-        onClick: () => emit('update:modelValue', value)
-      }, label)))
-  }
-})
 
 // While paired, a ticket counts again only after it has been out of view
 // this long, since the camera stays on between scans
@@ -187,8 +175,6 @@ const REPEAT_GAP_MS = 2000
 const SLOW_SEND_MS = 5000
 const GUIDE_SEEN_KEY = 'cksc.scanGuideSeen3'
 const CAMERA_KEY = 'cksc.scanCamera'
-const MODE_KEY = 'cksc.scanMode2'
-const MODES = ['auto', 'qr', 'card']
 
 function savedCamera() {
   try {
@@ -204,20 +190,11 @@ function saveCamera(deviceId) {
     // ignore
   }
 }
-function savedMode() {
-  try {
-    const saved = localStorage.getItem(MODE_KEY)
-    return MODES.includes(saved) ? saved : 'auto'
-  } catch {
-    return 'auto'
-  }
-}
 
 // Ticket QR codes point at the production site; also accept this origin
 const origins = [...new Set([new URL(SITE_URL).origin, window.location.origin])]
 
 const station = ref(null)
-const mode = ref(savedMode())
 const guideOpen = ref(false)
 // first visit: the camera waits until the guide is closed
 const firstGuide = ref(false)
@@ -226,19 +203,14 @@ const notice = ref('')
 const noticeTone = ref('danger')
 const manualId = ref('')
 const manualError = ref('')
+const manualBusy = ref(false)
+// paired: a name or 學號 with several orders
+const manualChoices = ref([])
 // from an order page's 用相機核對領票 (/admin/scan?order=…)
 const initialOrderId = ORDER_ID_PATTERN.test(String(route.query.order || '')) ? String(route.query.order) : ''
 const isPhone = window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth < 900
 
 let noticeTimer = 0
-
-watch(mode, (next) => {
-  try {
-    localStorage.setItem(MODE_KEY, next)
-  } catch {
-    // ignore
-  }
-})
 
 // 手機掃描、電腦領票: paired with a computer, what this phone reads is sent there
 const remote = useScanRemote({
@@ -335,16 +307,55 @@ function disconnect() {
   showNotice('已中斷連線；改在這支手機上領票', 'info')
 }
 
-function openManual() {
-  const orderId = manualId.value.normalize('NFKC').trim().toUpperCase()
-  if (!ORDER_ID_PATTERN.test(orderId)) {
-    manualError.value = '訂單編號格式不正確'
-    return
-  }
+// 都掃不到: an order number, a buyer's exact name or email, or a 學號. Here the
+// station looks it up; paired, this phone finds the order and sends it
+async function openManual() {
+  const value = manualId.value.normalize('NFKC').trim()
+  if (!value || manualBusy.value) return
   manualError.value = ''
+  manualChoices.value = []
+  manualBusy.value = true
+  try {
+    if (!remoteLink.value) {
+      manualError.value = (await station.value?.search(value)) || ''
+      if (!manualError.value) manualId.value = ''
+      return
+    }
+    const query = classifySearch(value)
+    if (!query) {
+      manualError.value = `請輸入${SEARCH_HINT}`
+      return
+    }
+    if (query.kind === 'order') {
+      sendManual(query.orderId, searchLabel(query))
+      return
+    }
+    const orders = (await lookupOrders(query)).orders || []
+    const pick = pickOrder(orders)
+    if (!orders.length) manualError.value = notFoundText(query)
+    else if (pick) sendManual(pick.id, pick.customerName || `訂單 ${pick.id}`)
+    else manualChoices.value = choices(orders)
+  } catch (error) {
+    console.error('Order lookup failed', error)
+    const code = String(error?.code || '').replace('functions/', '')
+    manualError.value = code === 'invalid-argument' ? `請輸入完整的${SEARCH_HINT}` : `查詢失敗（${code || 'unknown'}）；請再試一次`
+  } finally {
+    manualBusy.value = false
+  }
+}
+
+function sendManual(orderId, what) {
   manualId.value = ''
-  if (remoteLink.value) sendToDesk({ orderId, ticketCode: '' }, `訂單 ${orderId}`)
-  else station.value?.receive({ orderId })
+  manualChoices.value = []
+  sendToDesk({ orderId, ticketCode: '' }, what)
+}
+
+function sendChoice(order) {
+  sendManual(order.id, order.customerName || `訂單 ${order.id}`)
+}
+
+function itemsOf(order) {
+  return (order?.items || []).map((item) => `${item.name} × ${item.quantity}`).join('、')
 }
 
 function openGuide() {
@@ -557,34 +568,6 @@ onBeforeUnmount(() => {
   color: var(--lunar);
 }
 
-.mode-switch {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-bottom: 14px;
-  border: 1px solid var(--line);
-}
-
-.mode-switch :deep(button) {
-  min-height: 42px;
-  border: 0;
-  background: transparent;
-  color: var(--lunar);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: .04em;
-  cursor: pointer;
-}
-
-.mode-switch :deep(button + button) {
-  border-left: 1px solid var(--line);
-}
-
-.mode-switch :deep(button.active) {
-  background: var(--ember);
-  color: #111;
-}
-
 .manual {
   margin-top: 16px;
   padding: 16px;
@@ -627,6 +610,41 @@ onBeforeUnmount(() => {
 
 .manual-row input:focus {
   border-color: rgba(242, 240, 233, .35);
+}
+
+.manual-hint {
+  margin: 6px 0 0;
+  color: var(--lunar);
+  font-size: 12px;
+}
+
+.manual-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.manual-choices p {
+  margin: 0;
+  color: var(--lunar);
+  font-size: 13px;
+}
+
+.manual-choices button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  height: auto;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.manual-choices button span {
+  color: var(--lunar);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .manual-error {

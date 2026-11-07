@@ -98,6 +98,23 @@ describe('掃描學生證', () => {
     await assert.rejects(findByCard({ studentId: 'ck1130524' }, as('manager1')), { code: 'invalid-argument' })
   })
 
+  test('staff find a buyer\'s orders by their exact name', async () => {
+    const found = await findByCard({ name: ' 王小明 ' }, as('manager1'))
+    assert.equal(found.name, '王小明')
+    assert.deepEqual(found.orders.map((order) => order.id), [ORDER_ID])
+    assert.equal(found.orders[0].ticketCode, undefined)
+    assert.deepEqual((await findByCard({ name: '王小' }, as('manager1'))).orders, [])
+    await assert.rejects(findByCard({ name: '王小明' }, as('buyer')), { code: 'permission-denied' })
+    await assert.rejects(findByCard({ name: '  ' }, as('manager1')), { code: 'invalid-argument' })
+  })
+
+  test('staff find a buyer\'s orders by their email, in any case', async () => {
+    const found = await findByCard({ email: ' CK1130524@gl.ck.tp.edu.tw ' }, as('manager1'))
+    assert.deepEqual(found.orders.map((order) => order.id), [ORDER_ID])
+    assert.deepEqual((await findByCard({ email: 'nobody@example.com' }, as('manager1'))).orders, [])
+    await assert.rejects(findByCard({ email: 'not-an-email' }, as('manager1')), { code: 'invalid-argument' })
+  })
+
   test('a ticket type for 建中 students needs the student card as well as the QR code', async () => {
     await db.doc('settings/ticketTypes').set({ types: [{ id: 'early', name: '早鳥票', eligibleBuyerIdentity: 'campus_students' }] })
     await ref().update({ items: [{ id: 'early', ticketTypeId: 'early', name: '早鳥票', quantity: 1 }] })

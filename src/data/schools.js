@@ -29,6 +29,9 @@ export const SCHOOL_ACCOUNT_DOMAIN = 'gl.ck.tp.edu.tw'
 export const STUDENT_ACCOUNT_PREFIX = 'ck'
 export const STUDENT_ID_LENGTH = [6, 8]
 export const STUDENT_ID_PATTERN = /^[0-9]{6,8}$/
+// what is printed on a 建中 student card: 11x00xxx. The card reader only
+// takes numbers like this; other numbers on the card are left out
+export const CARD_ID_PATTERN = /^11[0-9]00[0-9]{3}$/
 
 // The 學號 typed or read off a card, or '' when it is not one
 export function cleanStudentId(value) {
@@ -39,6 +42,14 @@ export function cleanStudentId(value) {
 export function studentAccountEmail(studentId) {
   const id = cleanStudentId(studentId)
   return id ? `${STUDENT_ACCOUNT_PREFIX}${id}@${SCHOOL_ACCOUNT_DOMAIN}` : ''
+}
+
+// the 學號 of a 建中 school account (ck{學號}@gl.ck.tp.edu.tw), or ''
+export function accountStudentId(email) {
+  const text = String(email ?? '').trim().toLowerCase()
+  const suffix = `@${SCHOOL_ACCOUNT_DOMAIN}`
+  if (!text.startsWith(STUDENT_ACCOUNT_PREFIX) || !text.endsWith(suffix)) return ''
+  return cleanStudentId(text.slice(STUDENT_ACCOUNT_PREFIX.length, -suffix.length))
 }
 
 // 友校: their students' school Google account domains, for the 友校帳號

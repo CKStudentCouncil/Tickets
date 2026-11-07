@@ -1433,6 +1433,8 @@ describe('scanLinks (手機掃描、電腦處理)', () => {
     await seed()
     const need = (fields = {}) => ({ orderId: ORDER_ID, name: '王小明', qr: false, card: true, at: serverTimestamp(), ...fields })
     await assertSucceeds(updateDoc(linkDoc(desk), { need: need() }))
+    await assertSucceeds(updateDoc(linkDoc(desk), { need: need({ done: 'qr' }) }))
+    await assertSucceeds(updateDoc(linkDoc(desk), { need: need({ qr: true, card: false, done: 'card' }) }))
     await assertSucceeds(updateDoc(linkDoc(desk), { need: null }))
     // only the computer that made the link, only `need`, and well formed
     await assertFails(updateDoc(linkDoc(phoneUser), { need: need() }))
@@ -1444,7 +1446,9 @@ describe('scanLinks (手機掃描、電腦處理)', () => {
       { card: 'yes' },
       { qr: 1 },
       { at: Timestamp.now() },
-      { extra: 1 }
+      { extra: 1 },
+      { done: 'both' },
+      { done: true }
     ]) {
       await assertFails(updateDoc(linkDoc(desk), { need: need(fields) }), JSON.stringify(fields))
     }

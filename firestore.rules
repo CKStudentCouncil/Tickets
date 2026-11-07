@@ -680,7 +680,8 @@ service cloud.firestore {
     function isValidScanLinkNeed(need) {
       return need == null || (need is map
         && need.keys().hasAll(['orderId', 'name', 'qr', 'card', 'at'])
-        && need.keys().hasOnly(['orderId', 'name', 'qr', 'card', 'at'])
+        && need.keys().hasOnly(['orderId', 'name', 'qr', 'card', 'done', 'at'])
+        && (!('done' in need) || need.done in ['qr', 'card'])
         && need.orderId is string
         && need.orderId.matches('[A-Z]{1,4}[0-9]{8}([0-9]{4}|[A-HJ-NP-Z2-9]{6})')
         && isShortString(need.name, 200)

@@ -263,6 +263,13 @@ export async function findStudentOrders(studentId) {
   return data
 }
 
+// 都掃不到 (managers): a classifySearch() result that is not an order
+// number, as { orders }. Names and emails must match exactly
+export async function lookupOrders(query) {
+  const { data } = await studentOrdersCallable({ [query.kind]: query[query.kind] })
+  return data
+}
+
 export function updateOrderPayment(orderId, paid, expectedPaid) {
   return statusCall(paymentCallable, { orderId, paid, expectedPaid })
 }
