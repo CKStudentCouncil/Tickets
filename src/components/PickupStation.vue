@@ -3,11 +3,12 @@
     <div v-if="camera" class="station-camera">
       <StudentCardScanner
         :device-id="savedCamera()"
-        :card="cameraMode !== 'qr'"
-        :qr="cameraMode !== 'card'"
+        qr
         :lookup="false"
-        :title="cameraTitle"
+        title="QR Code 和學生證都可以掃"
         compact
+        :expect="expectedCard"
+        :scanned="scannedOne"
         @read="({ studentId }) => handleCard(studentId)"
         @qr="handleQr"
         @camera="saveCamera"
@@ -30,12 +31,12 @@
 
       <!-- a 學號 with several orders -->
       <div v-else-if="prompt?.kind === 'choose'" class="station-prompt" role="dialog" aria-label="選擇訂單">
-        <p class="prompt-title">學號 {{ prompt.studentId }} 有 {{ prompt.orders.length }} 筆訂單</p>
+        <p class="prompt-title">{{ prompt.title }}</p>
         <p class="prompt-text">點選要領的那一筆，或直接掃那一筆的 QR Code</p>
         <div class="choose-list">
           <button v-for="item in prompt.orders" :key="item.id" type="button" class="choose-row" @click="choose(item)">
             <strong>{{ item.customerName || '（未填姓名）' }}</strong>
-            <span>{{ itemsOf(item) }}</span>
+            <span>{{ [item.school, itemsOf(item)].filter(Boolean).join('・') }}</span>
             <span class="choose-state" :class="{ done: item.delivered }">{{ item.delivered ? '已領票' : '未領票' }}{{ item.paid ? '' : '・未付款' }}</span>
           </button>
         </div>
@@ -99,11 +100,12 @@ import { Check, ScanLine } from 'lucide-vue-next'
 import PickupPanel from 'src/components/PickupPanel.vue'
 import StudentCardScanner from 'src/components/StudentCardScanner.vue'
 import { SITE_URL } from 'src/config/app'
-import { cleanStudentId } from 'src/data/schools'
-import { fetchCancelledOrder, fetchOrder, findStudentOrders, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
+import { accountStudentId, cleanStudentId } from 'src/data/schools'
+import { fetchCancelledOrder, fetchOrder, findStudentOrders, lookupOrders, updateOrderDelivery, updateOrderPayment } from 'src/services/orderService'
 import { fetchTicketTypes } from 'src/services/ticketTypeService'
 import { useAuthStore } from 'src/stores/auth'
 import { cardMatches, pickupChecks } from 'src/utils/pickupChecks'
+import { SEARCH_HINT, choices, classifySearch, notFoundText, pickOrder, searchLabel } from 'src/utils/pickupSearch'
 import { parseTicketQr } from 'src/utils/ticketQr'
 
 // The check-in station: one buyer at a time, never leaving the page. Every
@@ -114,8 +116,6 @@ import { parseTicketQr } from 'src/utils/ticketQr'
 const props = defineProps({
   // this device's camera (StudentCardScanner); off at a computer a phone scans for
   camera: { type: Boolean, default: true },
-  // auto | qr | card: what the camera reads
-  cameraMode: { type: String, default: 'auto' },
   // Enter collects, Esc clears (a computer)
   keyboard: { type: Boolean, default: false },
   // one order only (its order page): no idle screen, no switching
@@ -153,7 +153,16 @@ const loading = ref(false)
 const busy = ref(false)
 const panelError = ref('')
 const panel = ref(null)
-// { kind: 'switch', title, text, name, orderId, order, scans } | { kind: 'choose', studentId, orders }
+// the 學號 on the order shown, still to be scanned: the camera takes it on
+// the first reading
+// one of QR Code and card scanned, the other still wanted
+const scannedOne = computed(() => (current.value && !current.value.order.delivered ? checks.value?.need?.done || '' : ''))
+const expectedCard = computed(() => {
+  const entry = current.value
+  if (!entry || entry.order.delivered || entry.scans.studentId) return ''
+  return accountStudentId(entry.order.customerEmail)
+})
+// { kind: 'switch', title, text, name, orderId, order, scans } | { kind: 'choose', title, orders, scans }
 const prompt = ref(null)
 const notice = ref(null)
 const done = ref(null)
@@ -167,7 +176,6 @@ const checks = computed(() => current.value && pickupChecks(current.value.order,
   isAdmin: auth.isAdmin
 }))
 
-const cameraTitle = computed(() => ({ qr: '只掃 QR Code', card: '只掃學生證' })[props.cameraMode] || 'QR Code 和學生證都可以掃')
 const idleTitle = computed(() => (props.camera ? '掃 QR Code 或學生證開始' : '等待掃描'))
 const idleText = computed(() => props.idleHint || '先掃哪一個都可以，相機會一直開著，等你掃下一樣')
 
@@ -292,7 +300,16 @@ async function handleCard(value, hintOrderId = '') {
     return
   }
   feedback('ok')
-  prompt.value = { kind: 'choose', studentId, orders: waiting.length ? waiting : orders }
+  const list = waiting.length ? waiting : orders
+  prompt.value = { kind: 'choose', title: `學號 ${studentId} 有 ${list.length} 筆訂單`, orders: list, scans: { studentId } }
+}
+
+function searchError(error) {
+  const code = String(error?.code || '').replace('functions/', '')
+  if (code === 'permission-denied') return '這個帳號不能查訂單，請用工作人員帳號登入'
+  if (code === 'invalid-argument') return `請輸入完整的${SEARCH_HINT}`
+  if (code === 'unavailable' || !navigator.onLine) return '網路不穩，查詢失敗；請再試一次'
+  return `查詢失敗（${code || 'unknown'}）`
 }
 
 function lookupError(error) {
@@ -342,9 +359,9 @@ function acceptSwitch() {
 }
 
 function choose(order) {
-  const studentId = prompt.value?.studentId || ''
+  const scans = prompt.value?.scans || {}
   prompt.value = null
-  load(order.id, { studentId })
+  load(order.id, scans)
 }
 
 function addScans(scans) {
@@ -481,6 +498,42 @@ function clock(date) {
   return date.toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+// ---------- 都掃不到: an order number, a name, an email or a 學號, typed ----------
+// A typed 學號 only finds the orders: it does not tick the student card.
+// Returns '' or what was wrong with the text
+async function search(text) {
+  const query = classifySearch(text)
+  if (!query) return `請輸入${SEARCH_HINT}`
+  if (query.kind === 'order') {
+    await route(query.orderId, {})
+    return ''
+  }
+  const label = searchLabel(query)
+  const sequence = ++loadSequence
+  say(`查詢 ${label} 的訂單…`, 'info', 0)
+  let found
+  try {
+    found = await lookupOrders(query)
+  } catch (error) {
+    if (sequence !== loadSequence) return ''
+    notice.value = null
+    console.error('Order lookup failed', error)
+    return searchError(error)
+  }
+  if (sequence !== loadSequence) return ''
+  notice.value = null
+  const orders = found.orders || []
+  if (!orders.length) return notFoundText(query)
+  const pick = pickOrder(orders)
+  if (pick) {
+    await route(pick.id, {})
+    return ''
+  }
+  const list = choices(orders)
+  prompt.value = { kind: 'choose', title: `${label} 有 ${list.length} 筆訂單`, orders: list, scans: {} }
+  return ''
+}
+
 // ---------- outside scans (a paired phone, a typed order number) ----------
 // { orderId, ticketCode?, studentId? }
 function receive(scan) {
@@ -523,7 +576,7 @@ watch(
     const entry = current.value
     const need = checks.value?.need
     if (!entry || entry.order.delivered || !need || (!need.qr && !need.card)) return null
-    return JSON.stringify({ orderId: entry.order.id, name: entry.order.customerName || '', qr: need.qr, card: need.card })
+    return JSON.stringify({ orderId: entry.order.id, name: entry.order.customerName || '', qr: need.qr, card: need.card, done: need.done })
   },
   (value) => emit('need', value ? JSON.parse(value) : null),
   { immediate: true }
@@ -546,7 +599,7 @@ onBeforeUnmount(() => {
   audio?.close?.()
 })
 
-defineExpose({ receive, load, clear, current })
+defineExpose({ receive, search, load, clear, current })
 </script>
 
 <style scoped>

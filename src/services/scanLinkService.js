@@ -63,7 +63,7 @@ export function sendScan(linkId, phone, { orderId, ticketCode = '', studentId = 
 export function setScanLinkNeed(linkId, need) {
   return updateDoc(linkRef(linkId), {
     need: need
-      ? { orderId: need.orderId, name: shortName(need.name), qr: !!need.qr, card: !!need.card, at: serverTimestamp() }
+      ? { orderId: need.orderId, name: shortName(need.name), qr: !!need.qr, card: !!need.card, ...(['qr', 'card'].includes(need.done) ? { done: need.done } : {}), at: serverTimestamp() }
       : null
   })
 }

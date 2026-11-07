@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { cleanStudentId, orderSummary, studentAccountEmail } from '../../lib/studentCards.js'
+import { cleanEmail, cleanName, cleanStudentId, orderSummary, studentAccountEmail } from '../../lib/studentCards.js'
 
 test('student IDs are 6–8 digits; spaces and full-width digits are tidied', () => {
   assert.equal(cleanStudentId('1130524'), '1130524')
@@ -24,7 +24,19 @@ test('order summaries carry only what staff need to pick the order', () => {
     items: [{ name: '一階票', quantity: 2, price: 900 }], createdAt
   })
   assert.deepEqual(summary, {
-    id: 'CKS20261101ABCDEF', customerName: '王小明', delivered: true, paid: false,
+    id: 'CKS20261101ABCDEF', customerName: '王小明', school: '', delivered: true, paid: false,
     items: [{ name: '一階票', quantity: 2 }], createdAt: '2026-11-01T02:03:04.000Z'
   })
+})
+
+test('names are trimmed and must be short', () => {
+  assert.equal(cleanName('  王小明 '), '王小明')
+  assert.equal(cleanName('Amy   Chen'), 'Amy Chen')
+  assert.equal(cleanName('王小明'.padEnd(51, '明')), '')
+  for (const bad of ['', '   ', null, 12, ['王小明']]) assert.equal(cleanName(bad), '', String(bad))
+})
+
+test('emails are trimmed and must look like one', () => {
+  assert.equal(cleanEmail(' Lee@Example.com '), 'Lee@Example.com')
+  for (const bad of ['lee', 'lee@', 'a b@c.d', '', null, `${'a'.repeat(250)}@x.tw`]) assert.equal(cleanEmail(bad), '', String(bad))
 })

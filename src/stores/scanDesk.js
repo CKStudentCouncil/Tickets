@@ -77,7 +77,7 @@ export const useScanDeskStore = defineStore('scanDesk', () => {
   // The station says what it still needs (null: nothing, or it closed)
   function setNeed(value) {
     const next = value && (value.qr || value.card)
-      ? { orderId: value.orderId, name: value.name || '', qr: !!value.qr, card: !!value.card }
+      ? { orderId: value.orderId, name: value.name || '', qr: !!value.qr, card: !!value.card, done: ['qr', 'card'].includes(value.done) ? value.done : '' }
       : null
     if (JSON.stringify(next) === JSON.stringify(need.value)) return
     need.value = next

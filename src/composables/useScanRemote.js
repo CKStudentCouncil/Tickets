@@ -33,7 +33,7 @@ function currentNeed(value) {
   if (!value?.orderId || (!value.qr && !value.card)) return null
   const at = value.at?.toDate?.()
   if (at && Date.now() - at.getTime() > NEED_MAX_AGE_MS) return null
-  return { orderId: value.orderId, name: value.name || '', qr: value.qr === true, card: value.card === true }
+  return { orderId: value.orderId, name: value.name || '', qr: value.qr === true, card: value.card === true, done: ['qr', 'card'].includes(value.done) ? value.done : '' }
 }
 
 // The link is gone or no longer takes scans (the rules deny the write)
