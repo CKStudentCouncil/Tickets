@@ -3,17 +3,58 @@
 import { acquireCamera, releaseCamera } from './camera.js'
 
 const SCAN_INTERVAL_MS = 150
-// jsQR reads the centre square the viewfinder shows, downscaled to at most
-// this size: enough pixels for a QR held 20-30 cm away (phone cameras can't
-// focus closer), small enough to decode quickly on older phones
+// The centre square the viewfinder shows is read, downscaled to at most this
+// size: enough pixels for a QR held 20-30 cm away (phone cameras can't focus
+// closer), small enough to decode quickly on older phones
 const MAX_FRAME_SIZE = 800
 
+// ZXing (WebAssembly, served with the site): as sure as jsQR on blurred,
+// tilted, dim and inverted codes and about five times faster (17 ms against
+// 94 ms a frame on a slow phone), and it looks for light-on-dark codes (an
+// email app in dark mode) in the same pass. jsQR stays as the fallback when
+// it can't load.
+async function loadZxing() {
+  const [{ readBarcodes, prepareZXingModule }, { default: wasmUrl }] = await Promise.all([
+    import('zxing-wasm/reader'),
+    import('zxing-wasm/reader/zxing_reader.wasm?url')
+  ])
+  await prepareZXingModule({ overrides: { locateFile: (path) => (path.endsWith('.wasm') ? wasmUrl : path) }, fireImmediately: true })
+  const options = { formats: ['QRCode'], tryInvert: true, maxNumberOfSymbols: 1 }
+  return async (image) => (await readBarcodes(image, options))[0]?.text || ''
+}
+
+async function loadJsQr() {
+  const { default: jsQR } = await import('jsqr')
+  let invert = false
+  return async ({ data, width, height }) => {
+    // every other frame looks for light-on-dark codes. Inverted here: jsQR
+    // 1.4's own 'onlyInvert' option throws
+    invert = !invert
+    if (invert) {
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 255 - data[i]
+        data[i + 1] = 255 - data[i + 1]
+        data[i + 2] = 255 - data[i + 2]
+      }
+    }
+    return jsQR(data, width, height, { inversionAttempts: 'dontInvert' })?.data || ''
+  }
+}
+
 // Each frame: the centre square the viewfinder shows is drawn to a canvas
-// and read by the browser's BarcodeDetector (when it has one) and by jsQR.
-// jsQR always runs, so a BarcodeDetector that exists but finds nothing in
+// and read by the browser's BarcodeDetector (when it has one) and by ZXing.
+// ZXing always runs, so a BarcodeDetector that exists but finds nothing in
 // camera frames (seen on iOS) can't stop scanning.
 export async function createDecoder() {
-  const { default: jsQR } = await import('jsqr')
+  let read = null
+  let engine = 'ZXing'
+  try {
+    read = await loadZxing()
+  } catch (error) {
+    console.warn('ZXing failed to load, using jsQR', error)
+    read = await loadJsQr()
+    engine = 'jsQR'
+  }
 
   let detector = null
   if (typeof window.BarcodeDetector === 'function') {
@@ -27,7 +68,6 @@ export async function createDecoder() {
 
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  let invert = false
 
   const decode = async (video) => {
     const side = Math.min(video.videoWidth, video.videoHeight)
@@ -44,27 +84,15 @@ export async function createDecoder() {
         const [code] = await detector.detect(canvas)
         if (code?.rawValue) return code.rawValue
       } catch (error) {
-        console.warn('BarcodeDetector failed, using jsQR only', error)
+        console.warn(`BarcodeDetector failed, using ${engine} only`, error)
         detector = null
       }
     }
 
-    const { data } = context.getImageData(0, 0, size, size)
-    // every other frame looks for light-on-dark codes (e.g. an email app in
-    // dark mode inverting the image) without doubling the work per frame.
-    // Inverted here: jsQR 1.4's own 'onlyInvert' option throws.
-    invert = !invert
-    if (invert) {
-      for (let i = 0; i < data.length; i += 4) {
-        data[i] = 255 - data[i]
-        data[i + 1] = 255 - data[i + 1]
-        data[i + 2] = 255 - data[i + 2]
-      }
-    }
-    return jsQR(data, size, size, { inversionAttempts: 'dontInvert' })?.data || ''
+    return read(context.getImageData(0, 0, size, size))
   }
 
-  return { decode, name: () => (detector ? 'BarcodeDetector + jsQR' : 'jsQR') }
+  return { decode, name: () => (detector ? `BarcodeDetector + ${engine}` : engine) }
 }
 
 export function cameraErrorMessage(error) {

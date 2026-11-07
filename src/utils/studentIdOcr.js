@@ -12,10 +12,18 @@
 //    fitted as lines and intersected, which puts back the hidden corners.
 // 2. Warp the card flat, drop coloured pixels (logos, frames, skin), and
 //    binarise against the local mean so shadows and backgrounds go white.
-// 3. Tesseract.js (sparse text) reads both upright and upside down; the ID is
-//    the largest confident number of the expected length. Unsure reads are
-//    repeated with other thresholds and the readings vote.
-// 4. No card found: the whole picture, deskewed, in four orientations.
+// 3. When the card's layout is known (`idCorner`: 建中 cards have the number
+//    in small print at the bottom right), only that corner is read: the row
+//    of digit-sized marks in it is picked out and read alone, from the
+//    black-and-white corner and from the picture itself. A few tens of
+//    milliseconds instead of reading the whole card.
+// 4. Otherwise, or when that finds nothing: Tesseract.js (sparse text) reads
+//    the whole card upright and upside down; the ID is the largest confident
+//    number of the expected length. Unsure reads are repeated with other
+//    thresholds and the readings vote.
+// 5. No card found: rows of digit-sized marks anywhere in the picture, at any
+//    angle (`findLines`); for a photo also the whole picture, deskewed, in
+//    four orientations.
 
 const OPENCV_URL = 'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js'
 
@@ -26,6 +34,13 @@ const DEFAULTS = {
   idLength: [6, 8],
   // only numbers like this count (e.g. /^11[0-9]00[0-9]{3}$/); null: any
   idPattern: null,
+  // (digits) => the ID they stand for, or '': puts back a fixed part that is
+  // often misread (the 11 of 11x00xxx read as 41 or 1)
+  repairId: null,
+  // [x0, y0, x1, y1] of the upright card (0–1) where the number is printed
+  idCorner: null,
+  // no card, or nothing in its corner: look for rows of digits anywhere
+  findLines: false,
   maxWorkers: 0, // 0: by CPU cores, 2–4
   workMax: 1800, // longest side of the picture searched for the card
   hiResMax: 3000, // longest side the card is cut from
@@ -80,8 +95,8 @@ function decolor(canvas) {
 
 // Black where a pixel is `offset` darker than the mean around it (box of
 // side 2r + 1, summed with an integral image)
-function threshold(values, width, height, offset) {
-  const r = Math.max(8, Math.round(Math.max(width, height) / 40))
+function threshold(values, width, height, offset, radius = 0) {
+  const r = radius || Math.max(8, Math.round(Math.max(width, height) / 40))
   const stride = width + 1
   const sums = new Float64Array(stride * (height + 1))
   for (let y = 0; y < height; y++) {
@@ -376,7 +391,7 @@ export function quadsFromOutline(outline, { minSide }) {
 
 // ---------- reading the number ----------
 
-function pickNumbers(data, [minLength, maxLength], pattern = null) {
+function pickNumbers(data, [minLength, maxLength], pattern = null, repair = null) {
   const found = []
   const add = (text, confidence, bbox) => {
     if (text.length < minLength || text.length > maxLength) return
@@ -385,7 +400,10 @@ function pickNumbers(data, [minLength, maxLength], pattern = null) {
   }
   for (const word of data.words || []) {
     const text = word.text.replace(/^[^0-9]+|[^0-9]+$/g, '')
-    if (/^\d+$/.test(text)) add(text, word.confidence, word.bbox)
+    if (!/^\d+$/.test(text)) continue
+    add(text, word.confidence, word.bbox)
+    const fixed = repair?.(text)
+    if (fixed && fixed !== text) add(fixed, word.confidence - 10, word.bbox)
   }
   // a number split into two words ("1234 567")
   for (const line of data.lines || []) {
@@ -413,6 +431,247 @@ function pickNumbers(data, [minLength, maxLength], pattern = null) {
   found.sort((a, b) => b.score - a.score)
   const seen = new Set()
   return found.filter((c) => !seen.has(c.text) && seen.add(c.text))
+}
+
+// ---------- rows of digits ----------
+
+// Long straight black runs (a frame, the photo's edge, the card's edge) turn
+// white, so digits touching them come apart
+export function wipeLongRuns(bits, width, height, longest) {
+  const wipe = new Uint8Array(width * height)
+  const runs = (count, length, at) => {
+    for (let a = 0; a < count; a++) {
+      let start = -1
+      for (let b = 0; b <= length; b++) {
+        const black = b < length && bits[at(a, b)] === 0
+        if (black && start < 0) start = b
+        if (!black && start >= 0) {
+          if (b - start > longest) for (let k = start; k < b; k++) wipe[at(a, k)] = 1
+          start = -1
+        }
+      }
+    }
+  }
+  runs(height, width, (y, x) => y * width + x)
+  runs(width, height, (x, y) => y * width + x)
+  for (let i = 0; i < bits.length; i++) if (wipe[i]) bits[i] = 255
+  return bits
+}
+
+// Connected black areas: { x0, y0, x1, y1, w, h, area, cx, cy, pixels? }.
+// Areas wider or taller than `maxSide` are dropped (and not kept whole)
+function components(bits, width, height, { maxSide = Infinity, keepPixels = false } = {}) {
+  const label = new Uint8Array(width * height)
+  const found = []
+  const stack = []
+  for (let start = 0; start < bits.length; start++) {
+    if (bits[start] !== 0 || label[start]) continue
+    let x0 = width, y0 = height, x1 = 0, y1 = 0, area = 0, sx = 0, sy = 0
+    const pixels = keepPixels ? [] : null
+    label[start] = 1
+    stack.push(start)
+    while (stack.length) {
+      const i = stack.pop()
+      const x = i % width
+      const y = (i - x) / width
+      area++
+      sx += x
+      sy += y
+      if (pixels) pixels.push(i)
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+      for (const next of [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, y > 0 ? i - width : -1, y < height - 1 ? i + width : -1]) {
+        if (next >= 0 && bits[next] === 0 && !label[next]) {
+          label[next] = 1
+          stack.push(next)
+        }
+      }
+    }
+    const w = x1 - x0 + 1
+    const h = y1 - y0 + 1
+    if (w > maxSide || h > maxSide) continue
+    found.push({ x0, y0, x1, y1, w, h, area, cx: sx / area, cy: sy / area, pixels })
+  }
+  return found
+}
+
+// The rows of digit-sized marks in a level black-and-white canvas (the
+// corner of a flattened card), longest first: each a canvas holding only that
+// row's marks on white, with `box` (where it was)
+export function findDigitRows(canvas, { minCount = 6, max = 2, unline = 0.25 } = {}) {
+  const { width, height } = canvas
+  const bits = canvasBits(canvas)
+  if (unline) wipeLongRuns(bits, width, height, Math.round(height * unline))
+  // digit-shaped: not specks, taller than a digit is wide unless digits
+  // touch (then one wide mark), not a frame
+  const marks = components(bits, width, height, { maxSide: height * 0.6 * 4.5, keepPixels: true }).filter(
+    (c) => c.h >= Math.max(8, height * 0.04) && c.h <= height * 0.6 && c.w <= c.h * 4.5 && c.w >= c.h * 0.12 && c.area >= c.w * c.h * 0.12
+  )
+  marks.forEach((c, i) => (c.id = i))
+  const rows = []
+  for (const seed of marks) {
+    const middle = (seed.y0 + seed.y1) / 2
+    const row = marks
+      .filter((c) => Math.abs((c.y0 + c.y1) / 2 - middle) < seed.h * 0.35 && c.h > seed.h * 0.7 && c.h < seed.h * 1.4)
+      .sort((a, b) => a.x0 - b.x0)
+    // the longest run with small gaps
+    let run = [row[0]]
+    let best = run
+    const span = (list) => list.reduce((sum, c) => sum + c.w, 0)
+    for (let k = 1; k < row.length; k++) {
+      if (row[k].x0 - run[run.length - 1].x1 < seed.h * 0.9) run.push(row[k])
+      else run = [row[k]]
+      if (span(run) > span(best)) best = run
+    }
+    // touching digits come as one wide mark: counted by width
+    const digits = best.reduce((sum, c) => sum + Math.max(1, Math.round(c.w / (seed.h * 0.6))), 0)
+    if (digits >= minCount) rows.push({ marks: best, digits })
+  }
+  // rows that share no mark, the most digits first
+  const used = new Set()
+  const picked = []
+  for (const row of rows.sort((a, b) => b.digits - a.digits)) {
+    if (picked.length >= max) break
+    if (row.marks.some((c) => used.has(c.id))) continue
+    row.marks.forEach((c) => used.add(c.id))
+    picked.push(row)
+  }
+  return picked.map((row) => drawRow(row.marks, width))
+}
+
+function drawRow(marks, sourceWidth) {
+  const x0 = Math.min(...marks.map((c) => c.x0))
+  const x1 = Math.max(...marks.map((c) => c.x1))
+  const y0 = Math.min(...marks.map((c) => c.y0))
+  const y1 = Math.max(...marks.map((c) => c.y1))
+  const h = y1 - y0 + 1
+  const pad = Math.round(h * 0.6)
+  const out = document.createElement('canvas')
+  out.width = x1 - x0 + 1 + pad * 2
+  out.height = h + pad * 2
+  const context = out.getContext('2d', { willReadFrequently: true })
+  const image = context.createImageData(out.width, out.height)
+  image.data.fill(255)
+  for (const c of marks) {
+    for (const i of c.pixels) {
+      const x = (i % sourceWidth) - x0 + pad
+      const y = Math.floor(i / sourceWidth) - y0 + pad
+      const p = (y * out.width + x) * 4
+      image.data[p] = image.data[p + 1] = image.data[p + 2] = 0
+    }
+  }
+  context.putImageData(image, 0, 0)
+  out.box = { x0, y0, x1, y1, h }
+  return out
+}
+
+// Grey with coloured pixels white, in place (Tesseract binarises a tight
+// crop well on its own)
+function greyInPlace(canvas) {
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  const image = context.getImageData(0, 0, canvas.width, canvas.height)
+  const d = image.data
+  for (let p = 0; p < d.length; p += 4) {
+    const max = Math.max(d[p], d[p + 1], d[p + 2])
+    const spread = max - Math.min(d[p], d[p + 1], d[p + 2])
+    d[p] = d[p + 1] = d[p + 2] = max > 90 && spread > 35 && spread > max * 0.25 ? 255 : max
+  }
+  context.putImageData(image, 0, 0)
+  return canvas
+}
+
+// A row's box cut from the picture itself, twice as large
+function greyRow(source, box, scale = 2) {
+  const sx = Math.max(0, box.x0 - box.h * 0.5)
+  const sy = Math.max(0, box.y0 - box.h * 0.3)
+  const sw = Math.min(source.width - sx, box.x1 - box.x0 + 1 + box.h)
+  const sh = Math.min(source.height - sy, box.y1 - box.y0 + 1 + box.h * 0.7)
+  const out = document.createElement('canvas')
+  out.width = Math.max(1, Math.round(sw * scale))
+  out.height = Math.max(1, Math.round(sh * scale))
+  const context = out.getContext('2d', { willReadFrequently: true })
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(source, sx, sy, sw, sh, 0, 0, out.width, out.height)
+  return greyInPlace(out)
+}
+
+// Lines of digit-sized marks anywhere in a black-and-white picture, at any
+// angle: { cx, cy, angle, length, h, digits, count }, the most like an
+// 8-digit number first
+export function findTextLines(bits, width, height, { minH = 7, maxH = 80, minDigits = 6, maxDigits = 11, digits: want = 8 } = {}) {
+  const marks = components(bits, width, height, { maxSide: maxH * 4 })
+    .map((c) => ({ ...c, size: Math.max(c.w, c.h) }))
+    .filter((c) => c.size >= minH && c.size <= maxH && c.area >= c.size * c.size * 0.06 && c.area <= c.size * c.size * 0.75)
+  // neighbours of a like size join one group
+  const parent = marks.map((_, i) => i)
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])))
+  const order = marks.map((_, i) => i).sort((a, b) => marks[a].cx - marks[b].cx)
+  for (let a = 0; a < order.length; a++) {
+    const m = marks[order[a]]
+    for (let b = a + 1; b < order.length; b++) {
+      const n = marks[order[b]]
+      if (n.cx - m.cx > m.size * 1.6) break
+      if (Math.abs(n.cy - m.cy) > m.size * 1.6) continue
+      if (n.size > m.size * 1.5 || n.size < m.size / 1.5) continue
+      if (Math.hypot(n.cx - m.cx, n.cy - m.cy) > Math.max(m.size, n.size) * 1.3) continue
+      parent[find(order[a])] = find(order[b])
+    }
+  }
+  const groups = new Map()
+  marks.forEach((m, i) => {
+    const root = find(i)
+    if (!groups.has(root)) groups.set(root, [])
+    groups.get(root).push(m)
+  })
+  const lines = []
+  for (const group of groups.values()) {
+    if (group.length < 3) continue
+    // straight: the centres along their principal axis
+    const mx = group.reduce((s, m) => s + m.cx, 0) / group.length
+    const my = group.reduce((s, m) => s + m.cy, 0) / group.length
+    let xx = 0, xy = 0, yy = 0
+    for (const m of group) {
+      xx += (m.cx - mx) ** 2
+      xy += (m.cx - mx) * (m.cy - my)
+      yy += (m.cy - my) ** 2
+    }
+    const angle = 0.5 * Math.atan2(2 * xy, xx - yy)
+    const ux = Math.cos(angle)
+    const uy = Math.sin(angle)
+    let lo = Infinity, hi = -Infinity, off = 0
+    for (const m of group) {
+      const t = (m.cx - mx) * ux + (m.cy - my) * uy
+      lo = Math.min(lo, t)
+      hi = Math.max(hi, t)
+      off = Math.max(off, Math.abs((m.cy - my) * ux - (m.cx - mx) * uy))
+    }
+    const h = group.map((m) => m.size).sort((a, b) => a - b)[group.length >> 1]
+    if (off > h * 0.6) continue
+    const length = hi - lo + h * 0.7
+    const digits = Math.round(length / (h * 0.62))
+    if (digits < minDigits || digits > maxDigits) continue
+    lines.push({ cx: mx + (ux * (lo + hi)) / 2, cy: my + (uy * (lo + hi)) / 2, angle, length, h, digits, count: group.length })
+  }
+  return lines.sort((a, b) => Math.abs(a.digits - want) - Math.abs(b.digits - want) || b.count - a.count)
+}
+
+// A line cut out of the picture and turned level (`flip`: upside down too)
+function cutLine(source, line, { scale = 1, flip = false } = {}) {
+  const out = document.createElement('canvas')
+  out.width = Math.round((line.length + line.h * 1.2) * scale)
+  out.height = Math.round(line.h * 2 * scale)
+  const context = out.getContext('2d', { willReadFrequently: true })
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, out.width, out.height)
+  context.imageSmoothingQuality = 'high'
+  context.translate(out.width / 2, out.height / 2)
+  context.scale(scale, scale)
+  context.rotate(-line.angle + (flip ? Math.PI : 0))
+  context.translate(-line.cx, -line.cy)
+  context.drawImage(source, 0, 0)
+  return greyInPlace(out)
 }
 
 export function createStudentIdReader(userOptions = {}) {
@@ -697,11 +956,11 @@ export function createStudentIdReader(userOptions = {}) {
     mark('card')
     const scheduler = await schedulerReady
 
-    const binarise = (canvas) => {
+    const binarise = (canvas, radius = 0) => {
       const values = decolor(canvas)
       const cache = new Map()
       return (offset) => {
-        if (!cache.has(offset)) cache.set(offset, binaryCanvas(threshold(values, canvas.width, canvas.height, offset), canvas.width, canvas.height))
+        if (!cache.has(offset)) cache.set(offset, binaryCanvas(threshold(values, canvas.width, canvas.height, offset, radius), canvas.width, canvas.height))
         return cache.get(offset)
       }
     }
@@ -714,7 +973,7 @@ export function createStudentIdReader(userOptions = {}) {
       const view = skew ? rotate(turned, -skew) : turned
       return scheduler.addJob('recognize', view).then(({ data }) => {
         mark(`ocr ${mode} ${turn}° C${offset}`)
-        return pickNumbers(data, idLength, options.idPattern).map((c) => Object.assign(c, { view, turn, skew, mode, offset }))
+        return pickNumbers(data, idLength, options.idPattern, options.repairId).map((c) => Object.assign(c, { view, turn, skew, mode, offset }))
       })
     }
     const readAll = async (jobs) => (await Promise.all(jobs.map((job) => read(...job)))).flat()
@@ -753,10 +1012,71 @@ export function createStudentIdReader(userOptions = {}) {
       return pool
     }
 
+    // the corner where the number is printed, upright and (the card upside
+    // down) the opposite corner turned
+    let rowsSeen = 0
+    const readCorner = async () => {
+      const W = card.width
+      const H = card.height
+      const [x0, y0, x1, y1] = options.idCorner
+      const cut = (cx0, cy0, cx1, cy1, turned) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round((cx1 - cx0) * W)
+        canvas.height = Math.round((cy1 - cy0) * H)
+        const context = canvas.getContext('2d', { willReadFrequently: true })
+        if (turned) {
+          context.translate(canvas.width, canvas.height)
+          context.rotate(Math.PI)
+        }
+        context.drawImage(card, cx0 * W, cy0 * H, (cx1 - cx0) * W, (cy1 - cy0) * H, 0, 0, canvas.width, canvas.height)
+        return canvas
+      }
+      // the local mean over the same area as for the whole card
+      const radius = Math.max(8, Math.round(Math.max(W, H) / 40))
+      const jobs = []
+      for (const corner of [cut(x0, y0, x1, y1, false), cut(1 - x1, 1 - y1, 1 - x0, 1 - y0, true)]) {
+        const bits = binarise(corner, radius)(12)
+        for (const row of findDigitRows(bits)) {
+          rowsSeen++
+          const grey = greyRow(corner, row.box)
+          jobs.push([() => row, 12, 0, 'row'], [() => grey, 12, 0, 'row grey'])
+        }
+      }
+      mark('rows')
+      return readAll(jobs)
+    }
+
+    // rows of digits anywhere, at any angle (no card, or a card fit wrong)
+    const readLines = async () => {
+      const frame = toCanvas(image, 1280, 1)
+      const bits = threshold(decolor(frame), frame.width, frame.height, 25, Math.round(1280 / 60))
+      const lines = findTextLines(bits, frame.width, frame.height).slice(0, 8)
+      if (!lines.length) return []
+      const hi = toCanvas(image, options.hiResMax, 1)
+      const k = hi.width / frame.width
+      const jobs = []
+      for (const line of lines) {
+        const big = { ...line, cx: line.cx * k, cy: line.cy * k, length: line.length * k, h: line.h * k }
+        const scale = Math.min(3, Math.max(1, 40 / big.h))
+        for (const flip of [false, true]) {
+          const view = cutLine(hi, big, { scale, flip })
+          jobs.push([() => view, 0, 0, 'line'])
+        }
+      }
+      mark('lines')
+      return readAll(jobs)
+    }
+
     let pool = []
-    if (card) pool = await search(card, [0, 180], 'card')
-    if (!pool.some((c) => c.confidence >= 40) && (!quick || !card)) {
-      pool = pool.concat(await search(work, [0, 180, 90, 270], 'full'))
+    if (card && options.idCorner) pool = await readCorner()
+    if (!pool.length && options.findLines) pool = await readLines()
+    // the whole card (a photo, or no corner known); the next camera frame
+    // tries again instead
+    if (!pool.length && (!quick || !options.idCorner)) {
+      if (card) pool = await search(card, [0, 180], 'card')
+      if (!pool.some((c) => c.confidence >= 40) && (!quick || !card)) {
+        pool = pool.concat(await search(work, [0, 180, 90, 270], 'full'))
+      }
     }
 
     // the same number read more often and more confidently ranks first
@@ -781,6 +1101,8 @@ export function createStudentIdReader(userOptions = {}) {
       votes: best ? best.votes : 0,
       lowConfidence: best ? best.confidence < 75 && best.votes < 2 : true,
       cardFound: !!card,
+      // a row of digits in the card's corner: a student card, not a phone
+      numberSeen: rowsSeen > 0,
       cardFit: found?.kind || null, // corners | rect | lines (sides fitted past fingers)
       quad: found?.quad || null, // corners in `debug.work` coordinates
       candidates: ranked.map((c) => ({ text: c.text, confidence: Math.round(c.confidence), votes: c.votes })),

@@ -123,7 +123,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { findStudentOrders } from 'src/services/orderService'
-import { CARD_ID_PATTERN, cleanStudentId } from 'src/data/schools'
+import { CARD_ID_CORNER, CARD_ID_PATTERN, cleanStudentId, repairCardId } from 'src/data/schools'
 import { acquireCamera, releaseCamera } from 'src/utils/camera'
 import { cameraErrorMessage, createDecoder, listCameras } from 'src/utils/qrScanner'
 import { createStudentIdReader } from 'src/utils/studentIdOcr'
@@ -297,7 +297,13 @@ function snapshot() {
 }
 
 function getReader() {
-  reader ||= createStudentIdReader({ idLength: [8, 8], idPattern: CARD_ID_PATTERN })
+  reader ||= createStudentIdReader({
+    idLength: [8, 8],
+    idPattern: CARD_ID_PATTERN,
+    repairId: repairCardId,
+    idCorner: CARD_ID_CORNER,
+    findLines: true
+  })
   return reader
 }
 
@@ -312,7 +318,9 @@ async function loop(run) {
       if (frame) {
         const read = await reader.recognize(frame, { quick: true })
         if (run !== sequence || unmounted) return
-        cardSeen.value = read.cardFound
+        // a phone held up with its QR code is card-shaped too: only a card
+        // with a row of digits in its corner slows the QR checks
+        cardSeen.value = read.cardFound && read.numberSeen
         if (read.id) {
           const expected = expectedRead(read)
           const again = readBefore(read)
@@ -333,7 +341,7 @@ async function loop(run) {
           hint.value = `讀到 ${read.id}，確認中…`
           continue
         }
-        hint.value = read.cardFound ? '找到學生證，讀取學號中…' : idleHint()
+        hint.value = cardSeen.value ? '找到學生證，讀取學號中…' : idleHint()
       }
       await new Promise((resolve) => setTimeout(resolve, FRAME_GAP_MS))
     }

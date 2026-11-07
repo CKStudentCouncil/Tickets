@@ -33,6 +33,21 @@ export const STUDENT_ID_PATTERN = /^[0-9]{6,8}$/
 // takes numbers like this; other numbers on the card are left out
 export const CARD_ID_PATTERN = /^11[0-9]00[0-9]{3}$/
 
+// where a 建中 card prints the 學號: small, at the bottom right under the
+// photo, as [x0, y0, x1, y1] of the upright card (with room for a card
+// found a little off)
+export const CARD_ID_CORNER = [0.55, 0.72, 1, 1]
+
+// The 學號 a card read stands for: the leading 11 of 11x00xxx is often read
+// as 41, 71 or a single 1, so digits ending in x00xxx are taken as
+// 11x00xxx. '' when they can't be one
+export function repairCardId(digits) {
+  const text = String(digits ?? '')
+  if (CARD_ID_PATTERN.test(text)) return text
+  if (!/^\d{7,9}$/.test(text) || !/\d00\d{3}$/.test(text)) return ''
+  return `11${text.slice(-6)}`
+}
+
 // The 學號 typed or read off a card, or '' when it is not one
 export function cleanStudentId(value) {
   const id = String(value ?? '').normalize('NFKC').replace(/\s+/g, '')
