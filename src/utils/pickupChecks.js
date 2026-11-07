@@ -63,13 +63,13 @@ export function pickupChecks(order, { ticketTypes = [], scans = {}, exceptions =
   // who collects
   if (needsCard) {
     const id = { key: 'id', title: '建中學生證' }
-    if (cardOk) Object.assign(id, { state: 'done', text: `學號 ${studentId} 相符`, hint: '看照片是不是本人、背面有沒有本學期註冊章' })
+    if (cardOk) Object.assign(id, { state: 'done', text: `學號 ${studentId} 相符` })
     else if (idException) Object.assign(id, { state: 'excepted', text: `沒帶學生證：已用${methodShort(idException.method)}查驗${idException.note ? `（${idException.note}）` : ''}` })
     else Object.assign(id, { state: 'wait', text: '等待掃描建中學生證…', action: { kind: 'id', label: '沒帶學生證？', allowed: true } })
     rows.push(id)
   } else if (lookAtId) {
     const id = { key: 'id', title: '學生證' }
-    if (cardOk) Object.assign(id, { state: 'done', text: `學號 ${studentId} 相符`, hint: '看照片是不是本人' })
+    if (cardOk) Object.assign(id, { state: 'done', text: `學號 ${studentId} 相符` })
     else {
       Object.assign(id, {
         state: 'look',

@@ -65,16 +65,22 @@
 
     <p v-if="error" class="panel-error" role="alert">{{ error }}</p>
 
-    <button
-      v-if="isAdmin && !order.delivered && skipped.length && !checks.unpaid"
-      type="button"
-      class="force-button"
-      :disabled="busy"
-      @click="openAction('force')"
-    >
-      <ShieldAlert :size="16" aria-hidden="true" />
-      管理員強制領票…
-    </button>
+    <div v-if="canForce || detailLink" class="panel-links">
+      <button
+        v-if="canForce"
+        type="button"
+        class="force-button"
+        :disabled="busy"
+        @click="openAction('force')"
+      >
+        <ShieldAlert :size="16" aria-hidden="true" />
+        管理員強制領票…
+      </button>
+      <router-link v-if="detailLink" class="detail-link" :to="{ name: 'admin-order-detail', params: { id: order.id } }">
+        查看訂單詳情
+        <ChevronRight :size="16" aria-hidden="true" />
+      </router-link>
+    </div>
 
     <!-- 沒帶 QR Code (admins) -->
     <q-dialog v-model="dialogs.qr" aria-labelledby="no-qr-title">
@@ -148,7 +154,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { Check, Eye, ScanLine, ShieldAlert, TriangleAlert, X } from 'lucide-vue-next'
+import { Check, ChevronRight, Eye, ScanLine, ShieldAlert, TriangleAlert, X } from 'lucide-vue-next'
 import { ID_CHECK_METHODS, ID_NOTE_MAX } from 'src/data/pickup'
 import { getBuyerTypeLabel } from 'src/utils/buyerIdentity'
 import { unfinishedRows } from 'src/utils/pickupChecks'
@@ -166,6 +172,8 @@ const props = defineProps({
   error: { type: String, default: '' },
   // ✕ goes back to waiting for the next buyer (the station)
   clearable: { type: Boolean, default: false },
+  // a link to the order's own page (not on that page itself)
+  detailLink: { type: Boolean, default: false },
   // a computer: Enter collects
   keyboard: { type: Boolean, default: false }
 })
@@ -184,6 +192,7 @@ const forceReason = ref('')
 const buyerType = computed(() => getBuyerTypeLabel(props.order))
 const itemsText = computed(() => (props.order.items || []).map((item) => `${item.name} × ${item.quantity}`).join('、'))
 const skipped = computed(() => unfinishedRows(props.checks))
+const canForce = computed(() => props.isAdmin && !props.order.delivered && skipped.value.length > 0 && !props.checks.unpaid)
 const idReady = computed(() => !!idMethod.value && (idMethod.value !== 'other' || !!idNote.value))
 
 const deliveredBy = computed(() => {
@@ -492,6 +501,28 @@ defineExpose({ dialogOpen: () => dialogs.qr || dialogs.id || dialogs.force })
   color: var(--bad);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.panel-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  margin-left: auto;
+  color: var(--lunar);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.detail-link:hover {
+  color: var(--off-white);
 }
 
 .force-button {
