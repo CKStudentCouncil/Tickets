@@ -180,6 +180,20 @@ const idleTitle = computed(() => (props.camera ? '掃 QR Code 或學生證開始
 const idleText = computed(() => props.idleHint || '先掃哪一個都可以，相機會一直開著，等你掃下一樣')
 
 let loadSequence = 0
+// the order load in progress: a card or a search waits for it, so neither
+// cancels it and leaves 載入訂單中… on screen
+let loadingNow = null
+const LOAD_TIMEOUT_MS = 15000
+async function afterLoad() {
+  while (loadingNow) await loadingNow
+}
+function timeout(promise, ms) {
+  let timer
+  const late = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error('timed out'), { code: 'deadline-exceeded' })), ms)
+  })
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer))
+}
 let noticeTimer = 0
 let doneTimer = 0
 let flashTimer = 0
@@ -267,6 +281,7 @@ async function handleCard(value, hintOrderId = '') {
   if (panel.value?.dialogOpen?.()) return
   const studentId = cleanStudentId(value)
   if (!studentId || !isNew(`card:${studentId}`)) return
+  await afterLoad()
   const shown = current.value
   if (shown && !shown.order.delivered && cardMatches(shown.order, studentId)) {
     addScans({ studentId })
@@ -322,6 +337,7 @@ function lookupError(error) {
 // one order's scan: ticks it when shown, else opens it (asking first when
 // the one shown is half done)
 async function route(orderId, scans, why = '') {
+  await afterLoad()
   const shown = current.value
   if (shown?.order.id === orderId) {
     addScans(scans)
@@ -384,7 +400,15 @@ function addScans(scans) {
   feedback(qrBad ? 'bad' : 'ok')
 }
 
-async function load(orderId, scans = {}, known = null) {
+function load(orderId, scans = {}, known = null) {
+  const run = loadOrder(orderId, scans, known).finally(() => {
+    if (loadingNow === run) loadingNow = null
+  })
+  loadingNow = run
+  return run
+}
+
+async function loadOrder(orderId, scans, known) {
   const sequence = ++loadSequence
   clearTimeout(doneTimer)
   done.value = null
@@ -393,10 +417,10 @@ async function load(orderId, scans = {}, known = null) {
   panelError.value = ''
   loading.value = true
   try {
-    const order = known || await fetchOrder(orderId)
+    const order = known || await timeout(fetchOrder(orderId), LOAD_TIMEOUT_MS)
     if (sequence !== loadSequence) return
     if (!order) {
-      const cancelled = await fetchCancelledOrder(orderId).catch(() => null)
+      const cancelled = await timeout(fetchCancelledOrder(orderId), LOAD_TIMEOUT_MS).catch(() => null)
       if (sequence !== loadSequence) return
       current.value = null
       feedback('bad')
@@ -509,6 +533,7 @@ async function search(text) {
     return ''
   }
   const label = searchLabel(query)
+  await afterLoad()
   const sequence = ++loadSequence
   say(`查詢 ${label} 的訂單…`, 'info', 0)
   let found
