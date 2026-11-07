@@ -1,17 +1,16 @@
 <template>
   <div class="card-scanner">
     <div class="scanner-card">
-      <div class="scanner-card-head">
-        <span>{{ title || (card && qr ? '自動辨識 QR Code／學生證' : card ? '學生證掃描' : '票券 QR Code 掃描') }}</span>
-        <span v-if="card" class="scanner-status" :class="{ busy: engine !== 'ready' }"><i />{{ engineLabel }}</span>
-      </div>
-
       <p v-if="prompt && !compact" class="scanner-prompt" role="status">{{ prompt }}</p>
 
       <div class="viewfinder">
         <video ref="video" muted playsinline autoplay aria-label="相機畫面" />
         <div v-if="phase === 'scanning'" :class="card ? 'card-frame' : 'qr-frame'" :data-seen="cardSeen || null" aria-hidden="true" />
         <p v-if="phase === 'scanning'" class="live-hint" role="status" aria-live="polite">{{ hint }}</p>
+        <!-- QR codes are read meanwhile: the picture shows through -->
+        <div v-if="phase === 'scanning' && card && engine === 'loading'" class="engine-loading" role="status">
+          <p><span class="spinner" aria-hidden="true" />辨識引擎載入中…</p>
+        </div>
 
         <div v-if="phase === 'starting'" class="overlay">
           <p>正在開啟相機…</p>
@@ -193,7 +192,6 @@ const cameras = ref([])
 const currentCamera = ref('')
 
 const lookupEnabled = computed(() => props.lookup)
-const engineLabel = computed(() => ({ loading: '載入辨識引擎…', ready: '辨識引擎就緒', failed: '辨識引擎載入失敗' })[engine.value])
 function idleHint() {
   if (props.scanned === 'card' && props.qr) return '學生證掃描成功，請掃描 QR Code'
   if (props.scanned === 'qr' && props.card) return 'QR Code 掃描成功，請掃描學生證'
@@ -259,7 +257,7 @@ async function startCamera(deviceId = currentCamera.value || props.deviceId) {
 function beginReading(run) {
   phase.value = 'scanning'
   recentReads = []
-  hint.value = props.card && engine.value !== 'ready' ? '第一次使用要下載辨識引擎（約 15 MB），請稍候…' : idleHint()
+  hint.value = idleHint()
   if (props.card) loop(run)
   if (props.qr) qrLoop(run)
 }
@@ -309,7 +307,6 @@ async function loop(run) {
   try {
     await getReader().ready()
     engine.value = 'ready'
-    if (run === sequence && hint.value.startsWith('第一次')) hint.value = idleHint()
     while (run === sequence && !unmounted && props.card) {
       const frame = snapshot()
       if (frame) {
@@ -570,39 +567,6 @@ defineExpose({ restart: () => startCamera() })
   box-shadow: 0 22px 55px rgba(0, 0, 0, .22);
 }
 
-.scanner-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 3px 4px 13px;
-  color: var(--off-white);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .06em;
-}
-
-.scanner-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--lunar);
-  font-size: 11px;
-  letter-spacing: .04em;
-}
-
-.scanner-status i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #77bf8b;
-  box-shadow: 0 0 0 4px rgba(119, 191, 139, .12);
-}
-
-.scanner-status.busy i {
-  background: var(--ember);
-  box-shadow: 0 0 0 4px rgba(228, 164, 104, .14);
-}
-
 .viewfinder {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -680,6 +644,27 @@ defineExpose({ restart: () => startCamera() })
 
 .overlay p {
   margin: 0;
+}
+
+.engine-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(60, 62, 68, .55);
+  color: var(--off-white);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  pointer-events: none;
+}
+
+.engine-loading p {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .overlay strong {

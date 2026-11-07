@@ -53,6 +53,7 @@
         :busy="busy"
         :error="panelError"
         :clearable="!fixed"
+        :detail-link="!fixed"
         :keyboard="keyboard"
         @collect="collect()"
         @force="collect"

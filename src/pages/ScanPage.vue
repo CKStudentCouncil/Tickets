@@ -5,7 +5,7 @@
         <div class="title-row">
           <div>
             <p class="eyebrow">領票服務 <span>／ CHECK-IN</span></p>
-            <h1>{{ remoteLink ? '手機掃描' : '領票' }}</h1>
+            <h1>{{ remoteLink ? '手機掃描' : '掃描 QR Code 或學生證' }}</h1>
           </div>
           <button type="button" class="help-button" aria-label="使用教學" title="使用教學" @click="openGuide">
             <CircleQuestionMark :size="20" :stroke-width="1.75" aria-hidden="true" />
