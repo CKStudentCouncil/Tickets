@@ -648,9 +648,12 @@ describe('surveyResponses (PARTY-23)', () => {
     await assertFails(setDoc(doc(as(staff.superAdmin), 'surveyResponses', 'r2'), response()))
   })
 
-  test('only staff can read responses, and only super admins delete them', async () => {
+  test('only super admins read and delete responses', async () => {
     await assertFails(getDocs(collection(anon(), 'surveyResponses')))
-    await assertSucceeds(getDocs(collection(as(staff.manager), 'surveyResponses')))
+    for (const who of [staff.manager, staff.admin]) {
+      await assertFails(getDocs(collection(as(who), 'surveyResponses')))
+    }
+    await assertSucceeds(getDocs(collection(as(staff.superAdmin), 'surveyResponses')))
 
     await env.withSecurityRulesDisabled((context) =>
       setDoc(doc(context.firestore(), 'surveyResponses', 'r1'), { identity: '其他' })
