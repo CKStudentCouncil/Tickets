@@ -92,6 +92,9 @@
                   <p v-if="isAdminOnlyType(ticketType)" class="ticket-limit">
                     測試票・僅管理員可見、可購買
                   </p>
+                  <p v-if="isFriendSchoolsOnlyType(ticketType)" class="ticket-limit">
+                    限建中及友校在學學生購買
+                  </p>
                   <p v-if="!ticketType.unlimited && ticketType.purchaseLimitPerPerson" class="ticket-limit">
                     每人限購 {{ ticketType.purchaseLimitPerPerson }} 張
                   </p>
@@ -117,7 +120,13 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getTicketStatus, isAdminOnlyType, isTicketTypeListed, loadStorefront } from 'src/services/ticketTypeService'
+import {
+  getTicketStatus,
+  isAdminOnlyType,
+  isFriendSchoolsOnlyType,
+  isTicketTypeListed,
+  loadStorefront
+} from 'src/services/ticketTypeService'
 import { EVENT_DATE, EVENT_VENUE } from 'src/config/app'
 import { useNow } from 'src/composables/useNow'
 import { useAuthStore } from 'src/stores/auth'

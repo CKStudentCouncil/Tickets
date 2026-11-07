@@ -49,6 +49,10 @@
           限建中在學學生以 @{{ SCHOOL_ACCOUNT_DOMAIN }} 帳號登入購買，領票時須出示建中學生證
         </p>
 
+        <p v-if="isFriendSchoolsTicket" class="ticket-limit">
+          限建中及友校（{{ FRIEND_SCHOOLS.join('、') }}）在學學生以學校帳號登入購買，領票時須出示學生證
+        </p>
+
         <template v-if="studentOnlyUntil">
           <p v-if="isStudentPhase" class="ticket-limit">
             目前僅開放學生以學校帳號（Email 結尾為 edu.tw）登入購買，{{ formatDateTime(studentOnlyUntil) }} 起開放所有人
@@ -95,19 +99,23 @@
           </button>
 
           <template v-else-if="needsOtherAccount">
-            <p v-if="!isCampusTicket" class="account-warning">
+            <p v-if="isCampusTicket" class="account-warning">
+              此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
+              <span class="account-email">{{ auth.email }}</span>。
+            </p>
+            <p v-else-if="isFriendSchoolsTicket" class="account-warning">
+              此票種限建中及友校學生以學校帳號購買，你目前登入的是
+              <span class="account-email">{{ auth.email }}</span>。
+            </p>
+            <p v-else class="account-warning">
               目前僅開放學校帳號（Email 結尾為 edu.tw）購買，你目前登入的是
               <span class="account-email">{{ auth.email }}</span>，
               {{ formatDateTime(studentOnlyUntil) }} 起開放所有人（倒數 {{ formatCountdown(studentOnlyUntil, now) }}）。
             </p>
-            <p v-else class="account-warning">
-              此票種限使用建中帳號（@{{ SCHOOL_ACCOUNT_DOMAIN }}）購買，你目前登入的是
-              <span class="account-email">{{ auth.email }}</span>。
-            </p>
             <button type="button" class="primary-button" @click="switchAccount">
-              {{ isCampusTicket ? '改用建中帳號登入' : '改用學校帳號登入' }}
+              {{ isCampusTicket ? '改用建中帳號登入' : isFriendSchoolsTicket ? '改用建中或友校帳號登入' : '改用學校帳號登入' }}
             </button>
-            <button v-if="!isCampusTicket" type="button" class="declaration-link" @click="declarationOpen = true">
+            <button v-if="!isCampusTicket && !isFriendSchoolsTicket" type="button" class="declaration-link" @click="declarationOpen = true">
               無法使用學校帳號？填寫學生切結後購買
             </button>
           </template>
@@ -264,9 +272,10 @@ import {
   getPurchaseLimit,
   getTicketStatus,
   isAdminOnlyType,
+  isFriendSchoolsOnlyType,
   isTicketTypeListed
 } from 'src/services/ticketTypeService'
-import { CAMPUS_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
+import { CAMPUS_SCHOOLS, FRIEND_SCHOOLS, HOME_SCHOOL, SCHOOLS, SCHOOL_ACCOUNT_DOMAIN } from 'src/data/schools'
 import { useAuthStore } from 'src/stores/auth'
 import { useNow } from 'src/composables/useNow'
 import { formatCountdown, formatDateTime, parseDate } from 'src/utils/datetime'
@@ -353,6 +362,12 @@ const isCampusTicket = computed(() =>
   ticketType.value?.eligibleBuyerIdentity === ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS
 )
 
+// 僅限建中及友校: a 建中 or 友校 school account, ordering as that school
+// (checked again by createOrder); no 學生切結
+const isFriendSchoolsTicket = computed(
+  () => !isCampusTicket.value && isFriendSchoolsOnlyType(ticketType.value)
+)
+
 // 學生優先購買: until studentOnlyUntil only school accounts (edu.tw) may buy,
 // then everyone (checked again by createOrder)
 const studentOnlyUntil = computed(() => ticketType.value?.studentOnlyUntil || '')
@@ -371,7 +386,12 @@ const declarationOpen = ref(false)
 const studentDeclared = ref(false)
 const studentDeclaration = ref(null)
 const usesDeclaration = computed(
-  () => studentDeclared.value && isStudentPhase.value && !isCampusTicket.value && !auth.isEduAccount
+  () =>
+    studentDeclared.value &&
+    isStudentPhase.value &&
+    !isCampusTicket.value &&
+    !isFriendSchoolsTicket.value &&
+    !auth.isEduAccount
 )
 watch(() => [auth.user?.uid, ticketType.value?.id], () => {
   studentDeclared.value = false
@@ -381,6 +401,7 @@ watch(() => [auth.user?.uid, ticketType.value?.id], () => {
 const needsOtherAccount = computed(
   () =>
     (isCampusTicket.value && !auth.isSchoolAccount) ||
+    (isFriendSchoolsTicket.value && !auth.accountSchool) ||
     (!isCampusTicket.value && isStudentPhase.value && !auth.isEduAccount && !studentDeclared.value)
 )
 
@@ -390,10 +411,21 @@ function agreeDeclaration(declaration) {
   openOrderForm()
 }
 
-const schoolOptions = computed(() => (isCampusTicket.value ? [HOME_SCHOOL] : SCHOOLS))
+// 僅限建中及友校: only the school of the signed-in account
+const schoolOptions = computed(() => {
+  if (isCampusTicket.value) return [HOME_SCHOOL]
+  if (isFriendSchoolsTicket.value) return auth.accountSchool ? [auth.accountSchool] : []
+  return SCHOOLS
+})
 
 function goToLogin() {
-  const account = isCampusTicket.value ? 'school' : isStudentPhase.value ? 'edu' : null
+  const account = isCampusTicket.value
+    ? 'school'
+    : isFriendSchoolsTicket.value
+      ? 'friend'
+      : isStudentPhase.value
+        ? 'edu'
+        : null
   router.push({
     name: 'login',
     query: { redirect: route.fullPath, ...(account ? { account } : {}) }

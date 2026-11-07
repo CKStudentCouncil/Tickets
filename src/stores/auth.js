@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from 'src/boot/firebase'
-import { isEduAccount as isEduEmail, isSchoolAccount as isSchoolEmail } from 'src/data/schools'
+import { accountSchoolOf, isEduAccount as isEduEmail, isSchoolAccount as isSchoolEmail } from 'src/data/schools'
 import { isOnSellerList } from 'src/services/sellerService'
 import { isOnOfficerList } from 'src/services/guestService'
 import { ROLE_RANK } from 'src/data/roles'
@@ -31,6 +31,9 @@ export const useAuthStore = defineStore('auth', () => {
   const isSchoolAccount = computed(() => isSchoolEmail(email.value))
   // 學生 tickets need any school's account (edu.tw)
   const isEduAccount = computed(() => isEduEmail(email.value))
+  // 建國中學 or the 友校 whose student account this is ('' for others);
+  // 僅限建中及友校 tickets need one
+  const accountSchool = computed(() => accountSchoolOf(email.value))
 
   // Name recorded on orders / content edited by this staff member
   const displayName = computed(
@@ -120,6 +123,7 @@ export const useAuthStore = defineStore('auth', () => {
     email,
     isSchoolAccount,
     isEduAccount,
+    accountSchool,
     displayName,
     init,
     refresh,

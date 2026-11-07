@@ -194,7 +194,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from 'src/stores/auth'
 import { useToastStore } from 'src/stores/toast'
-import { ELIGIBLE_IDENTITIES, fetchTicketTypes } from 'src/services/ticketTypeService'
+import { ELIGIBLE_IDENTITIES, fetchTicketTypes, isFriendSchoolsOnlyType } from 'src/services/ticketTypeService'
 import { deleteOrder } from 'src/services/orderService'
 import { fetchAllStreetSales, fetchStreetProgram, saveStreetProgram } from 'src/services/streetSaleService'
 import { formatDateTime, getTaiwanDateKey } from 'src/utils/datetime'
@@ -218,9 +218,12 @@ const quantityOf = (sale) =>
 const amountOf = (sale) => Number(sale.finalTotal) || 0
 const ticketTypeName = (id) => ticketTypes.value.find((type) => type.id === id)?.name || ''
 
-// 本校學生 tickets need the buyer's own school account (registerStreetSale refuses them)
+// 本校學生 and 僅限建中及友校 tickets need the buyer's own school account
+// (registerStreetSale refuses them)
 const sellableTypes = computed(() =>
-  ticketTypes.value.filter((type) => type.eligibleBuyerIdentity !== ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS)
+  ticketTypes.value.filter(
+    (type) => type.eligibleBuyerIdentity !== ELIGIBLE_IDENTITIES.CAMPUS_STUDENTS && !isFriendSchoolsOnlyType(type)
+  )
 )
 
 const sum = (list) => ({

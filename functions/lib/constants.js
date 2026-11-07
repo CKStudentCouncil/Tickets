@@ -39,6 +39,16 @@ export const SCHOOL_ACCOUNT_DOMAIN = 'gl.ck.tp.edu.tw'
 export const STUDENT_ACCOUNT_PREFIX = 'ck'
 export const STUDENT_ID_PATTERN = /^[0-9]{6,8}$/
 
+// 友校: their students' school Google account domains, for tickets sold to
+// 建中及友校 only (friendSchoolsOnly). Keep in sync with src/data/schools.js
+export const FRIEND_SCHOOL_DOMAINS = {
+  北一女中: 'gapps.fg.tp.edu.tw',
+  中山女高: 'm2.csghs.tp.edu.tw',
+  景美女中: 'cmgsh.tp.edu.tw',
+  成功高中: 'gafe.cksh.tp.edu.tw',
+  師大附中: 'gs.hs.ntnu.edu.tw'
+}
+
 // Students of these schools give their class and seat number
 export const CAMPUS_SCHOOLS = new Set([
   '建國中學',
