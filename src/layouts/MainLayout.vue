@@ -305,7 +305,7 @@ const navGroups = computed(() => {
     //auth.isSuperAdmin && { to: '/super_admin/street', label: '路宣管理' },
     auth.isSuperAdmin && { to: '/admin/cancel', label: '取消與退款' },
     auth.isSuperAdmin && { to: '/super_admin/guests', label: '公關票管理' },
-    auth.isManager && { to: '/admin/survey', label: '系統問卷管理' },
+    auth.isSuperAdmin && { to: '/super_admin/survey', label: '系統問卷管理' },
     auth.isAdmin && { to: '/admin/sellers', label: '學弟賣票管理' },
     auth.isSuperAdmin && { to: '/admin/intromanagement', label: '舞會介紹管理' },
     auth.isSuperAdmin && { to: '/admin/performer', label: '社團與藝人管理' },

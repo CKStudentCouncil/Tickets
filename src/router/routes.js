@@ -224,11 +224,6 @@ const routes = [
         }
       },
       {
-        path: 'survey',
-        name: 'admin-survey',
-        component: () => import('pages/SurveyAdminPage.vue')
-      },
-      {
         path: 'party-survey',
         name: 'admin-party-survey',
         component: () => import('pages/PartySurveyAdminPage.vue'),
@@ -270,6 +265,11 @@ const routes = [
         path: 'guests',
         name: 'super-admin-guests',
         component: () => import('pages/GuestAdminPage.vue')
+      },
+      {
+        path: 'survey',
+        name: 'super-admin-survey',
+        component: () => import('pages/SurveyAdminPage.vue')
       },
       {
         // 報帳管理: review the claims and the party's profit (sales less
